@@ -1,0 +1,11 @@
+# Не уходит на хост при `make sync`. Исключённое не удаляется на хосте (секреты там сохраняются).
+.git
+node_modules
+build
+coverage
+.env*
+.idea
+.claude
+*.dump
+backup_*.sql.gz
+agent/dist

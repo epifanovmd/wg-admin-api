@@ -1,0 +1,8 @@
+# Интеграционный набор: настоящий сервер + Postgres, Redis, Mailpit.
+# Сервисы: docker compose -f docker-compose.dev.yml up -d
+require:
+  - tsx
+  - test/e2e/setup.ts
+spec: "test/e2e/**/*.e2e.ts"
+timeout: 30000
+slow: 2000

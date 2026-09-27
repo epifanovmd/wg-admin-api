@@ -1,0 +1,25 @@
+# Git-хуки: форматирование и линт застейдженных файлов, затем проверка типов и тесты.
+pre-commit:
+  parallel: false
+  jobs:
+    - name: prettier
+      glob: "*.{ts,json,md,yml,yaml}"
+      exclude:
+        - "src/routing/swagger.json"
+        - "src/routing/routes.ts"
+      run: yarn prettier --write {staged_files}
+      stage_fixed: true
+
+    - name: eslint
+      glob: "src/**/*.ts"
+      exclude:
+        - "src/routing/routes.ts"
+        - "src/migrations/**"
+      run: yarn eslint --fix {staged_files}
+      stage_fixed: true
+
+    - name: typecheck
+      run: yarn typecheck
+
+    - name: test
+      run: yarn test

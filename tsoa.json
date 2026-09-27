@@ -1,0 +1,39 @@
+{
+  "entryFile": "./src/main.ts",
+  "controllerPathGlobs": ["./src/modules/**/*.*controller.ts"],
+  "noImplicitAdditionalProperties": "silently-remove-extras",
+  "spec": {
+    "schemes": ["http"],
+    "securityDefinitions": {
+      "jwt": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Api-Key",
+        "description": "API-ключ: агент ноды (scope wg-agent) или интеграция"
+      }
+    },
+    "spec": {
+      "servers": [
+        {
+          "url": "http://localhost:8181",
+          "description": "Local dev"
+        }
+      ]
+    },
+    "outputDirectory": "./src/routing",
+    "specMerging": "recursive",
+    "specVersion": 3
+  },
+  "routes": {
+    "authenticationModule": "./src/core/auth/koa-authentication.ts",
+    "routesDir": "./src/routing",
+    "basePath": "/",
+    "middleware": "koa",
+    "iocModule": "./src/app.container.ts"
+  }
+}

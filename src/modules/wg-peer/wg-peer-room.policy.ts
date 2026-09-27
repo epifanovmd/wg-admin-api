@@ -1,0 +1,40 @@
+import { inject } from "inversify";
+
+import { Injectable } from "../../core";
+import { ISocketRoomPolicy } from "../socket";
+import { WgAccessService } from "../wg-node";
+import { WgPeerPermissions } from "./wg-peer.permissions";
+import { WgPeerRepository } from "./wg-peer.repository";
+
+export const wgPeerRoom = (id: string): string => `wg-peer_${id}`;
+
+/**
+ * Комната пира: live-статистика и статус — право `wg:peer:view` либо
+ * держатель пира с правом `wg:peer:own`.
+ */
+@Injectable()
+export class WgPeerRoomPolicy implements ISocketRoomPolicy {
+  readonly type = "wg-peer";
+
+  constructor(
+    @inject(WgAccessService) private readonly _access: WgAccessService,
+    @inject(WgPeerRepository) private readonly _peers: WgPeerRepository,
+  ) {}
+
+  room(id: string): string {
+    return wgPeerRoom(id);
+  }
+
+  async canJoin(userId: string, id: string): Promise<boolean> {
+    if (await this._access.can(userId, WgPeerPermissions.PEER_VIEW)) {
+      return true;
+    }
+    if (!(await this._access.can(userId, WgPeerPermissions.PEER_OWN))) {
+      return false;
+    }
+
+    const peer = await this._peers.findOne({ where: { id } });
+
+    return peer?.userId === userId;
+  }
+}

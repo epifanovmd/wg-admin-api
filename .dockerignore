@@ -1,0 +1,23 @@
+# Контекст сборки образа: исходники бэкенда, агента и шаблоны писем.
+**/node_modules
+build
+agent/dist
+.git
+.github
+.claude
+.idea
+.vscode
+.DS_Store
+*.log
+*.md
+.env
+.env.*
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+Makefile
+lefthook.yml
+deploy
+docs
+scripts
+test

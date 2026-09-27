@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+coverage
+.vscode/
+.idea
+.DS_Store
+yarn-error.log
+.env*
+!.env.example
+!.env.deploy.example
+
+# Локальная память агента разработки
+.claude/memory/

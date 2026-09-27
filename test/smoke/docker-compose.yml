@@ -1,0 +1,45 @@
+# Smoke-стенд WG-домена: бэкенд + БД + Redis в Docker. Поднимает и гасит
+# test/smoke/wg-smoke.sh (проект WG_TEST_PROJECT), он же запускает агентов.
+name: wg-smoke
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wg_local
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+
+  api:
+    image: wg-admin-api:test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      NODE_ENV: development
+      APP_ROLE: all
+      SERVER_PORT: "8181"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: wg_local
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: wg-local-test-secret-key-0123456789abcdef
+      ADMIN_EMAIL: admin@wg.local
+      ADMIN_PASSWORD: wg-local-Admin-2026
+      APP_PUBLIC_URL: http://api:8181
+      LOG_LEVEL: info
+      LOG_PRETTY: "false"
+    ports:
+      - "${WG_LOCAL_PORT:-8281}:8181"

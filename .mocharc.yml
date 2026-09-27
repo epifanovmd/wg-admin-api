@@ -1,0 +1,4 @@
+require:
+  - tsx
+spec: "src/**/*.test.ts"
+timeout: 10000

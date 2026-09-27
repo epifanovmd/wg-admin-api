@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "nodenext",
+    "target": "es2023",
+    "types": ["node", "mocha"],
+    "lib": ["es2023"],
+    "sourceMap": true,
+    "outDir": "build",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "nodenext",
+    "emitDecoratorMetadata": true,
+    "skipLibCheck": true,
+    "strict": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["build", "node_modules"]
+}
