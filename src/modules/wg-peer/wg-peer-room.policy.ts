@@ -38,3 +38,29 @@ export class WgPeerRoomPolicy implements ISocketRoomPolicy {
     return peer?.userId === userId;
   }
 }
+
+export const wgOwnPeersRoom = (userId: string): string =>
+  `wg-peers-own_${userId}`;
+
+/**
+ * Комната «мои пиры» держателя: live-статистика его пиров для списка своих
+ * подключений. Только своя (`id` — свой `userId`) и с правом `wg:peer:own`.
+ */
+@Injectable()
+export class WgOwnPeersRoomPolicy implements ISocketRoomPolicy {
+  readonly type = "wg-peers-own";
+
+  constructor(
+    @inject(WgAccessService) private readonly _access: WgAccessService,
+  ) {}
+
+  room(id: string): string {
+    return wgOwnPeersRoom(id);
+  }
+
+  async canJoin(userId: string, id: string): Promise<boolean> {
+    if (id !== userId) return false;
+
+    return this._access.can(userId, WgPeerPermissions.PEER_OWN);
+  }
+}

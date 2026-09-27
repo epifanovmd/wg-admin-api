@@ -6,7 +6,7 @@ import { WgPeer } from "./wg-peer.entity";
 import { WgPeerListener } from "./wg-peer.listener";
 import { WgPeerRepository } from "./wg-peer.repository";
 import { WgPeerService } from "./wg-peer.service";
-import { WgPeerRoomPolicy } from "./wg-peer-room.policy";
+import { WgOwnPeersRoomPolicy, WgPeerRoomPolicy } from "./wg-peer-room.policy";
 
 @Module({
   entities: [WgPeer],
@@ -15,6 +15,7 @@ import { WgPeerRoomPolicy } from "./wg-peer-room.policy";
     WgPeerService,
     WgPeerController,
     asSocketRoomPolicy(WgPeerRoomPolicy),
+    asSocketRoomPolicy(WgOwnPeersRoomPolicy),
     asSocketListener(WgPeerListener),
     asJobHandler(WgPeerExpiryJob),
   ],

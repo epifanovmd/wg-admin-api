@@ -38,5 +38,7 @@ attachment), `GET {id}/qr` (PNG data-URL). Конфликты имени/клю�
 
 ## Сокет
 
-Комната `wg-peer_<id>` (policy `wg-peer`: view или свой пир) + события
+Комната `wg-peer_<id>` (policy `wg-peer`: view или свой пир), комната «мои
+пиры» `wg-peers-own_<userId>` (policy `wg-peers-own`: только своя, право
+`wg:peer:own`) — live-статистика пиров держателя; события
 `wg:peer:updated`/`wg:peer:deleted` (комната, overview, держателю).

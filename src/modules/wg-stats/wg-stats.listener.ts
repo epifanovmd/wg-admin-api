@@ -4,7 +4,7 @@ import { EventBus, Injectable, logger } from "../../core";
 import { ISocketEventListener, SocketEmitterService } from "../socket";
 import { wgInterfaceRoom } from "../wg-interface";
 import { WG_OVERVIEW_ROOM, wgNodeRoom } from "../wg-node";
-import { wgPeerRoom } from "../wg-peer";
+import { wgOwnPeersRoom, wgPeerRoom } from "../wg-peer";
 import {
   WgInterfaceLiveStatsEvent,
   WgLinksProbedEvent,
@@ -16,7 +16,20 @@ import {
 import { WgLinkHealthService } from "./wg-link-health.service";
 import type { IWgPeerLive } from "./wg-stats.types";
 
-/** Live-статистика — подписчикам комнат; пир — ещё и держателю. */
+/** Сгруппировать по ключу с сохранением порядка. */
+const groupBy = <T>(items: T[], key: (item: T) => string | null) => {
+  const groups = new Map<string, T[]>();
+
+  for (const item of items) {
+    const value = key(item);
+
+    if (value) groups.set(value, [...(groups.get(value) ?? []), item]);
+  }
+
+  return groups;
+};
+
+/** Live-статистика — подписчикам комнат. */
 @Injectable()
 export class WgStatsListener implements ISocketEventListener {
   constructor(
@@ -28,29 +41,9 @@ export class WgStatsListener implements ISocketEventListener {
   ) {}
 
   register(): void {
-    this._eventBus.on(WgPeersLiveStatsEvent, ({ lives }) => {
-      const byInterface = new Map<string, IWgPeerLive[]>();
-
-      for (const live of lives) {
-        this._emitter.toRoom(wgPeerRoom(live.peerId), "wg:peer:stats", live);
-        if (live.userId) {
-          this._emitter.toUser(live.userId, "wg:peer:stats", live);
-        }
-        byInterface.set(live.interfaceId, [
-          ...(byInterface.get(live.interfaceId) ?? []),
-          live,
-        ]);
-      }
-      // Таблицы пиров: страница интерфейса и общий список — одной пачкой.
-      for (const [interfaceId, peers] of byInterface) {
-        this._emitter.toRoom(wgInterfaceRoom(interfaceId), "wg:peers:stats", {
-          peers,
-        });
-      }
-      this._emitter.toRoom(WG_OVERVIEW_ROOM, "wg:peers:stats", {
-        peers: lives,
-      });
-    });
+    this._eventBus.on(WgPeersLiveStatsEvent, ({ lives }) =>
+      this._sendPeers(lives),
+    );
     this._eventBus.on(WgInterfaceLiveStatsEvent, ({ live }) =>
       this._emitter.toRoom(
         wgInterfaceRoom(live.interfaceId),
@@ -71,6 +64,43 @@ export class WgStatsListener implements ISocketEventListener {
     this._eventBus.on(WgLinksProbedEvent, ({ nodeIds }) =>
       this._sendLinks(nodeIds),
     );
+  }
+
+  /**
+   * Статистика пиров за тик — одним событием `wg:peers:stats` на получателя:
+   * комнате обзора — все пиры, комнате интерфейса — его пиры, комнате «мои
+   * пиры» — пиры держателя, комнате пира — только он. Участники комнаты
+   * обзора уже получили весь тик и из остальных рассылок исключаются;
+   * держатель со списком своих пиров не получает пира ещё раз из его комнаты.
+   */
+  private _sendPeers(lives: IWgPeerLive[]): void {
+    const except = WG_OVERVIEW_ROOM;
+
+    this._emitter.toRoom(WG_OVERVIEW_ROOM, "wg:peers:stats", { peers: lives });
+    for (const [interfaceId, peers] of groupBy(lives, l => l.interfaceId)) {
+      this._emitter.toRoomExcept(
+        wgInterfaceRoom(interfaceId),
+        except,
+        "wg:peers:stats",
+        { peers },
+      );
+    }
+    for (const [userId, peers] of groupBy(lives, l => l.userId)) {
+      this._emitter.toRoomExcept(
+        wgOwnPeersRoom(userId),
+        except,
+        "wg:peers:stats",
+        { peers },
+      );
+    }
+    for (const live of lives) {
+      this._emitter.toRoomExcept(
+        wgPeerRoom(live.peerId),
+        live.userId ? [except, wgOwnPeersRoom(live.userId)] : except,
+        "wg:peers:stats",
+        { peers: [live] },
+      );
+    }
   }
 
   /** Линки каждой затронутой ноды — в её комнату (с её точки зрения). */

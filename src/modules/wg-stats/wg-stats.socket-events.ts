@@ -13,9 +13,10 @@ import type {
 
 declare module "../socket/socket.types" {
   interface ISocketEmitEvents {
-    /** Live-статистика пира — комната пира и держатель. */
-    "wg:peer:stats": (...args: [IWgPeerLive]) => void;
-    /** Статистика пиров за тик — комнаты интерфейсов и `wg-overview`. */
+    /**
+     * Статистика пиров за тик — одним событием: `wg-overview` — все пиры,
+     * комнаты интерфейса, «мои пиры» (`wg-peers-own`) и пира — своя часть.
+     */
     "wg:peers:stats": (...args: [{ peers: IWgPeerLive[] }]) => void;
     /** Live-статистика интерфейса — комната интерфейса. */
     "wg:interface:stats": (...args: [IWgInterfaceLive]) => void;

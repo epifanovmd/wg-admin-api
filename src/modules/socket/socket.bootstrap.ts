@@ -12,6 +12,7 @@ import { UserOfflineEvent, UserOnlineEvent } from "../profile/events";
 import { TSocket } from "./socket.types";
 import { SocketAuthMiddleware } from "./socket-auth.middleware";
 import { SocketClientRegistry } from "./socket-client-registry";
+import { userSocketRoom } from "./socket-emitter.service";
 import {
   ISocketEventListener,
   SOCKET_EVENT_LISTENER,
@@ -77,9 +78,9 @@ export class SocketBootstrap implements IBootstrap {
 
       await this.clientRegistry.register(user.userId, socket);
       // Личная room пользователя — через неё доставляются все push-уведомления.
-      // SocketEmitterService.toUser() использует io.to('user_${userId}'),
-      // поэтому все соединения (несколько вкладок/устройств) получат событие.
-      socket.join(`user_${user.userId}`);
+      // SocketEmitterService.toUser() шлёт в неё, поэтому событие получат все
+      // соединения (несколько вкладок/устройств).
+      socket.join(userSocketRoom(user.userId));
       socket.emit("authenticated", { userId: user.userId });
       // Срок access-токена: auth:expired → auth:refresh или разрыв
       this.authMiddleware.watch(socket);

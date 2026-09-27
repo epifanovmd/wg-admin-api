@@ -23,9 +23,13 @@
   (Redis при `REDIS_URL`, иначе память процесса), TTL 5 мин.
 - **Live-события** (EventBus → `WgStatsListener` → комнаты): при зрителях —
   каждый тик, без них — deadband 256 Б/с и максимум раз в 30 с тишины.
-  Пиры — одним `WgPeersLiveStatsEvent` за тик: `wg:peers:stats {peers}` в
-  комнаты интерфейсов и overview, `wg:peer:stats` — комнате пира и держателю;
-  `wg:interface:stats`, `wg:node:stats`, `wg:stats:overview`.
+  Пиры — одним `WgPeersLiveStatsEvent` за тик и одним событием
+  `wg:peers:stats {peers}` на комнату: overview — все пиры тика, комната
+  интерфейса — его пиры, «мои пиры» (`wg-peers-own_<userId>`) — пиры
+  держателя, комната пира — только он. Участники overview исключены из
+  остальных рассылок, держатель со списком своих — из комнаты пира
+  (`toRoomExcept`); в личную комнату пользователя статистика не шлётся.
+  Остальные — `wg:interface:stats`, `wg:node:stats`, `wg:stats:overview`.
 - **Зрители**: `WgViewerDemandService` — есть ли подключённые сокеты в любом
   процессе (ключ `viewers` в live-хранилище, TTL 10 с, кэш 2 с); от него
   зависят частота статистики агентов и частота событий.

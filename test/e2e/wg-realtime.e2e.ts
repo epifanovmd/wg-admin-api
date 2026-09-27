@@ -340,7 +340,7 @@ describe("wireguard: обновления по сокетам", () => {
     }
   });
 
-  it("статистика пиров — пачкой в комнаты интерфейса и обзора; короткий ряд; повтор тика не учитывается", async () => {
+  it("статистика пиров — одной пачкой на комнату: обзор, интерфейс, «мои пиры», карточка пира только со своим пиром; короткий ряд; повтор тика не учитывается", async () => {
     const iface = expectStatus(
       await call(admin, "POST", "/api/v1/wg/interfaces", {
         nodeId: target.id,
@@ -354,10 +354,21 @@ describe("wireguard: обновления по сокетам", () => {
       await call(admin, "POST", "/api/v1/wg/peers", {
         interfaceId: iface.id,
         name: "rt-peer",
+        userId: user.id,
+      }),
+      201,
+    ).data;
+    const second = expectStatus(
+      await call(admin, "POST", "/api/v1/wg/peers", {
+        interfaceId: iface.id,
+        name: "rt-peer-2",
+        userId: user.id,
       }),
       201,
     ).data;
     const interfacePage = await connectSocket(admin);
+    const holder = await connectSocket(user);
+    const holderList = await connectSocket(user);
     const tick = (seq: number, rxBytes: number) => {
       const now = Date.now();
 
@@ -369,15 +380,13 @@ describe("wireguard: обновления по сокетам", () => {
         interfaces: [
           {
             name: "wg7",
-            peers: [
-              {
-                publicKey: peer.publicKey,
-                rxBytes,
-                txBytes: 2000,
-                lastHandshake: Math.floor(now / 1000),
-                endpoint: "198.51.100.9:40000",
-              },
-            ],
+            peers: [peer, second].map(item => ({
+              publicKey: item.publicKey,
+              rxBytes,
+              txBytes: 2000,
+              lastHandshake: Math.floor(now / 1000),
+              endpoint: "198.51.100.9:40000",
+            })),
           },
         ],
       };
@@ -390,8 +399,39 @@ describe("wireguard: обновления по сокетам", () => {
         ok: true,
       });
 
+      // Вкладка обзора, открывшая и интерфейс, получает тик один раз.
+      expect(await ws.join("wg-interface", iface.id)).to.deep.equal({
+        ok: true,
+      });
+
+      // Держатель: карточка одного пира и (в другой вкладке) список своих.
+      expect(await holder.join("wg-peer", peer.id)).to.deep.equal({ ok: true });
+      expect(await holderList.join("wg-peers-own", user.id)).to.deep.equal({
+        ok: true,
+      });
+      expect(await holderList.join("wg-peers-own", admin.id)).to.deep.equal({
+        ok: false,
+      });
+
+      let holderBatches = 0;
+      const countHolder = (batch: any) => {
+        if (hasPeer(batch)) holderBatches += 1;
+      };
+
+      holder.socket.on("wg:peers:stats", countHolder);
+
+      let overviewBatches = 0;
+      const countOverview = (batch: any) => {
+        if (hasPeer(batch)) overviewBatches += 1;
+      };
+
+      ws.socket.on("wg:peers:stats", countOverview);
+
       const onInterface = interfacePage.next<any>("wg:peers:stats", hasPeer);
       const onOverview = ws.next<any>("wg:peers:stats", hasPeer);
+      const onHolder = holder.next<any>("wg:peers:stats", hasPeer);
+      const onHolderList = holderList.next<any>("wg:peers:stats", hasPeer);
+      const noSingle = holder.none("wg:peer:stats");
 
       await agentStats(target.key, tick(1, 1000));
 
@@ -407,6 +447,18 @@ describe("wireguard: обновления по сокетам", () => {
         endpoint: "198.51.100.9:40000",
       });
       await onOverview;
+      // Карточка пира — только он, хотя у держателя пиров два.
+      expect((await onHolder).peers.map((l: any) => l.peerId)).to.deep.equal([
+        peer.id,
+      ]);
+      expect(
+        (await onHolderList).peers.map((l: any) => l.peerId).sort(),
+      ).to.deep.equal([peer.id, second.id].sort());
+      await noSingle;
+      ws.socket.off("wg:peers:stats", countOverview);
+      holder.socket.off("wg:peers:stats", countHolder);
+      expect(overviewBatches).to.equal(1);
+      expect(holderBatches).to.equal(1);
 
       // Повтор того же тика (досылка) — трафик не удваивается.
       await agentStats(target.key, tick(1, 999_999));
@@ -440,6 +492,9 @@ describe("wireguard: обновления по сокетам", () => {
       );
     } finally {
       interfacePage.close();
+      holder.close();
+      holderList.close();
+      await call(admin, "DELETE", `/api/v1/wg/peers/${second.id}`);
       await call(admin, "DELETE", `/api/v1/wg/peers/${peer.id}`);
       await call(admin, "DELETE", `/api/v1/wg/interfaces/${iface.id}`);
     }
