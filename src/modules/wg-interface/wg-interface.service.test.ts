@@ -49,13 +49,19 @@ describe("WgInterfaceService", () => {
   let txRepo: ReturnType<typeof createMockRepository>;
   let dataSource: { transaction: sinon.SinonStub };
 
-  let replicasRepo: { update: sinon.SinonStub; getRepository: sinon.SinonStub };
+  let replicasRepo: {
+    update: sinon.SinonStub;
+    findOne: sinon.SinonStub;
+    getRepository: sinon.SinonStub;
+  };
 
   beforeEach(() => {
     replicasRepo = {
       update: sinon.stub().resolves({ affected: 0 }),
-      getRepository: sinon.stub().returns(createMockRepository()),
+      findOne: sinon.stub().resolves(null),
+      getRepository: sinon.stub(),
     };
+    replicasRepo.getRepository.returns(replicasRepo);
     txRepo = createMockRepository();
     repo = {
       ...createMockRepository(),
@@ -386,6 +392,11 @@ describe("WgInterfaceService", () => {
 
     repo.findForNode.resolves([changed, same, replicated]);
     repo.update.resolves({});
+    replicasRepo.findOne.resolves({
+      status: EWgInterfaceStatus.Unknown,
+      iface: { endpoint: { relayNodeId: "relay" } },
+    });
+    replicasRepo.update.resolves({ affected: 1 });
     repo.findWithRelations.resolves({
       ...changed,
       status: EWgInterfaceStatus.Up,
@@ -397,7 +408,8 @@ describe("WgInterfaceService", () => {
       { name: "wg2", status: EWgInterfaceStatus.Up },
     ]);
 
-    expect(eventBus.emit.callCount).to.equal(1);
+    // Интерфейс ноды и реплика — по событию; у реплики сменился статус.
+    expect(eventBus.emit.callCount).to.equal(2);
     expect(repo.update.firstCall.args).to.deep.equal([
       { id: changed.id },
       { status: EWgInterfaceStatus.Up, statusMessage: null },
@@ -411,6 +423,29 @@ describe("WgInterfaceService", () => {
       interfaceId: replicated.id,
       nodeId: changed.nodeId,
     });
+    // Реплика поднялась — релей точки получает новую версию (резерв).
+    expect(nodes.markDirty.calledWith("relay")).to.be.true;
+  });
+
+  it("статус реплики не менялся — ни события, ни новой версии релея", async () => {
+    const replicated = makeIface({
+      name: "wg2",
+      nodeId: "44444444-4444-4444-8444-444444444444",
+    });
+
+    repo.findForNode.resolves([replicated]);
+    replicasRepo.findOne.resolves({
+      status: EWgInterfaceStatus.Up,
+      iface: { endpoint: { relayNodeId: "relay" } },
+    });
+
+    await service.updateReportedStatuses(
+      "55555555-5555-4555-8555-555555555555",
+      [{ name: "wg2", status: EWgInterfaceStatus.Up }],
+    );
+
+    expect(eventBus.emit.called).to.be.false;
+    expect(nodes.markDirty.called).to.be.false;
   });
 
   it("restart: создаёт команду агенту", async () => {

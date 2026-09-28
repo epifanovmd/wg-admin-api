@@ -125,20 +125,41 @@ export class WgInterfaceReplicaService {
     }
   }
 
-  /** Статус реплики из отчёта агента её ноды; событие — только при смене. */
+  /**
+   * Статус реплики из отчёта агента её ноды; событие — только при смене.
+   * Реплика поднялась или упала — релей точки получает новую версию: в его
+   * резерве только поднятые копии.
+   */
   async updateStatus(
     interfaceId: string,
     nodeId: string,
     status: EWgInterfaceStatus,
     message: string | null,
   ): Promise<void> {
-    const result = await this._replicas.update(
-      { interfaceId, nodeId, status: Not(status) },
-      { status, statusMessage: message },
-    );
+    const previous = await this._replicas.findOne({
+      where: { interfaceId, nodeId },
+      relations: { iface: { endpoint: true } },
+    });
 
-    if (result.affected) {
-      await emitInterfaceUpdated(this._repo, this._eventBus, interfaceId);
-    }
+    if (!previous || previous.status === status) return;
+
+    const relayNodeId = previous.iface?.endpoint?.relayNodeId ?? null;
+    const servingChanged =
+      (previous.status === EWgInterfaceStatus.Up) !==
+      (status === EWgInterfaceStatus.Up);
+
+    await this._dataSource.transaction(async manager => {
+      const result = await this._replicas
+        .getRepository(manager)
+        .update(
+          { interfaceId, nodeId, status: Not(status) },
+          { status, statusMessage: message },
+        );
+
+      if (result.affected && servingChanged && relayNodeId) {
+        await this._nodes.markDirty(relayNodeId, manager);
+      }
+    });
+    await emitInterfaceUpdated(this._repo, this._eventBus, interfaceId);
   }
 }

@@ -1,4 +1,5 @@
 import { BaseDto } from "../../../core";
+import type { EWgNodeStatus } from "../../wg-node";
 import type { WgInterface } from "../wg-interface.entity";
 import type { EWgInterfaceStatus } from "../wg-interface.types";
 
@@ -18,6 +19,8 @@ export const resolveClientEndpoint = (iface: WgInterface): string | null => {
 export interface IWgInterfaceReplicaDto {
   nodeId: string;
   nodeName: string | null;
+  /** Статус ноды копии: `created` — агента ещё нет, копия ждёт его. */
+  nodeStatus: EWgNodeStatus | null;
   priority: number;
   status: EWgInterfaceStatus;
   statusMessage: string | null;
@@ -28,6 +31,8 @@ export class WgInterfaceDto extends BaseDto {
   nodeId: string;
   /** Название ноды (если загружена связь). */
   nodeName: string | null;
+  /** Статус ноды (если загружена связь): `created` — агента ещё нет. */
+  nodeStatus: EWgNodeStatus | null;
   name: string;
   listenPort: number;
   addressCidr: string;
@@ -60,6 +65,7 @@ export class WgInterfaceDto extends BaseDto {
     this.id = entity.id;
     this.nodeId = entity.nodeId;
     this.nodeName = entity.node?.name ?? null;
+    this.nodeStatus = entity.node?.status ?? null;
     this.name = entity.name;
     this.listenPort = entity.listenPort;
     this.addressCidr = entity.addressCidr;
@@ -82,6 +88,7 @@ export class WgInterfaceDto extends BaseDto {
       .map(replica => ({
         nodeId: replica.nodeId,
         nodeName: replica.node?.name ?? null,
+        nodeStatus: replica.node?.status ?? null,
         priority: replica.priority,
         status: replica.status,
         statusMessage: replica.statusMessage,

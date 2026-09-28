@@ -751,6 +751,15 @@
 						"type": "string",
 						"nullable": true
 					},
+					"nodeStatus": {
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/EWgNodeStatus"
+							}
+						],
+						"nullable": true,
+						"description": "Статус ноды копии: `created` — агента ещё нет, копия ждёт его."
+					},
 					"priority": {
 						"type": "number",
 						"format": "double"
@@ -766,6 +775,7 @@
 				"required": [
 					"nodeId",
 					"nodeName",
+					"nodeStatus",
 					"priority",
 					"status",
 					"statusMessage"
@@ -785,6 +795,15 @@
 						"type": "string",
 						"nullable": true,
 						"description": "Название ноды (если загружена связь)."
+					},
+					"nodeStatus": {
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/EWgNodeStatus"
+							}
+						],
+						"nullable": true,
+						"description": "Статус ноды (если загружена связь): `created` — агента ещё нет."
 					},
 					"name": {
 						"type": "string"
@@ -877,6 +896,7 @@
 					"id",
 					"nodeId",
 					"nodeName",
+					"nodeStatus",
 					"name",
 					"listenPort",
 					"addressCidr",

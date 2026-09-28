@@ -356,6 +356,7 @@ const models: TsoaRoute.Models = {
         "properties": {
             "nodeId": {"dataType":"string","required":true},
             "nodeName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "nodeStatus": {"dataType":"union","subSchemas":[{"ref":"EWgNodeStatus"},{"dataType":"enum","enums":[null]}],"required":true},
             "priority": {"dataType":"double","required":true},
             "status": {"ref":"EWgInterfaceStatus","required":true},
             "statusMessage": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
@@ -369,6 +370,7 @@ const models: TsoaRoute.Models = {
             "id": {"dataType":"string","required":true},
             "nodeId": {"dataType":"string","required":true},
             "nodeName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "nodeStatus": {"dataType":"union","subSchemas":[{"ref":"EWgNodeStatus"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "listenPort": {"dataType":"double","required":true},
             "addressCidr": {"dataType":"string","required":true},

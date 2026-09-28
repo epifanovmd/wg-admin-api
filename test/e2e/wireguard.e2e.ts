@@ -937,6 +937,9 @@ describe("wireguard", () => {
       expect(withReplica.replicas.map((r: any) => r.nodeId)).to.deep.equal([
         nodeC.id,
       ]);
+      // Агента на ноде копии ещё нет — UI показывает «ожидает агента».
+      expect(withReplica.replicas[0].nodeStatus).to.equal("created");
+      expect(withReplica.nodeStatus).to.be.a("string");
 
       // Тот же ключ и те же пиры на копии.
       const primaryWg0 = (await agentState(nodeAKey)).interfaces.find(
@@ -963,15 +966,40 @@ describe("wireguard", () => {
         200,
       );
 
-      // Релей: туннели до обеих копий, кандидаты по приоритету.
+      // Релей: туннели до обеих копий. Копия ещё не поднялась (агент не
+      // отчитался) — в резерв не попадает: релей не шлёт трафик туда, где
+      // интерфейса нет, даже если нода отвечает на пинг.
       const relayForward = (state: any) =>
         state.forwards.find((f: any) => f.id === iface.id);
       const relayState = await agentState(relayKey);
 
       expect(relayState.tunnels).to.have.length(2);
+      expect(relayForward(relayState).candidates).to.equal(undefined);
+
+      const reportReplica = async (status: string) =>
+        expectStatus(
+          await agent(nodeCKey, "POST", "/api/v1/wg-agent/state", {
+            interfaces: [{ name: "wg0", status }],
+          }),
+          204,
+        );
+
+      // Копия поднялась — релей получает новую версию с резервом по приоритету.
+      await reportReplica("up");
+
+      const relayWithReplica = await agentState(relayKey);
+
+      expect(relayWithReplica.version).to.be.greaterThan(relayState.version);
       expect(
-        relayForward(relayState).candidates.map((c: any) => c.nodeId),
+        relayForward(relayWithReplica).candidates.map((c: any) => c.nodeId),
       ).to.deep.equal([nodeA.id, nodeC.id]);
+
+      // Копия упала — из резерва выходит; поднялась снова — возвращается.
+      await reportReplica("error");
+      expect(relayForward(await agentState(relayKey)).candidates).to.equal(
+        undefined,
+      );
+      await reportReplica("up");
 
       // Ручное закрепление копии и возврат в авто.
       expectStatus(
@@ -1011,12 +1039,6 @@ describe("wireguard", () => {
               activeNodeId: nodeC.id,
             },
           ],
-        }),
-        204,
-      );
-      expectStatus(
-        await agent(nodeCKey, "POST", "/api/v1/wg-agent/state", {
-          interfaces: [{ name: "wg0", status: "up" }],
         }),
         204,
       );

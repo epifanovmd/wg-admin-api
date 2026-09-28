@@ -10,7 +10,11 @@ import {
   WgEndpointService,
 } from "../wg-endpoint";
 import { EWgForwardPath, WgForwardRepository } from "../wg-forward";
-import { WgInterfaceRepository, WgInterfaceService } from "../wg-interface";
+import {
+  EWgInterfaceStatus,
+  WgInterfaceRepository,
+  WgInterfaceService,
+} from "../wg-interface";
 import {
   wgConfig,
   WgNode,
@@ -234,10 +238,18 @@ export class WgAgentStateService {
 
       const listenPort = iface.endpointPort ?? iface.listenPort;
       // Копии интерфейса по приоритету (основная — первой); закреплённая —
-      // единственный кандидат. Агент берёт первую живую копию.
+      // единственный кандидат. Реплика в резерве, только когда её агент
+      // отчитался, что интерфейс поднят: нода без агента или с ошибкой
+      // интерфейса отвечает на пинг, но трафик там пропал бы. Агент берёт
+      // первую живую копию.
       const copies = [
         { nodeId: iface.nodeId, publicHost: iface.node?.publicHost ?? null },
         ...[...(iface.replicas ?? [])]
+          .filter(
+            replica =>
+              replica.status === EWgInterfaceStatus.Up ||
+              replica.nodeId === iface.activeReplicaNodeId,
+          )
           .sort((a, b) => a.priority - b.priority)
           .map(replica => ({
             nodeId: replica.nodeId,
