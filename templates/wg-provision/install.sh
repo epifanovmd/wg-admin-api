@@ -290,7 +290,9 @@ install_agent() {
     || die "Не удалось скачать агента с $BACKEND_URL (ключ верный? бэкенд доступен?)"
   EXPECTED=$(tr -d '\r' < "$TMP/headers" | awk 'tolower($1) == "x-agent-sha256:" { print $2 }' | tail -1)
   ACTUAL=$(sha256sum "$TMP/agent" | awk '{ print $1 }')
-  [ -n "$EXPECTED" ] && [ "$EXPECTED" = "$ACTUAL" ] || die "sha256 бинаря не совпадает с заявленным бэкендом"
+  if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then
+    die "sha256 бинаря не совпадает с заявленным бэкендом"
+  fi
   install -m 0755 "$TMP/agent" "$BIN.new"
   mv -f "$BIN.new" "$BIN"
 
