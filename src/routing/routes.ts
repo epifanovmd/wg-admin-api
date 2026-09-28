@@ -2717,6 +2717,7 @@ export function RegisterRoutes(router: KoaRouter) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_listWgInterfaces: Record<string, TsoaRoute.ParameterSchema> = {
                 nodeId: {"in":"query","name":"nodeId","ref":"UUID"},
+                hostNodeId: {"in":"query","name":"hostNodeId","ref":"UUID"},
                 endpointId: {"in":"query","name":"endpointId","ref":"UUID"},
                 viaRelay: {"in":"query","name":"viaRelay","dataType":"boolean"},
                 enabled: {"in":"query","name":"enabled","dataType":"boolean"},

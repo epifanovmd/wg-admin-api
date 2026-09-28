@@ -7,7 +7,10 @@ import { WgInterface } from "./wg-interface.entity";
 import { WgInterfaceReplica } from "./wg-interface-replica.entity";
 
 export interface IWgInterfaceFilters {
+  /** Основная нода интерфейса. */
   nodeId?: string;
+  /** Нода, где интерфейс работает: основная или копия. */
+  hostNodeId?: string;
   endpointId?: string;
   /** Только интерфейсы за точками через релей. */
   viaRelay?: boolean;
@@ -18,7 +21,14 @@ export interface IWgInterfaceFilters {
 @InjectableRepository(WgInterface)
 export class WgInterfaceRepository extends BaseRepository<WgInterface> {
   findPage(
-    { nodeId, endpointId, viaRelay, enabled, query }: IWgInterfaceFilters,
+    {
+      nodeId,
+      hostNodeId,
+      endpointId,
+      viaRelay,
+      enabled,
+      query,
+    }: IWgInterfaceFilters,
     { offset, limit }: Pagination,
   ): Promise<[WgInterface[], number]> {
     const qb = this.createQueryBuilder("iface")
@@ -33,6 +43,15 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
       .take(limit);
 
     if (nodeId) qb.andWhere("iface.nodeId = :nodeId", { nodeId });
+    if (hostNodeId) {
+      qb.andWhere(
+        `(iface.nodeId = :hostNodeId OR EXISTS (
+          SELECT 1 FROM wg_interface_replicas hr
+          WHERE hr.interface_id = iface.id AND hr.node_id = :hostNodeId
+        ))`,
+        { hostNodeId },
+      );
+    }
     if (endpointId)
       qb.andWhere("iface.endpointId = :endpointId", { endpointId });
     if (viaRelay)

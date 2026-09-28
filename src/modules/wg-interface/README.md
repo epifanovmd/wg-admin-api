@@ -17,7 +17,8 @@ customPostUp/Down (право `wg:interface:hooks`), enabled, status/statusMessa
 
 ## Эндпоинты (`/api/v1/wg/interfaces`, тег WgInterface)
 
-Список (`GET /`) — с копиями; фильтры `nodeId`, `endpointId`, `viaRelay`
+Список (`GET /`) — с копиями; фильтры `nodeId` (основная нода),
+`hostNodeId` (где интерфейс работает: основная или копия), `endpointId`, `viaRelay`
 (только интерфейсы за точками через релей — что и куда пересылают релеи),
 `enabled`, `query`.
 

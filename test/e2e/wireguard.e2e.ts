@@ -1025,6 +1025,37 @@ describe("wireguard", () => {
         true,
       );
 
+      // hostNodeId — всё, что работает на ноде: основные и копии чужих.
+      const elsewhere = expectStatus(
+        await call(admin, "POST", "/api/v1/wg/interfaces", {
+          nodeId: relayNode.id,
+          name: "wg7",
+          listenPort: 51970,
+          addressCidr: "10.197.0.1/24",
+        }),
+        201,
+      ).data;
+      const onC = expectStatus(
+        await call(
+          admin,
+          "GET",
+          `/api/v1/wg/interfaces?hostNodeId=${nodeC.id}`,
+        ),
+        200,
+      ).data.items;
+
+      expect(onC.map((i: any) => i.id)).to.deep.equal([iface.id]);
+      expect(
+        expectStatus(
+          await call(admin, "GET", `/api/v1/wg/interfaces?nodeId=${nodeC.id}`),
+          200,
+        ).data.items,
+      ).to.deep.equal([]);
+      expectStatus(
+        await call(admin, "DELETE", `/api/v1/wg/interfaces/${elsewhere.id}`),
+        204,
+      );
+
       // Точка знает свои интерфейсы и ноды их копий — «куда ведёт».
       const withTargets = expectStatus(
         await call(admin, "GET", `/api/v1/wg/endpoints/${endpoint.id}`),

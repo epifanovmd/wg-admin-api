@@ -6382,7 +6382,7 @@
 						}
 					}
 				},
-				"description": "Интерфейсы с фильтрами (с копиями), новые первыми. `viaRelay` — только\nинтерфейсы за точками через релей: что и куда пересылают релеи.",
+				"description": "Интерфейсы с фильтрами (с копиями), новые первыми. `nodeId` — основная\nнода, `hostNodeId` — нода, где интерфейс работает (основная или копия).\n`viaRelay` — только\nинтерфейсы за точками через релей: что и куда пересылают релеи.",
 				"summary": "Список интерфейсов",
 				"tags": [
 					"WgInterface"
@@ -6398,6 +6398,14 @@
 					{
 						"in": "query",
 						"name": "nodeId",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					},
+					{
+						"in": "query",
+						"name": "hostNodeId",
 						"required": false,
 						"schema": {
 							"$ref": "#/components/schemas/UUID"
