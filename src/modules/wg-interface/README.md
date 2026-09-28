@@ -15,6 +15,10 @@ customPostUp/Down (право `wg:interface:hooks`), enabled, status/statusMessa
 Адрес подключения клиентов: `endpoint.host:endpointPort ?? listenPort`,
 иначе `node.publicHost:listenPort` (`resolveClientEndpoint`).
 
+`WgInterfaceDto` кроме полей сущности несёт `nodeStatus` (статус ноды;
+`created` — агента ещё нет), `endpoint` (имя, режим, релей точки), копии
+`replicas` (со своим `nodeStatus`) и `servingNodeId`.
+
 ## Эндпоинты (`/api/v1/wg/interfaces`, тег WgInterface)
 
 Список (`GET /`) — с копиями; фильтры `nodeId` (основная нода),
@@ -55,7 +59,10 @@ PostUp/PostDown — 403 `WG_IFACE_CUSTOM_HOOKS_FORBIDDEN`. Удаление с �
 `wg-interface_<id>` — страница интерфейса (policy `wg-interface`, `wg:interface:view`).
 `WgInterfaceListener` шлёт `wg:interface:updated` (DTO) и `wg:interface:deleted {id}`
 в `wg-interfaces` и `wg-interface_<id>`; в комнаты нод и `wg-overview` изменения
-интерфейсов не идут. Статистика (`wg:interface:stats`, `wg:peers:stats`) — модуль wg-stats.
+интерфейсов не идут. Изменение интерфейса заново рассылает DTO его точек
+(`publishInterfacesChanged` модуля wg-endpoint → `wg:endpoint:updated` в
+`wg-endpoints`), изменение точки (`WgEndpointChangedEvent`) — DTO её
+интерфейсов. Статистика (`wg:interface:stats`, `wg:peers:stats`) — модуль wg-stats.
 
 Интерфейс нельзя подключить через точку, чей релей — его же нода: 409
 `WG_IFACE_ENDPOINT_RELAY_IS_NODE`. Такие пары (если остались в данных) не
@@ -91,7 +98,9 @@ UDP-порты релей-ноды общие для её relay-точек и с
   повтор, релей точки, порт/имя заняты; 400 — основная нода);
 - `DELETE /api/v1/wg/interfaces/{id}/replicas/{nodeId}` — убрать;
 - `PATCH` интерфейса `activeReplicaNodeId` — закрепить трафик через релей на
-  копии (основная или реплика); `null` — авто.
+  копии (основная или реплика, иначе 400 `WG_IFACE_ACTIVE_REPLICA_INVALID`);
+  копия, где интерфейс не поднят, — 409 `WG_IFACE_ACTIVE_REPLICA_DOWN`;
+  `null` — авто.
 
 Релей точки держит туннели до всех копий (цели линков включают реплики) и
 получает для проброса кандидатов по приоритету (основная — первой;

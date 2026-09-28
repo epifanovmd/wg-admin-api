@@ -29,7 +29,9 @@
 | `SENTRY_DSN`      | `observability.sentryDsn`      | пусто         | DSN Sentry; пусто — ошибки не отправляются                        |
 | `APP_NAME`        | `app.name`                     | `wg-admin`    | Метка `service` метрик, `serverName` в Sentry                     |
 | `APP_ROLE`        | `app.role`                     | `all`         | Метка `role` метрик                                               |
-| `APP_VERSION`     | — (env)                        | версия пакета | `release` в Sentry; в образ пишется при релизе                    |
+| `APP_VERSION`     | `app.version`                  | версия пакета | `release` в Sentry, `/health`; в образ — build-arg сборки         |
+| `APP_COMMIT`      | `app.commit`                   | пусто         | Короткий SHA сборки (build-arg)                                   |
+| `APP_BUILT_AT`    | `app.builtAt`                  | пусто         | Время сборки, ISO 8601 (build-arg)                                |
 
 ## Метрики
 

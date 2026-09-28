@@ -3,7 +3,8 @@
 Админка WireGuard: бэкенд (панель управления) и агент нод на Go. Бэкенд хранит
 желаемое состояние каждой ноды — интерфейсы и пиры, точки подключения через
 релей, реплики интерфейсов, пробросы портов, SOCKS5-прокси через mTLS, — агент
-на VPS забирает его по исходящему HTTPS, приводит сервер в соответствие и шлёт
+на VPS забирает его по исходящему соединению (WebSocket, запасной путь — HTTP;
+в продакшене — через HTTPS), приводит сервер в соответствие и шлёт
 статистику. Входящие порты агенту не нужны; агент ставится одной командой или
 из админки по SSH и обновляется бинарём с бэкенда.
 
@@ -35,10 +36,10 @@ src/
   migrations/        ← миграции и их упорядоченный список (index.ts)
   modules/           ← платформа (auth, user, role, jobs, …) и домен WireGuard (wg-*)
 agent/               ← агент нод (Go)
-templates/           ← шаблоны писем
+templates/           ← шаблоны писем и установщика агента
 test/e2e/            ← интеграционный набор (настоящий сервер + Postgres, Redis, Mailpit)
 test/smoke/          ← smoke-стенд WG-домена в Docker (бэкенд + агенты в контейнерах)
-scripts/             ← генератор модуля, Go в контейнере, дамп и восстановление БД
+scripts/             ← генератор модуля, Go в контейнере, проверка версии агента, дамп БД
 deploy/              ← конфиг Caddy (HTTPS)
 docs/                ← устройство системы
 ```
@@ -128,7 +129,9 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
 собираются бинари агента (amd64 и arm64), которые бэкенд раздаёт при установке
 и обновлении. Стадии сборки кросс-компилируют на платформе сборщика;
 production-зависимости, непривилегированный пользователь, `tini` как PID 1,
-read-only файловая система.
+read-only файловая система. Версию сборки (`APP_VERSION`, `APP_COMMIT`,
+`APP_BUILT_AT`) передают build-аргументами `make` и `release.yml`; она видна в
+`GET /api/v1/app/version`.
 
 `docker-compose.yml` — production-стек: `api`, `worker`, одноразовый `migrate`,
 Redis; по профилю `https` — Caddy с сертификатом для `APP_DOMAIN`
@@ -161,13 +164,16 @@ docker compose up -d --scale api=3      # реплики API (API_PORTS=8181-818
 ## CI
 
 - `ci.yml` (push и pull request в `main`): generate и сверка `src/routing`,
-  lint, typecheck, юнит-тесты, сборка; агент — `go mod tidy`, gofmt, vet,
+  lint, typecheck, юнит-тесты, сборка; агент — поднята ли `agent/VERSION` при
+  изменении его кода и совпадает ли Go в Dockerfile-ах с `go.mod`
+  (`scripts/check-agent-version.sh`), `go mod tidy`, gofmt, vet,
   `go test -race`, сборка под amd64/arm64; shellcheck скриптов; миграции на
   чистой БД, дрейф схемы и интеграционный тест очереди задач; e2e; аудит
   зависимостей; образ + Trivy. После всех проверок `main` — деплой
   (`deploy.yml`, если задана переменная репозитория `DEPLOY_ENV` и секрет
   `SSH_PRIVATE_KEY`).
-- `release.yml` (тег `v*` на коммите из `main`): образ amd64/arm64 в GHCR.
+- `release.yml` (тег `v*` на коммите из `main`): образ amd64/arm64 в GHCR
+  (версия сборки — тег).
 
 ## Лицензия
 

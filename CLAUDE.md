@@ -33,8 +33,9 @@ bash test/smoke/wg-smoke.sh   # smoke WG-домена в Docker, вручную 
 
 Перед завершением задачи обязательны: `yarn generate`, `yarn lint`, `yarn typecheck`,
 `yarn test`; при изменении API, схемы БД или инфраструктуры — ещё `yarn test:e2e`; при
-изменении агента — gofmt, `go vet`, `go test` (протокол `agent/internal/protocol` —
-зеркало `src/modules/wg-agent/wg-agent-protocol.ts`, менять синхронно).
+изменении агента — gofmt, `go vet`, `go test` и поднять `agent/VERSION` (протокол
+`agent/internal/protocol` — зеркало `src/modules/wg-agent/wg-agent-protocol.ts`, менять
+синхронно).
 
 ## Никогда не редактировать вручную
 

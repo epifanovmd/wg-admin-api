@@ -22,7 +22,7 @@
 ## Модель
 
 - **WgEndpoint** (`wg_endpoints`) — name (unique), host, mode, relayNodeId
-  (FK RESTRICT), forwardMode.
+  (FK RESTRICT), forwardMode, route (`auto` по умолчанию).
 - **WgRelayLink** (`wg_relay_links`) — линк (relayNode, targetNode) с
   уникальным `tunnelIndex`: /30-блок в `WG_RELAY_TUNNEL_CIDR`
   (по умолчанию `10.99.0.0/16`), имя туннеля `wgt<index>`, адреса концов —
@@ -49,8 +49,8 @@ CRUD + options; права `wg:endpoint:view` (чтение), `wg:endpoint:creat
 ## События
 
 `WgEndpointUpdatedEvent(dto, previous)` — при изменении host/mode/relay/
-forwardMode; модуль wg-interface пересинхронизирует линки и поднимает версии
-конфигурации затронутых нод. `WgEndpointChangedEvent(dto)` — при любом
+forwardMode/route; модуль wg-interface пересинхронизирует линки и поднимает
+версии конфигурации затронутых нод. `WgEndpointChangedEvent(dto)` — при любом
 сохранении (в том числе названия и описания), для UI.
 
 Сокет: комната `wg-endpoints` (право `wg:endpoint:view`) —
