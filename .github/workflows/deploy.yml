@@ -2,8 +2,9 @@ name: Deploy
 
 # Сборка и запуск на хосте по SSH (make deploy): из CI после проверок main
 # или вручную. Настройки — переменная репозитория DEPLOY_ENV (содержимое
-# .env.deploy), ключ — секрет SSH_PRIVATE_KEY. Секреты приложения —
-# .env.production на хосте (make env).
+# .env.deploy), ключ — секрет SSH_PRIVATE_KEY. Секреты приложения — секрет
+# PRODUCTION_ENV (содержимое .env.production): кладётся на хост при каждом
+# деплое; без него используется файл, уже лежащий на хосте (make env).
 on:
   workflow_call:
   workflow_dispatch:
@@ -55,6 +56,19 @@ jobs:
         run: |
           for i in 1 2 3; do make sync && exit 0; sleep 10; done
           exit 1
+
+      - name: Секреты приложения на хост
+        env:
+          PRODUCTION_ENV: ${{ secrets.PRODUCTION_ENV }}
+        run: |
+          if [ -z "$PRODUCTION_ENV" ]; then
+            echo "PRODUCTION_ENV не задан — используется файл на хосте"
+            exit 0
+          fi
+          env_file=$(sed -n 's/^ENV_FILE=//p' .env.deploy)
+          env_file=${env_file:-.env.production}
+          ( umask 077 && printf '%s\n' "$PRODUCTION_ENV" | tr -d '\r' > "$env_file" )
+          make env
 
       - name: Сборка, миграции, запуск
         run: make build migrate up
