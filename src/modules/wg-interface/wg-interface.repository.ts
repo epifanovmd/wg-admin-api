@@ -1,3 +1,5 @@
+import { In } from "typeorm";
+
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
 import { EWgEndpointMode, WgEndpoint } from "../wg-endpoint";
@@ -7,6 +9,8 @@ import { WgInterfaceReplica } from "./wg-interface-replica.entity";
 export interface IWgInterfaceFilters {
   nodeId?: string;
   endpointId?: string;
+  /** Только интерфейсы за точками через релей. */
+  viaRelay?: boolean;
   enabled?: boolean;
   query?: string;
 }
@@ -14,12 +18,14 @@ export interface IWgInterfaceFilters {
 @InjectableRepository(WgInterface)
 export class WgInterfaceRepository extends BaseRepository<WgInterface> {
   findPage(
-    { nodeId, endpointId, enabled, query }: IWgInterfaceFilters,
+    { nodeId, endpointId, viaRelay, enabled, query }: IWgInterfaceFilters,
     { offset, limit }: Pagination,
   ): Promise<[WgInterface[], number]> {
     const qb = this.createQueryBuilder("iface")
       .leftJoinAndSelect("iface.node", "node")
       .leftJoinAndSelect("iface.endpoint", "endpoint")
+      .leftJoinAndSelect("iface.replicas", "replica")
+      .leftJoinAndSelect("replica.node", "replicaNode")
       .orderBy("iface.createdAt", "DESC")
       .addOrderBy("iface.id", "DESC")
       .skip(offset)
@@ -28,6 +34,10 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
     if (nodeId) qb.andWhere("iface.nodeId = :nodeId", { nodeId });
     if (endpointId)
       qb.andWhere("iface.endpointId = :endpointId", { endpointId });
+    if (viaRelay)
+      qb.andWhere("endpoint.mode = :relayMode", {
+        relayMode: EWgEndpointMode.Relay,
+      });
     if (enabled !== undefined)
       qb.andWhere("iface.enabled = :enabled", { enabled });
     if (query) qb.andWhere("iface.name ILIKE :query", { query: `%${query}%` });
@@ -60,6 +70,17 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
       where: { endpointId },
       relations: { node: true, replicas: true },
     });
+  }
+
+  /** Интерфейсы точек (с нодами и копиями) — одним запросом на список точек. */
+  findByEndpoints(endpointIds: string[]): Promise<WgInterface[]> {
+    return endpointIds.length
+      ? this.find({
+          where: { endpointId: In(endpointIds) },
+          relations: { node: true, replicas: true },
+          order: { name: "ASC", replicas: { priority: "ASC" } },
+        })
+      : Promise.resolve([]);
   }
 
   /** id целевых нод, чьи интерфейсы подключены через relay-точки этой ноды (кроме неё самой). */

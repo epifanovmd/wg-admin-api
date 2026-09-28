@@ -136,6 +136,32 @@ func TestCandidates(t *testing.T) {
 	}
 }
 
+// Точка IPIP с маршрутом auto: у каждой копии туннель, затем её прямой
+// адрес. Лёг только туннель — трафик остаётся на той же ноде напрямую;
+// нода недоступна целиком — следующая копия.
+func TestTunnelThenDirectPerCopy(t *testing.T) {
+	health := NewHealth()
+	endpoint := []protocol.Forward{forward(func(f *protocol.Forward) {
+		f.FallbackIP = nil
+		f.Candidates = []protocol.Candidate{
+			{TargetIP: "10.99.0.2", Tunnel: str("wgt0"), NodeID: "a"},
+			{TargetIP: "203.0.113.20", NodeID: "a"},
+			{TargetIP: "10.99.0.6", Tunnel: str("wgt1"), NodeID: "c"},
+			{TargetIP: "203.0.113.30", NodeID: "c"},
+		}
+	})}
+	pick := func() Resolved { return Resolve(endpoint, health)[0] }
+
+	fail(health, "wgt0", FailoverAfterFailures)
+	if pick().TargetIP != "203.0.113.20" || pick().ActiveRoute != "direct" {
+		t.Fatal("туннель лёг — прямой адрес той же ноды")
+	}
+	fail(health, "ip:203.0.113.20", FailoverAfterFailures)
+	if pick().TargetIP != "10.99.0.6" || pick().ActiveRoute != "tunnel" {
+		t.Fatal("нода недоступна целиком — копия через туннель")
+	}
+}
+
 func TestPinnedCandidate(t *testing.T) {
 	health := NewHealth()
 	fail(health, "wgt1", 10)

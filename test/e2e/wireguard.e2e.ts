@@ -941,6 +941,37 @@ describe("wireguard", () => {
       expect(withReplica.replicas[0].nodeStatus).to.equal("created");
       expect(withReplica.nodeStatus).to.be.a("string");
 
+      // Список интерфейсов — с копиями; viaRelay — только за точками через релей.
+      const viaRelay = expectStatus(
+        await call(admin, "GET", "/api/v1/wg/interfaces?viaRelay=true"),
+        200,
+      ).data.items;
+      const listed = viaRelay.find((i: any) => i.id === iface.id);
+
+      expect(listed.replicas.map((r: any) => r.nodeId)).to.deep.equal([
+        nodeC.id,
+      ]);
+      expect(listed.replicas[0].nodeName).to.equal("replica-c");
+      expect(viaRelay.every((i: any) => i.endpointId === endpoint.id)).to.equal(
+        true,
+      );
+
+      // Точка знает свои интерфейсы и ноды их копий — «куда ведёт».
+      const withTargets = expectStatus(
+        await call(admin, "GET", `/api/v1/wg/endpoints/${endpoint.id}`),
+        200,
+      ).data;
+      const target = withTargets.interfaces.find(
+        (i: any) => i.interfaceId === iface.id,
+      );
+
+      expect(target).to.include({
+        interfaceName: iface.name,
+        nodeId: iface.nodeId,
+        port: iface.endpointPort ?? iface.listenPort,
+      });
+      expect(target.copyNodeIds).to.deep.equal([nodeC.id]);
+
       // Тот же ключ и те же пиры на копии.
       const primaryWg0 = (await agentState(nodeAKey)).interfaces.find(
         (i: any) => i.name === "wg0",
@@ -971,10 +1002,20 @@ describe("wireguard", () => {
       // интерфейса нет, даже если нода отвечает на пинг.
       const relayForward = (state: any) =>
         state.forwards.find((f: any) => f.id === iface.id);
+      // Пути релея по порядку: [нода, туннель | напрямую].
+      const paths = (state: any) =>
+        relayForward(state).candidates?.map((c: any) => [
+          c.nodeId,
+          c.tunnel ? "tunnel" : "direct",
+        ]);
       const relayState = await agentState(relayKey);
 
       expect(relayState.tunnels).to.have.length(2);
-      expect(relayForward(relayState).candidates).to.equal(undefined);
+      // Маршрут auto: туннель до основной, при его отказе — её прямой адрес.
+      expect(paths(relayState)).to.deep.equal([
+        [nodeA.id, "tunnel"],
+        [nodeA.id, "direct"],
+      ]);
 
       const reportReplica = async (status: string) =>
         expectStatus(
@@ -990,16 +1031,43 @@ describe("wireguard", () => {
       const relayWithReplica = await agentState(relayKey);
 
       expect(relayWithReplica.version).to.be.greaterThan(relayState.version);
-      expect(
-        relayForward(relayWithReplica).candidates.map((c: any) => c.nodeId),
-      ).to.deep.equal([nodeA.id, nodeC.id]);
+      expect(paths(relayWithReplica)).to.deep.equal([
+        [nodeA.id, "tunnel"],
+        [nodeA.id, "direct"],
+        [nodeC.id, "tunnel"],
+        [nodeC.id, "direct"],
+      ]);
 
       // Копия упала — из резерва выходит; поднялась снова — возвращается.
       await reportReplica("error");
-      expect(relayForward(await agentState(relayKey)).candidates).to.equal(
-        undefined,
-      );
+      expect(paths(await agentState(relayKey))).to.deep.equal([
+        [nodeA.id, "tunnel"],
+        [nodeA.id, "direct"],
+      ]);
       await reportReplica("up");
+
+      // Маршрут точки: только туннель / напрямую — релей получает новую версию.
+      const setRoute = async (route: string) =>
+        expect(
+          expectStatus(
+            await call(admin, "PATCH", `/api/v1/wg/endpoints/${endpoint.id}`, {
+              route,
+            }),
+            200,
+          ).data.route,
+        ).to.equal(route);
+
+      await setRoute("tunnel");
+      expect(paths(await agentState(relayKey))).to.deep.equal([
+        [nodeA.id, "tunnel"],
+        [nodeC.id, "tunnel"],
+      ]);
+      await setRoute("direct");
+      expect(paths(await agentState(relayKey))).to.deep.equal([
+        [nodeA.id, "direct"],
+        [nodeC.id, "direct"],
+      ]);
+      await setRoute("auto");
 
       // Ручное закрепление копии и возврат в авто.
       expectStatus(
@@ -1008,11 +1076,10 @@ describe("wireguard", () => {
         }),
         200,
       );
-      expect(
-        relayForward(await agentState(relayKey)).candidates.map(
-          (c: any) => c.nodeId,
-        ),
-      ).to.deep.equal([nodeC.id]);
+      expect(paths(await agentState(relayKey))).to.deep.equal([
+        [nodeC.id, "tunnel"],
+        [nodeC.id, "direct"],
+      ]);
       expectStatus(
         await call(admin, "PATCH", `/api/v1/wg/interfaces/${iface.id}`, {
           activeReplicaNodeId: relayNode.id,
@@ -1090,9 +1157,10 @@ describe("wireguard", () => {
       expect(
         (await agentState(nodeCKey)).interfaces.map((i: any) => i.name),
       ).to.not.include("wg0");
-      expect(relayForward(await agentState(relayKey)).candidates).to.equal(
-        undefined,
-      );
+      expect(paths(await agentState(relayKey))).to.deep.equal([
+        [nodeA.id, "tunnel"],
+        [nodeA.id, "direct"],
+      ]);
       expectStatus(
         await call(admin, "DELETE", `/api/v1/wg/nodes/${nodeC.id}`),
         204,

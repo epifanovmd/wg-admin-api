@@ -1,4 +1,8 @@
-import type { EWgEndpointMode, EWgForwardMode } from "../wg-endpoint.types";
+import type {
+  EWgEndpointMode,
+  EWgEndpointRoute,
+  EWgForwardMode,
+} from "../wg-endpoint.types";
 
 export interface ICreateWgEndpointBody {
   name: string;
@@ -9,6 +13,8 @@ export interface ICreateWgEndpointBody {
   /** Обязательна для mode=relay. */
   relayNodeId?: string | null;
   forwardMode?: EWgForwardMode;
+  /** Маршрут при IPIP: по умолчанию `auto` (запасной прямой путь). */
+  route?: EWgEndpointRoute;
 }
 
 export interface IUpdateWgEndpointBody {
@@ -18,4 +24,5 @@ export interface IUpdateWgEndpointBody {
   mode?: EWgEndpointMode;
   relayNodeId?: string | null;
   forwardMode?: EWgForwardMode;
+  route?: EWgEndpointRoute;
 }

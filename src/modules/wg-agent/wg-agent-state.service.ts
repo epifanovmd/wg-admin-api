@@ -4,6 +4,7 @@ import { In } from "typeorm";
 import { Injectable, logger } from "../../core";
 import {
   EWgEndpointMode,
+  EWgEndpointRoute,
   EWgForwardMode,
   relayTunnelAddresses,
   relayTunnelName,
@@ -262,13 +263,11 @@ export class WgAgentStateService {
       );
 
       type TCandidate = NonNullable<IWgAgentForward["candidates"]>[number];
-      const candidates = copies.flatMap((copy): TCandidate[] => {
-        if (endpoint.forwardMode !== EWgForwardMode.Ipip) {
-          return copy.publicHost
-            ? [{ targetIp: copy.publicHost, tunnel: null, nodeId: copy.nodeId }]
-            : [];
-        }
-
+      const direct = (copy: (typeof copies)[number]): TCandidate[] =>
+        copy.publicHost
+          ? [{ targetIp: copy.publicHost, tunnel: null, nodeId: copy.nodeId }]
+          : [];
+      const tunnel = (copy: (typeof copies)[number]): TCandidate[] => {
         const link = linkByTarget.get(copy.nodeId);
 
         return link
@@ -283,6 +282,20 @@ export class WgAgentStateService {
               },
             ]
           : [];
+      };
+      // IPIP с маршрутом auto: у каждой копии — туннель, затем прямой адрес
+      // той же ноды (лёг только туннель — клиенты остаются на ноде); копия
+      // целиком недоступна — следующая. DNAT и route=direct — только прямой.
+      const candidates = copies.flatMap((copy): TCandidate[] => {
+        if (
+          endpoint.forwardMode !== EWgForwardMode.Ipip ||
+          endpoint.route === EWgEndpointRoute.Direct
+        ) {
+          return direct(copy);
+        }
+        if (endpoint.route === EWgEndpointRoute.Tunnel) return tunnel(copy);
+
+        return [...tunnel(copy), ...direct(copy)];
       });
 
       if (candidates.length === 0) {

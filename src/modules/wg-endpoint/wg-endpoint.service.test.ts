@@ -57,6 +57,7 @@ describe("WgEndpointService", () => {
   let usage: {
     targetNodeIds: sinon.SinonStub;
     relayPortConflict: sinon.SinonStub;
+    interfacesByEndpoint: sinon.SinonStub;
   };
 
   beforeEach(() => {
@@ -71,6 +72,7 @@ describe("WgEndpointService", () => {
     eventBus = createMockEventBus();
     nodes = { findEntity: sinon.stub().resolves({}) };
     usage = {
+      interfacesByEndpoint: sinon.stub().resolves({}),
       targetNodeIds: sinon.stub().resolves([]),
       relayPortConflict: sinon.stub().resolves(false),
     };

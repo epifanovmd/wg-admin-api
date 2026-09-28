@@ -1,6 +1,11 @@
 import { BaseDto } from "../../../core";
+import type { IWgEndpointInterfaceDto } from "../endpoint-usage";
 import type { WgEndpoint } from "../wg-endpoint.entity";
-import type { EWgEndpointMode, EWgForwardMode } from "../wg-endpoint.types";
+import type {
+  EWgEndpointMode,
+  EWgEndpointRoute,
+  EWgForwardMode,
+} from "../wg-endpoint.types";
 
 export class WgEndpointDto extends BaseDto {
   id: string;
@@ -10,10 +15,14 @@ export class WgEndpointDto extends BaseDto {
   mode: EWgEndpointMode;
   relayNodeId: string | null;
   forwardMode: EWgForwardMode;
+  /** Маршрут при IPIP: запасной прямой путь до той же ноды (`auto`) или нет. */
+  route: EWgEndpointRoute;
+  /** Интерфейсы, подключённые через точку, — куда она ведёт. */
+  interfaces: IWgEndpointInterfaceDto[];
   createdAt: Date;
   updatedAt: Date;
 
-  constructor(entity: WgEndpoint) {
+  constructor(entity: WgEndpoint, interfaces: IWgEndpointInterfaceDto[] = []) {
     super(entity);
 
     this.id = entity.id;
@@ -23,12 +32,17 @@ export class WgEndpointDto extends BaseDto {
     this.mode = entity.mode;
     this.relayNodeId = entity.relayNodeId;
     this.forwardMode = entity.forwardMode;
+    this.route = entity.route;
+    this.interfaces = interfaces;
     this.createdAt = entity.createdAt;
     this.updatedAt = entity.updatedAt;
   }
 
-  static fromEntity(entity: WgEndpoint) {
-    return new WgEndpointDto(entity);
+  static fromEntity(
+    entity: WgEndpoint,
+    interfaces: IWgEndpointInterfaceDto[] = [],
+  ) {
+    return new WgEndpointDto(entity, interfaces);
   }
 }
 

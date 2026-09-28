@@ -14,6 +14,19 @@ export enum EWgForwardMode {
   Ipip = "ipip",
 }
 
+/**
+ * Маршрут пересылки через IPIP-туннель: с запасным прямым путём до той же
+ * ноды или без него. При DNAT не используется — туннеля нет.
+ */
+export enum EWgEndpointRoute {
+  /** Туннель; не отвечает — напрямую на ту же ноду, затем — на копии. */
+  Auto = "auto",
+  /** Только туннель: при его отказе — сразу на копии интерфейса. */
+  Tunnel = "tunnel",
+  /** Принудительно напрямую, мимо туннеля. */
+  Direct = "direct",
+}
+
 export const WG_ENDPOINT_NAME_MAX = 120;
 export const WG_ENDPOINT_DESCRIPTION_MAX = 2000;
 

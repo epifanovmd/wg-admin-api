@@ -3,6 +3,7 @@ import { z } from "zod";
 import { wgHostSchema } from "../../wg-node";
 import {
   EWgEndpointMode,
+  EWgEndpointRoute,
   EWgForwardMode,
   WG_ENDPOINT_DESCRIPTION_MAX,
   WG_ENDPOINT_NAME_MAX,
@@ -39,6 +40,7 @@ export const CreateWgEndpointSchema = z
     mode: z.enum(EWgEndpointMode),
     relayNodeId: z.uuid().nullable().optional(),
     forwardMode: z.enum(EWgForwardMode).optional(),
+    route: z.enum(EWgEndpointRoute).optional(),
   })
   .refine(relayConsistent, {
     message: "Для режима relay нужна релей-нода",
@@ -53,6 +55,7 @@ export const UpdateWgEndpointSchema = z
     mode: z.enum(EWgEndpointMode).optional(),
     relayNodeId: z.uuid().nullable().optional(),
     forwardMode: z.enum(EWgForwardMode).optional(),
+    route: z.enum(EWgEndpointRoute).optional(),
   })
   .refine(body => Object.values(body).some(v => v !== undefined), {
     message: "Нужно хотя бы одно поле",

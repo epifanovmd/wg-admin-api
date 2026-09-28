@@ -12,6 +12,7 @@ import {
 import { WgNode } from "../wg-node";
 import {
   EWgEndpointMode,
+  EWgEndpointRoute,
   EWgForwardMode,
   WG_ENDPOINT_NAME_MAX,
 } from "./wg-endpoint.types";
@@ -56,6 +57,14 @@ export class WgEndpoint {
     default: EWgForwardMode.Dnat,
   })
   forwardMode!: EWgForwardMode;
+
+  @Column({
+    type: "enum",
+    enum: EWgEndpointRoute,
+    enumName: "wg_endpoints_route_enum",
+    default: EWgEndpointRoute.Auto,
+  })
+  route!: EWgEndpointRoute;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;

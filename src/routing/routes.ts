@@ -282,6 +282,24 @@ const models: TsoaRoute.Models = {
         "enums": ["dnat","ipip"],
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "EWgEndpointRoute": {
+        "dataType": "refEnum",
+        "enums": ["auto","tunnel","direct"],
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "IWgEndpointInterfaceDto": {
+        "dataType": "refObject",
+        "properties": {
+            "interfaceId": {"dataType":"string","required":true},
+            "interfaceName": {"dataType":"string","required":true},
+            "nodeId": {"dataType":"string","required":true},
+            "nodeName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "port": {"dataType":"double","required":true},
+            "copyNodeIds": {"dataType":"array","array":{"dataType":"string"},"required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "WgEndpointDto": {
         "dataType": "refObject",
         "properties": {
@@ -292,6 +310,8 @@ const models: TsoaRoute.Models = {
             "mode": {"ref":"EWgEndpointMode","required":true},
             "relayNodeId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "forwardMode": {"ref":"EWgForwardMode","required":true},
+            "route": {"ref":"EWgEndpointRoute","required":true},
+            "interfaces": {"dataType":"array","array":{"dataType":"refObject","ref":"IWgEndpointInterfaceDto"},"required":true},
             "createdAt": {"dataType":"datetime","required":true},
             "updatedAt": {"dataType":"datetime","required":true},
         },
@@ -307,6 +327,7 @@ const models: TsoaRoute.Models = {
             "mode": {"ref":"EWgEndpointMode","required":true},
             "relayNodeId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
             "forwardMode": {"ref":"EWgForwardMode"},
+            "route": {"ref":"EWgEndpointRoute"},
         },
         "additionalProperties": false,
     },
@@ -342,6 +363,7 @@ const models: TsoaRoute.Models = {
             "mode": {"ref":"EWgEndpointMode"},
             "relayNodeId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
             "forwardMode": {"ref":"EWgForwardMode"},
+            "route": {"ref":"EWgEndpointRoute"},
         },
         "additionalProperties": false,
     },
@@ -2684,6 +2706,7 @@ export function RegisterRoutes(router: KoaRouter) {
         const argsWgInterfaceController_listWgInterfaces: Record<string, TsoaRoute.ParameterSchema> = {
                 nodeId: {"in":"query","name":"nodeId","ref":"UUID"},
                 endpointId: {"in":"query","name":"endpointId","ref":"UUID"},
+                viaRelay: {"in":"query","name":"viaRelay","dataType":"boolean"},
                 enabled: {"in":"query","name":"enabled","dataType":"boolean"},
                 query: {"in":"query","name":"query","dataType":"string"},
                 offset: {"in":"query","name":"offset","dataType":"double"},

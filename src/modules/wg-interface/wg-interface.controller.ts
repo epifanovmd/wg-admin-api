@@ -74,7 +74,8 @@ export class WgInterfaceController extends Controller {
   }
 
   /**
-   * Интерфейсы с фильтрами, новые первыми.
+   * Интерфейсы с фильтрами (с копиями), новые первыми. `viaRelay` — только
+   * интерфейсы за точками через релей: что и куда пересылают релеи.
    * @summary Список интерфейсов
    */
   @Security("jwt", ["permission:wg:interface:view"])
@@ -82,13 +83,14 @@ export class WgInterfaceController extends Controller {
   listWgInterfaces(
     @Query() nodeId?: UUID,
     @Query() endpointId?: UUID,
+    @Query() viaRelay?: boolean,
     @Query() enabled?: boolean,
     @Query() query?: string,
     @Query() offset?: number,
     @Query() limit?: number,
   ): Promise<IPaginatedDto<WgInterfaceDto>> {
     return this._service.list(
-      { nodeId, endpointId, enabled, query },
+      { nodeId, endpointId, viaRelay, enabled, query },
       normalizePagination(offset, limit),
     );
   }

@@ -24,7 +24,11 @@ import { relayTunnelCapacity } from "./relay-tunnel";
 import { WgEndpoint } from "./wg-endpoint.entity";
 import { WgEndpointError } from "./wg-endpoint.errors";
 import { WgEndpointRepository } from "./wg-endpoint.repository";
-import { EWgEndpointMode, EWgForwardMode } from "./wg-endpoint.types";
+import {
+  EWgEndpointMode,
+  EWgEndpointRoute,
+  EWgForwardMode,
+} from "./wg-endpoint.types";
 import { WgRelayLink } from "./wg-relay-link.entity";
 import { WgRelayLinkRepository } from "./wg-relay-link.repository";
 
@@ -57,6 +61,7 @@ export class WgEndpointService {
         relayNodeId:
           body.mode === EWgEndpointMode.Relay ? body.relayNodeId : null,
         forwardMode: body.forwardMode ?? EWgForwardMode.Dnat,
+        route: body.route ?? EWgEndpointRoute.Auto,
       });
       const dto = WgEndpointDto.fromEntity(endpoint);
 
@@ -75,7 +80,7 @@ export class WgEndpointService {
   ): Promise<IPaginatedDto<WgEndpointDto>> {
     const [items, total] = await this._endpoints.findPage(query, pagination);
 
-    return toPage(items.map(WgEndpointDto.fromEntity), total, pagination);
+    return toPage(await this._toDtos(items), total, pagination);
   }
 
   async options(): Promise<WgEndpointOptionDto[]> {
@@ -85,7 +90,9 @@ export class WgEndpointService {
   }
 
   async get(id: string): Promise<WgEndpointDto> {
-    return WgEndpointDto.fromEntity(await this._findOrFail(id));
+    const [dto] = await this._toDtos([await this._findOrFail(id)]);
+
+    return dto;
   }
 
   async update(
@@ -98,6 +105,7 @@ export class WgEndpointService {
       mode: endpoint.mode,
       relayNodeId: endpoint.relayNodeId,
       forwardMode: endpoint.forwardMode,
+      route: endpoint.route,
     };
 
     if (body.name !== undefined) endpoint.name = body.name;
@@ -106,6 +114,7 @@ export class WgEndpointService {
     if (body.mode !== undefined) endpoint.mode = body.mode;
     if (body.relayNodeId !== undefined) endpoint.relayNodeId = body.relayNodeId;
     if (body.forwardMode !== undefined) endpoint.forwardMode = body.forwardMode;
+    if (body.route !== undefined) endpoint.route = body.route;
 
     if (endpoint.mode === EWgEndpointMode.Direct) endpoint.relayNodeId = null;
     await this._assertRelayNode(endpoint.mode, endpoint.relayNodeId);
@@ -115,14 +124,13 @@ export class WgEndpointService {
     }
 
     try {
-      const dto = WgEndpointDto.fromEntity(
-        await this._endpoints.save(endpoint),
-      );
+      const [dto] = await this._toDtos([await this._endpoints.save(endpoint)]);
       const configChanged =
         previous.host !== endpoint.host ||
         previous.mode !== endpoint.mode ||
         previous.relayNodeId !== endpoint.relayNodeId ||
-        previous.forwardMode !== endpoint.forwardMode;
+        previous.forwardMode !== endpoint.forwardMode ||
+        previous.route !== endpoint.route;
 
       if (configChanged) {
         this._eventBus.emit(new WgEndpointUpdatedEvent(dto, previous));
@@ -134,6 +142,21 @@ export class WgEndpointService {
       if (isUniqueViolation(err)) throw WgEndpointError.NAME_TAKEN();
       throw err;
     }
+  }
+
+  /** DTO точек с интерфейсами, которые через них подключены. */
+  private async _toDtos(endpoints: WgEndpoint[]): Promise<WgEndpointDto[]> {
+    const ids = endpoints.map(endpoint => endpoint.id);
+    const byEndpoint = await Promise.all(
+      (this._usage ?? []).map(usage => usage.interfacesByEndpoint(ids)),
+    );
+
+    return endpoints.map(endpoint =>
+      WgEndpointDto.fromEntity(
+        endpoint,
+        byEndpoint.flatMap(interfaces => interfaces[endpoint.id] ?? []),
+      ),
+    );
   }
 
   /** Удалить точку подключения; используемая интерфейсами — 409. */

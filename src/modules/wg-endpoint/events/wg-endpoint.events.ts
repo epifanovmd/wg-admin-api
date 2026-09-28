@@ -11,6 +11,7 @@ export interface IWgEndpointConfigSnapshot {
   mode: string;
   relayNodeId: string | null;
   forwardMode: string;
+  route: string;
 }
 
 /**

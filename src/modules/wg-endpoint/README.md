@@ -14,6 +14,10 @@
   - `forwardMode=dnat` — iptables DNAT на публичный адрес целевой ноды;
   - `forwardMode=ipip` — IPIP-туннель (обход потерь и фильтрации UDP на
     пути у хостера) + DNAT внутрь туннеля.
+  - `route` (только для `ipip`): `auto` — у каждой копии интерфейса туннель,
+    затем её прямой адрес (лёг только туннель — клиенты остаются на ноде),
+    нода недоступна целиком — следующая копия; `tunnel` — только туннели;
+    `direct` — только прямые адреса.
 
 ## Модель
 
@@ -33,6 +37,10 @@ multi-inject `WG_ENDPOINT_USAGE` (`asWgEndpointUsage`, реализует wg-int
 `WG_ENDPOINT_RELAY_PORT_CONFLICT`.
 
 ## Эндпоинты (`/api/v1/wg/endpoints`, тег WgEndpoint)
+
+`WgEndpointDto.interfaces` — интерфейсы, подключённые через точку (нода,
+порт клиентов, ноды копий): куда она ведёт. Данные — от модуля интерфейсов
+через `IWgEndpointUsage.interfacesByEndpoint` (один запрос на список точек).
 
 CRUD + options; права `wg:endpoint:view` (чтение), `wg:endpoint:create`,
 `wg:endpoint:update`, `wg:endpoint:delete`.

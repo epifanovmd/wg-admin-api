@@ -567,6 +567,56 @@
 				],
 				"type": "string"
 			},
+			"EWgEndpointRoute": {
+				"description": "Маршрут пересылки через IPIP-туннель: с запасным прямым путём до той же\nноды или без него. При DNAT не используется — туннеля нет.",
+				"enum": [
+					"auto",
+					"tunnel",
+					"direct"
+				],
+				"type": "string"
+			},
+			"IWgEndpointInterfaceDto": {
+				"description": "Интерфейс, подключённый через точку: куда она ведёт.",
+				"properties": {
+					"interfaceId": {
+						"type": "string"
+					},
+					"interfaceName": {
+						"type": "string"
+					},
+					"nodeId": {
+						"type": "string",
+						"description": "Нода интерфейса (основная копия)."
+					},
+					"nodeName": {
+						"type": "string",
+						"nullable": true
+					},
+					"port": {
+						"type": "number",
+						"format": "double",
+						"description": "Порт клиентов на точке: отдельный порт точки или порт интерфейса."
+					},
+					"copyNodeIds": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"description": "Ноды копий интерфейса по приоритету."
+					}
+				},
+				"required": [
+					"interfaceId",
+					"interfaceName",
+					"nodeId",
+					"nodeName",
+					"port",
+					"copyNodeIds"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"WgEndpointDto": {
 				"properties": {
 					"id": {
@@ -592,6 +642,17 @@
 					"forwardMode": {
 						"$ref": "#/components/schemas/EWgForwardMode"
 					},
+					"route": {
+						"$ref": "#/components/schemas/EWgEndpointRoute",
+						"description": "Маршрут при IPIP: запасной прямой путь до той же ноды (`auto`) или нет."
+					},
+					"interfaces": {
+						"items": {
+							"$ref": "#/components/schemas/IWgEndpointInterfaceDto"
+						},
+						"type": "array",
+						"description": "Интерфейсы, подключённые через точку, — куда она ведёт."
+					},
 					"createdAt": {
 						"type": "string",
 						"format": "date-time"
@@ -609,6 +670,8 @@
 					"mode",
 					"relayNodeId",
 					"forwardMode",
+					"route",
+					"interfaces",
 					"createdAt",
 					"updatedAt"
 				],
@@ -638,6 +701,10 @@
 					},
 					"forwardMode": {
 						"$ref": "#/components/schemas/EWgForwardMode"
+					},
+					"route": {
+						"$ref": "#/components/schemas/EWgEndpointRoute",
+						"description": "Маршрут при IPIP: по умолчанию `auto` (запасной прямой путь)."
 					}
 				},
 				"required": [
@@ -726,6 +793,9 @@
 					},
 					"forwardMode": {
 						"$ref": "#/components/schemas/EWgForwardMode"
+					},
+					"route": {
+						"$ref": "#/components/schemas/EWgEndpointRoute"
 					}
 				},
 				"type": "object",
@@ -6274,7 +6344,7 @@
 						}
 					}
 				},
-				"description": "Интерфейсы с фильтрами, новые первыми.",
+				"description": "Интерфейсы с фильтрами (с копиями), новые первыми. `viaRelay` — только\nинтерфейсы за точками через релей: что и куда пересылают релеи.",
 				"summary": "Список интерфейсов",
 				"tags": [
 					"WgInterface"
@@ -6301,6 +6371,14 @@
 						"required": false,
 						"schema": {
 							"$ref": "#/components/schemas/UUID"
+						}
+					},
+					{
+						"in": "query",
+						"name": "viaRelay",
+						"required": false,
+						"schema": {
+							"type": "boolean"
 						}
 					},
 					{

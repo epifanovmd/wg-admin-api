@@ -1,7 +1,7 @@
 import { inject } from "inversify";
 
 import { Injectable } from "../../core";
-import type { IWgEndpointUsage } from "../wg-endpoint";
+import type { IWgEndpointInterfaceDto, IWgEndpointUsage } from "../wg-endpoint";
 import { WgNodeService } from "../wg-node";
 import { WgInterfaceRepository } from "./wg-interface.repository";
 
@@ -25,6 +25,27 @@ export class WgInterfaceEndpointUsage implements IWgEndpointUsage {
         ]),
       ),
     ];
+  }
+
+  async interfacesByEndpoint(
+    endpointIds: string[],
+  ): Promise<Record<string, IWgEndpointInterfaceDto[]>> {
+    const result: Record<string, IWgEndpointInterfaceDto[]> = {};
+
+    for (const iface of await this._repo.findByEndpoints(endpointIds)) {
+      if (!iface.endpointId) continue;
+
+      (result[iface.endpointId] ??= []).push({
+        interfaceId: iface.id,
+        interfaceName: iface.name,
+        nodeId: iface.nodeId,
+        nodeName: iface.node?.name ?? null,
+        port: iface.endpointPort ?? iface.listenPort,
+        copyNodeIds: (iface.replicas ?? []).map(replica => replica.nodeId),
+      });
+    }
+
+    return result;
   }
 
   async relayPortConflict(
