@@ -13,7 +13,12 @@ COMPOSE_FILES ?= docker-compose.yml docker-compose.postgres.yml
 # keepalive на долгой сборке. Переопределяется в .env.deploy.
 SSH_OPTS ?= -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=30
 SSH = ssh $(SSH_OPTS) $(SSH_USER)@$(SSH_HOST)
-COMPOSE_ENV = export IMAGE=$(IMAGE) TAG=$(TAG) COMPOSE_FILE=$(subst $() ,:,$(strip $(COMPOSE_FILES))) COMPOSE_PROFILES=$(subst $() ,$(),$(COMPOSE_PROFILES))
+# Версия сборки — из git этой копии (на хост .git не уходит): тег или SHA.
+APP_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+APP_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null)
+APP_BUILT_AT := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+BUILD_INFO = APP_VERSION=$(APP_VERSION) APP_COMMIT=$(APP_COMMIT) APP_BUILT_AT=$(APP_BUILT_AT)
+COMPOSE_ENV = export IMAGE=$(IMAGE) TAG=$(TAG) $(BUILD_INFO) COMPOSE_FILE=$(subst $() ,:,$(strip $(COMPOSE_FILES))) COMPOSE_PROFILES=$(subst $() ,$(),$(COMPOSE_PROFILES))
 COMPOSE = $(COMPOSE_ENV) && docker compose --env-file $(ENV_FILE)
 REMOTE = cd $(SSH_PROJECT_DIR) && $(COMPOSE)
 DB = --host $(SSH_USER)@$(SSH_HOST) --container $(DB_CONTAINER) --user $(DB_USER) --db $(DB_NAME)
@@ -78,7 +83,7 @@ db-restore:
 	scripts/db/restore_dump_db.sh $(DB) $(if $(DB_DUMP_FILE),--file $(DB_DUMP_FILE))
 
 image:
-	docker build --target app -t $(IMAGE):$(TAG) .
+	docker build --target app $(addprefix --build-arg ,$(BUILD_INFO)) -t $(IMAGE):$(TAG) .
 
 # --- Локально (docker на этой машине, тот же состав стека) ---
 local-up:

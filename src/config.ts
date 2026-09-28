@@ -74,6 +74,18 @@ const configSchema = z.object({
     role: z.enum(["api", "worker", "all"]).default("all"),
     /** Публичный URL API (для ссылок в письмах, подписанных URL файлов). */
     publicUrl: z.string().default("http://localhost:8181"),
+    /** Версия сборки: git describe (тег или SHA), в dev — версия package.json. */
+    version: z.string().min(1).default("dev"),
+    /** Короткий SHA коммита сборки; null — вне сборки образа. */
+    commit: z
+      .string()
+      .optional()
+      .transform(value => value || null),
+    /** Время сборки (ISO 8601); null — вне сборки образа. */
+    builtAt: z
+      .string()
+      .optional()
+      .transform(value => value || null),
   }),
 
   jobs: z.object({
@@ -257,6 +269,9 @@ export const config: Config = productionSchema.parse({
     name: env.APP_NAME,
     role: env.APP_ROLE,
     publicUrl: env.APP_PUBLIC_URL,
+    version: env.APP_VERSION || env.npm_package_version || undefined,
+    commit: env.APP_COMMIT,
+    builtAt: env.APP_BUILT_AT,
   },
   jobs: {
     concurrency: env.JOBS_CONCURRENCY,

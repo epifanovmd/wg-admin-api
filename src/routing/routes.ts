@@ -43,6 +43,8 @@ import { AuthController } from './../modules/auth/auth.controller';
 import { PasskeysController } from './../modules/passkeys/passkeys.controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { AuditController } from './../modules/audit/audit.controller';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { AppInfoController } from './../modules/app-info/app-info.controller';
 import { koaAuthentication } from './../core/auth/koa-authentication';
 // @ts-ignore - no great way to install types from subpackage
 import { iocContainer } from './../app.container';
@@ -1950,6 +1952,18 @@ const models: TsoaRoute.Models = {
         "properties": {
             "items": {"dataType":"array","array":{"dataType":"refObject","ref":"AuditEventDto"},"required":true},
             "nextCursor": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "IAppVersionDto": {
+        "dataType": "refObject",
+        "properties": {
+            "version": {"dataType":"string","required":true},
+            "commit": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "builtAt": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "startedAt": {"dataType":"string","required":true},
+            "agentVersion": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
         },
         "additionalProperties": false,
     },
@@ -6870,6 +6884,41 @@ export function RegisterRoutes(router: KoaRouter) {
 
             return templateService.apiHandler({
               methodName: 'listAuditEvents',
+              controller,
+              context,
+              validatedArgs,
+              successStatus: undefined,
+            });
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsAppInfoController_getAppVersion: Record<string, TsoaRoute.ParameterSchema> = {
+        };
+        router.get('/api/v1/app/version',
+            authenticateMiddleware([{"jwt":[]}]),
+            ...(fetchMiddlewares<Middleware>(AppInfoController)),
+            ...(fetchMiddlewares<Middleware>(AppInfoController.prototype.getAppVersion)),
+
+            async function AppInfoController_getAppVersion(context: Context, next: Next) {
+
+            let validatedArgs: any[] = [];
+            try {
+              validatedArgs = templateService.getValidatedArgs({ args: argsAppInfoController_getAppVersion, context, next });
+            } catch (err) {
+              const error = err as any;
+              error.message ||= JSON.stringify({ fields: error.fields });
+              context.status = error.status;
+              context.throw(context.status, error.message, error);
+            }
+
+            const container: IocContainer = typeof iocContainer === 'function' ? (iocContainer as IocContainerFactory)(context.request) : iocContainer;
+
+            const controller: any = await container.get<AppInfoController>(AppInfoController);
+            if (typeof controller['setStatus'] === 'function') {
+                controller.setStatus(undefined);
+            }
+
+            return templateService.apiHandler({
+              methodName: 'getAppVersion',
               controller,
               context,
               validatedArgs,

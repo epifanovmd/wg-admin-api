@@ -22,7 +22,10 @@ jobs:
       group: deploy-production
       cancel-in-progress: false
     steps:
+      # Полная история с тегами: версия сборки — git describe (make).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Настройки деплоя
         env:

@@ -10,7 +10,7 @@ import { config, nodeEnv } from "../../config";
 import { initSentry } from "./sentry";
 
 const { sentryDsn } = config.observability;
-const release = process.env.APP_VERSION ?? process.env.npm_package_version;
+const release = config.app.version;
 
 if (sentryDsn) {
   initSentry({

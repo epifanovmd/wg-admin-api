@@ -114,7 +114,7 @@ export const RegisterSystemRoutes = (
         ? {}
         : {
             uptime: Math.floor(process.uptime()),
-            version: process.env.npm_package_version ?? "unknown",
+            version: config.app.version,
             memory: {
               heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
               heapTotalMb: Math.round(memory.heapTotal / 1024 / 1024),

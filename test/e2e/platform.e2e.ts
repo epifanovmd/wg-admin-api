@@ -191,4 +191,21 @@ describe("платформа", () => {
       );
     });
   });
+
+  describe("версия бэкенда", () => {
+    it("любому вошедшему — версия, коммит, время сборки и запуска, версия агента; без входа — 401", async () => {
+      expectStatus(await call(null, "GET", "/api/v1/app/version"), 401);
+
+      const { data } = expectStatus(
+        await call(alice, "GET", "/api/v1/app/version"),
+        200,
+      );
+
+      expect(data.version).to.be.a("string").with.length.greaterThan(0);
+      expect(data).to.have.property("commit");
+      expect(data).to.have.property("builtAt");
+      expect(data).to.have.property("agentVersion");
+      expect(new Date(data.startedAt).getTime()).to.be.at.most(Date.now());
+    });
+  });
 });

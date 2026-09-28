@@ -2,6 +2,7 @@ import "reflect-metadata";
 
 import { CoreModule, Module, ObservabilityModule } from "./core";
 import { ApiKeyModule } from "./modules/api-key";
+import { AppInfoModule } from "./modules/app-info";
 import { AuditModule } from "./modules/audit";
 import { AuthModule } from "./modules/auth";
 import { JobsModule } from "./modules/jobs";
@@ -57,6 +58,7 @@ import { WgStatsModule } from "./modules/wg-stats";
     WgStatsModule,
     WgAgentModule,
     WgProvisionModule,
+    AppInfoModule,
 
     // Socket — последним, чтобы все ISocketHandler / ISocketEventListener были привязаны
     SocketModule,

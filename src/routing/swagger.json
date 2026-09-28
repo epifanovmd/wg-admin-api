@@ -5205,6 +5205,43 @@
 				],
 				"type": "object",
 				"additionalProperties": false
+			},
+			"IAppVersionDto": {
+				"description": "Версия запущенного бэкенда и агента, которого он раздаёт.",
+				"properties": {
+					"version": {
+						"type": "string",
+						"description": "Версия сборки: тег релиза или SHA (`git describe`), в dev — `package.json`."
+					},
+					"commit": {
+						"type": "string",
+						"nullable": true,
+						"description": "Короткий SHA коммита; null — процесс запущен не из образа."
+					},
+					"builtAt": {
+						"type": "string",
+						"nullable": true,
+						"description": "Время сборки образа (ISO 8601); null — процесс запущен не из образа."
+					},
+					"startedAt": {
+						"type": "string",
+						"description": "Время запуска процесса (ISO 8601)."
+					},
+					"agentVersion": {
+						"type": "string",
+						"nullable": true,
+						"description": "Версия агента, которую бэкенд ставит и раздаёт при обновлении\n(`agent/VERSION`); null — бинари агента не собраны. Установленная на\nноде — `agentVersion` ноды."
+					}
+				},
+				"required": [
+					"version",
+					"commit",
+					"builtAt",
+					"startedAt",
+					"agentVersion"
+				],
+				"type": "object",
+				"additionalProperties": false
 			}
 		},
 		"securitySchemes": {
@@ -12012,6 +12049,44 @@
 						}
 					}
 				]
+			}
+		},
+		"/api/v1/app/version": {
+			"get": {
+				"operationId": "GetAppVersion",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAppVersionDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Версия запущенного бэкенда (тег или SHA сборки, коммит, время сборки и\nзапуска процесса) и агента, которого он раздаёт, — для подписи версий в\nадминке.",
+				"summary": "Версия бэкенда",
+				"tags": [
+					"AppInfo"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
 			}
 		}
 	},

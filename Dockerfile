@@ -50,10 +50,8 @@ RUN --mount=type=cache,target=/usr/local/share/.cache/yarn,sharing=locked \
 FROM node:${NODE_VERSION} AS app
 WORKDIR /app
 
-ARG APP_VERSION=dev
 ENV NODE_ENV=production \
-    NODE_OPTIONS=--enable-source-maps \
-    APP_VERSION=${APP_VERSION}
+    NODE_OPTIONS=--enable-source-maps
 
 # tini — корректный PID 1: сигналы доходят до node, дочерние процессы убираются.
 # Менеджеры пакетов в рантайме не нужны (старт и миграции — через node): меньше
@@ -71,6 +69,15 @@ COPY --from=builder --chown=node:node /app/build ./build
 COPY --chown=node:node templates ./templates
 # Бинари агента: раздаются по ключу агента (установка и обновление).
 COPY --from=agent --chown=node:node /agent/dist ./agent/dist
+
+# Версия сборки (GET /api/v1/app/version) — последним слоем: меняется при
+# каждой сборке и не сбрасывает кэш слоёв выше.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=""
+ARG APP_BUILT_AT=""
+ENV APP_VERSION=${APP_VERSION} \
+    APP_COMMIT=${APP_COMMIT} \
+    APP_BUILT_AT=${APP_BUILT_AT}
 
 USER node
 EXPOSE 8181

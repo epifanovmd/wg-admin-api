@@ -85,8 +85,11 @@ services:
     build:
       context: .
       target: app
+      # Версия сборки — из make (git describe, коммит, время сборки).
       args:
-        APP_VERSION: ${TAG:-latest}
+        APP_VERSION: ${APP_VERSION:-dev}
+        APP_COMMIT: ${APP_COMMIT:-}
+        APP_BUILT_AT: ${APP_BUILT_AT:-}
     environment:
       <<: *app-env
       APP_ROLE: api
