@@ -26,7 +26,7 @@ export const WgInterfaceError = defineErrors("WG_IFACE", {
   RELAY_PORT_TAKEN: {
     status: HttpStatus.CONFLICT,
     message:
-      "Порт на релей-ноде точки уже занят её интерфейсом или пробросом другой точки",
+      "Порт на релей-ноде точки уже занят: её интерфейсом, другой точкой или включённым пробросом (выключите или удалите его)",
   },
   RELAY_PORT_BUSY: {
     status: HttpStatus.CONFLICT,

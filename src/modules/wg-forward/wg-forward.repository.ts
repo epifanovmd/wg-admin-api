@@ -42,14 +42,19 @@ export class WgForwardRepository extends BaseRepository<WgForward> {
     return rows.map(row => row.nodeId);
   }
 
-  /** Порты, которые пробросы занимают на ноде (она — релей). */
+  /**
+   * Порты, которые пробросы занимают на ноде (она — релей). Выключенный
+   * проброс порт не держит: интерфейс можно перевести на точку через релей,
+   * а проброс оставить для отката — включить его можно, только пока порт
+   * свободен.
+   */
   async listenPortsOn(
     relayNodeId: string,
   ): Promise<
     Array<{ id: string; protocol: EWgForwardProtocol; port: number }>
   > {
     const rows = await this.find({
-      where: { relayNodeId },
+      where: { relayNodeId, enabled: true },
       select: { id: true, protocol: true, listenPort: true },
     });
 

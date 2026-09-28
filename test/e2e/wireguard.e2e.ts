@@ -911,6 +911,75 @@ describe("wireguard", () => {
       ).to.not.include.members([udp.id, tcp.id]);
     });
 
+    it("выключенный проброс порт не держит: перевод интерфейса на точку через релей; включение при занятом порту — 409", async () => {
+      const manual = expectStatus(
+        await call(admin, "POST", "/api/v1/wg/forwards", {
+          name: "manual-wg",
+          relayNodeId: relayNode.id,
+          protocol: "udp",
+          listenPort: 51950,
+          targetNodeId: nodeA.id,
+          targetPort: 51950,
+          path: "ipip",
+        }),
+        201,
+      ).data;
+      const wg5 = expectStatus(
+        await call(admin, "POST", "/api/v1/wg/interfaces", {
+          nodeId: nodeA.id,
+          name: "wg5",
+          listenPort: 51950,
+          addressCidr: "10.195.0.1/24",
+        }),
+        201,
+      ).data;
+      const attach = () =>
+        call(admin, "PATCH", `/api/v1/wg/interfaces/${wg5.id}`, {
+          endpointId: endpoint.id,
+        });
+
+      // Включённый проброс держит порт на релее.
+      expectStatus(await attach(), 409, "WG_IFACE_RELAY_PORT_TAKEN");
+
+      // Выключили — порт свободен: интерфейс переходит на точку через релей.
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/wg/forwards/${manual.id}`, {
+          enabled: false,
+        }),
+        200,
+      );
+      expect(expectStatus(await attach(), 200).data.endpointId).to.equal(
+        endpoint.id,
+      );
+
+      // Выключенный проброс можно править; включить, пока порт у точки, — нельзя.
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/wg/forwards/${manual.id}`, {
+          name: "manual-wg-old",
+        }),
+        200,
+      );
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/wg/forwards/${manual.id}`, {
+          enabled: true,
+        }),
+        409,
+        "WG_FORWARD_PORT_TAKEN",
+      );
+      expect(
+        (await agentState(relayKey)).forwards.map((f: any) => f.id),
+      ).to.not.include(manual.id);
+
+      expectStatus(
+        await call(admin, "DELETE", `/api/v1/wg/interfaces/${wg5.id}`),
+        204,
+      );
+      expectStatus(
+        await call(admin, "DELETE", `/api/v1/wg/forwards/${manual.id}`),
+        204,
+      );
+    });
+
     it("реплики интерфейса: копия на ноде, общие пиры, кандидаты релея, закрепление, обслуживающая копия", async () => {
       const created = expectStatus(
         await call(admin, "POST", "/api/v1/wg/nodes", {

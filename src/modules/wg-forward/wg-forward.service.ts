@@ -247,7 +247,10 @@ export class WgForwardService {
       protocol === EWgForwardProtocol.Udp
         ? relay.osInfo?.udpPorts
         : relay.osInfo?.tcpPorts;
+    // Выключенный проброс порт не держит — конфликт с интерфейсами, точками
+    // и другими модулями проверяется при включении.
     const udpTaken =
+      forward.enabled &&
       protocol === EWgForwardProtocol.Udp &&
       ((await this._interfaces.nodeListenPortInUse(relay.id, port)) ||
         (await this._interfaces.relayForwardPortInUse(relay.id, port)));
@@ -255,7 +258,7 @@ export class WgForwardService {
     if (
       (other && other.id !== forward.id) ||
       udpTaken ||
-      (await this._claimedByOthers(relay.id, forward)) ||
+      (forward.enabled && (await this._claimedByOthers(relay.id, forward))) ||
       (checkHost && hostPorts?.includes(port))
     ) {
       throw WgForwardError.PORT_TAKEN();
