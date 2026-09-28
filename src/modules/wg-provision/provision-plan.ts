@@ -1,7 +1,7 @@
 /**
- * План установки агента на VPS: последовательность shell-шагов. Все данные
- * передаются в base64 — в команды не попадает ни одного пользовательского
- * символа, экранирование не требуется.
+ * План установки агента на VPS: последовательность shell-шагов. Данные
+ * (установщик, ключ агента) — файлами в рабочем каталоге: в команды не
+ * попадает ни одного пользовательского символа, экранирование не требуется.
  */
 export interface IProvisionStep {
   title: string;
@@ -10,25 +10,37 @@ export interface IProvisionStep {
   timeoutMs?: number;
 }
 
-/** Куда на VPS загружается установщик перед запуском. */
-export const INSTALL_SCRIPT_PATH = "/tmp/wg-admin-install.sh";
+/**
+ * Рабочий каталог на VPS: свой на каждый запуск (`mktemp -d`, 0700, владелец —
+ * пользователь SSH). Предсказуемый путь в /tmp дал бы другому пользователю
+ * хоста заранее создать файл и подменить установщик до запуска от root.
+ */
+export const WORK_DIR_COMMAND = "mktemp -d /tmp/wg-admin.XXXXXXXX";
+
+/** Путь из вывода `mktemp` — только такой попадает в команды. */
+export const WORK_DIR_PATTERN = /^\/tmp\/wg-admin\.[A-Za-z0-9]+$/;
+
+/** Файлы в рабочем каталоге: установщик и ключ агента. */
+export const workFiles = (workDir: string) => ({
+  script: `${workDir}/install.sh`,
+  key: `${workDir}/agent.key`,
+});
 
 /**
  * Установка по SSH — тот же установщик, что и для ручной установки: он
  * ставит зависимости, скачивает бинарь агента с бэкенда по ключу и
- * включает службу systemd. Ключ передаётся в base64 — экранирование не нужно.
+ * включает службу systemd. Ключ — файлом (`--key-file`): в аргументах
+ * команды его видел бы любой пользователь хоста всё время установки.
  */
-export const buildProvisionPlan = (input: {
-  agentKey: string;
-}): IProvisionStep[] => {
-  const keyB64 = Buffer.from(input.agentKey, "utf8").toString("base64");
+export const buildProvisionPlan = (workDir: string): IProvisionStep[] => {
+  const files = workFiles(workDir);
 
   return [
     {
       title: "Установка агента (зависимости, бинарь, служба systemd)",
       command:
-        `sh ${INSTALL_SCRIPT_PATH} --key "$(echo ${keyB64} | base64 -d)"; ` +
-        `code=$?; rm -f ${INSTALL_SCRIPT_PATH}; exit $code`,
+        `sh ${files.script} --key-file ${files.key}; ` +
+        `code=$?; rm -rf ${workDir}; exit $code`,
       timeoutMs: 900_000,
     },
   ];
@@ -40,12 +52,12 @@ export const buildProvisionPlan = (input: {
  * журналу установки (пакеты, forwarding, модули), удаление бинаря, unit и
  * /etc/wg-admin.
  */
-export const buildUninstallPlan = (): IProvisionStep[] => [
+export const buildUninstallPlan = (workDir: string): IProvisionStep[] => [
   {
     title: "Удаление агента (откат созданного им)",
     command:
-      `sh ${INSTALL_SCRIPT_PATH} --uninstall; ` +
-      `code=$?; rm -f ${INSTALL_SCRIPT_PATH}; exit $code`,
+      `sh ${workFiles(workDir).script} --uninstall; ` +
+      `code=$?; rm -rf ${workDir}; exit $code`,
     timeoutMs: 180_000,
   },
 ];

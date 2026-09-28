@@ -4,6 +4,7 @@ import (
 	"os"
 	"syscall"
 	"testing"
+	"time"
 
 	"wgadmin/agent/internal/apply"
 	"wgadmin/agent/internal/failover"
@@ -88,5 +89,35 @@ func TestStopRollsBackOnlyOnTerm(t *testing.T) {
 		if rolledBack != tc.rollback || exited != 0 {
 			t.Fatalf("%s: откат %v (ожидался %v), выход %d", tc.signal, rolledBack, tc.rollback, exited)
 		}
+	}
+}
+
+// Перезапуск после обновления ждёт текущего применения: выход посреди
+// wg-quick up оставил бы интерфейсы и правила наполовину настроенными.
+func TestRestartAfterUpdateWaitsForApply(t *testing.T) {
+	a := &Agent{applier: apply.New(t.TempDir(), t.TempDir()+"/state.json", nil), socks: socks.New()}
+	rolledBack := false
+	exited := make(chan int, 1)
+	a.rollbackFn = func() { rolledBack = true }
+	a.exitFn = func(code int) { exited <- code }
+
+	a.applier.Lock()
+	go a.restartAfterUpdate()
+
+	select {
+	case <-exited:
+		t.Fatal("выход во время применения")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	a.applier.Unlock()
+
+	select {
+	case code := <-exited:
+		if code != 0 || rolledBack {
+			t.Fatalf("выход %d, откат %v: ожидался выход 0 без отката", code, rolledBack)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("агент не завершился после применения")
 	}
 }

@@ -13,7 +13,7 @@ import { join } from "node:path";
 
 import { expect } from "chai";
 
-import { HOST_STATE_FUNCTIONS } from "./install-script";
+import { INSTALL_SCRIPT_TEMPLATE } from "./install-script";
 
 /**
  * Системные утилиты, которые видит скрипт в песочнице. Остальное в PATH не
@@ -127,9 +127,9 @@ esac`,
       "/bin/sh",
       [
         "-c",
-        `set -eu
+        `WG_ADMIN_INSTALL_LIB=1
+. ${INSTALL_SCRIPT_TEMPLATE}
 log() { echo "$*"; }
-${HOST_STATE_FUNCTIONS}
 INSTALL_STATE=${root}/etc/install-state
 SYSCTL_CONF=${root}/99-wg-admin.conf
 MODULES_DIR=${root}/modules

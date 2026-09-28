@@ -107,8 +107,7 @@ func New(cfg config.Config, paths update.Paths) *Agent {
 		Known:      a.knownVersion,
 		Handler:    link.Handler{State: a.onState, Rate: a.setStatsInterval, Contact: a.onContact},
 	}, client)
-	// Перезапуск после обновления — без отката созданного: трафик не рвётся.
-	a.executor = commands.New(a.link, cfg.ConfigDir, paths, func() { os.Exit(0) })
+	a.executor = commands.New(a.link, cfg.ConfigDir, paths, a.restartAfterUpdate)
 
 	if hash, err := update.FileHash(paths.Binary); err == nil {
 		a.codeHash = &hash
@@ -433,6 +432,10 @@ func (a *Agent) stop(signal os.Signal) {
 	}
 	a.exitFn(0)
 }
+
+// restartAfterUpdate — выход на новый бинарь как по SIGHUP: после текущего
+// применения и без отката — трафик не рвётся, supervisor запустит новую версию.
+func (a *Agent) restartAfterUpdate() { a.stop(syscall.SIGHUP) }
 
 // Run — запуск агента (блокирует до сигнала остановки).
 func (a *Agent) Run() {

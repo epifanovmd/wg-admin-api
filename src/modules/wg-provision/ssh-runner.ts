@@ -79,7 +79,8 @@ export class SshRunner {
     timeoutMs = 60_000,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const command = `mkdir -p "$(dirname '${remotePath}')" && cat > '${remotePath}'`;
+      // umask 077: файл (установщик, ключ агента) читает только владелец.
+      const command = `umask 077 && mkdir -p "$(dirname '${remotePath}')" && cat > '${remotePath}'`;
       const timer = setTimeout(() => {
         reject(
           new Error(`Загрузка ${remotePath} не уложилась в ${timeoutMs} мс`),

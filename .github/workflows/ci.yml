@@ -41,6 +41,10 @@ jobs:
         working-directory: agent
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: agent/VERSION поднята, Go в Dockerfile-ах = go.mod
+        run: ../scripts/check-agent-version.sh
       # Ветка Go — из go.mod (1.26.0 → 1.26), патч — последний: исправления
       # стандартной библиотеки попадают в бинари без правки go.mod.
       - id: go
@@ -69,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # shellcheck предустановлен в образе ubuntu-latest.
-      - run: shellcheck scripts/*.sh scripts/db/*.sh test/smoke/*.sh
+      - run: shellcheck scripts/*.sh scripts/db/*.sh test/smoke/*.sh templates/*/*.sh
 
   migrations:
     runs-on: ubuntu-latest

@@ -2,6 +2,7 @@ import "reflect-metadata";
 
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -15,23 +16,23 @@ import { expect } from "chai";
 import sinon from "sinon";
 
 import { uuid, uuid2 } from "../../test/helpers";
-import { APPARMOR_FUNCTIONS, renderInstallScript } from "./install-script";
+import { INSTALL_SCRIPT_TEMPLATE, renderInstallScript } from "./install-script";
 import {
   buildProvisionPlan,
   buildUninstallPlan,
-  INSTALL_SCRIPT_PATH,
   withSudo,
 } from "./provision-plan";
 import { WgProvisionService } from "./wg-provision.service";
 
 describe("provision-plan", () => {
-  it("ключ агента — только в base64, установщик удаляется после запуска", () => {
-    const [step] = buildProvisionPlan({ agentKey: "prefix.k'; rm -rf /" });
+  it("ключ агента — файлом (--key-file), рабочий каталог удаляется после запуска", () => {
+    const [step] = buildProvisionPlan("/tmp/wg-admin.x1");
 
-    expect(step.command).to.not.include("rm -rf /");
-    expect(step.command).to.include("base64 -d");
-    expect(step.command).to.include(`sh ${INSTALL_SCRIPT_PATH} --key`);
-    expect(step.command).to.include(`rm -f ${INSTALL_SCRIPT_PATH}`);
+    expect(step.command).to.include(
+      "sh /tmp/wg-admin.x1/install.sh --key-file /tmp/wg-admin.x1/agent.key",
+    );
+    expect(step.command).to.not.include("--key ");
+    expect(step.command).to.include("rm -rf /tmp/wg-admin.x1");
     // Без сборки образа на хосте: бинарь скачивается готовым.
     expect(step.command).to.not.include("docker build");
     expect(step.timeoutMs).to.be.greaterThan(300_000);
@@ -71,7 +72,7 @@ describe("renderInstallScript", () => {
         "sh",
         [
           "-c",
-          `${APPARMOR_FUNCTIONS}\nAPPARMOR_DIR=${root}/apparmor.d\n${action}`,
+          `WG_ADMIN_INSTALL_LIB=1\n. ${INSTALL_SCRIPT_TEMPLATE}\nAPPARMOR_DIR=${root}/apparmor.d\n${action}`,
         ],
         { env: { PATH: `${bin}:${process.env.PATH}` } },
       );
@@ -103,7 +104,7 @@ describe("renderInstallScript", () => {
     const root = mkdtempSync(join(tmpdir(), "wg-aa-"));
     const result = spawnSync("sh", [
       "-c",
-      `${APPARMOR_FUNCTIONS}\nAPPARMOR_DIR=${root}/none\nallow_apparmor && revoke_apparmor`,
+      `WG_ADMIN_INSTALL_LIB=1\n. ${INSTALL_SCRIPT_TEMPLATE}\nAPPARMOR_DIR=${root}/none\nallow_apparmor && revoke_apparmor`,
     ]);
 
     expect(result.status).to.equal(0);
@@ -118,6 +119,158 @@ describe("renderInstallScript", () => {
     expect(script).to.include(
       `BACKEND_URL='https://admin.example.com'\\''; rm -rf /'`,
     );
+    expect(script).to.not.include("__BACKEND_URL__");
+  });
+
+  it("спецпоследовательности replace ($&, $') в адресе подставляются как есть", () => {
+    const script = renderInstallScript("https://a.example.com/$&$'");
+
+    expect(script).to.include(`BACKEND_URL='https://a.example.com/$&$'\\'''`);
+  });
+
+  it("set -e действует внутри main: сбой команды останавливает установщик", () => {
+    const root = mkdtempSync(join(tmpdir(), "wg-main-"));
+    const bin = join(root, "bin");
+
+    mkdirSync(bin);
+    writeFileSync(join(bin, "id"), "#!/bin/sh\necho 0\n", { mode: 0o755 });
+    writeFileSync(
+      join(bin, "systemctl"),
+      '#!/bin/sh\n[ "$1" = daemon-reload ] && exit 1\nexit 0\n',
+      { mode: 0o755 },
+    );
+
+    const result = spawnSync("sh", ["-s", "--", "--uninstall"], {
+      input: renderInstallScript(""),
+      env: { PATH: `${bin}:/usr/bin:/bin` },
+      encoding: "utf8",
+    });
+
+    rmSync(root, { recursive: true, force: true });
+    expect(result.status).to.not.equal(0);
+    expect(result.stdout).to.not.include("Агент удалён");
+  });
+
+  it("unit: перезапуск не убивает wireguard-go, нет лимита запусков, страховка отката", () => {
+    const script = renderInstallScript("https://admin.example.com");
+
+    expect(script).to.include("KillMode=process");
+    expect(script).to.include("StartLimitIntervalSec=0");
+    expect(script).to.include("TimeoutStopSec=120");
+    expect(script).to.include("ExecStartPre=-/etc/wg-admin/boot-guard.sh");
+    expect(script).to.include('write_boot_guard "$ETC/boot-guard.sh"');
+  });
+
+  it("boot-guard: новая версия, падающая до связи с бэкендом, заменяется прежней на 5-м запуске", () => {
+    const root = mkdtempSync(join(tmpdir(), "wg-guard-"));
+    const guard = join(root, "boot-guard.sh");
+    const bin = join(root, "agent");
+    const marker = join(root, ".agent-update");
+    const env = {
+      PATH: "/usr/bin:/bin",
+      WG_AGENT_CONFIG_DIR: root,
+      WG_AGENT_BIN: bin,
+    };
+    const start = () => spawnSync(guard, [], { env, encoding: "utf8" });
+
+    try {
+      spawnSync("sh", [
+        "-c",
+        `WG_ADMIN_INSTALL_LIB=1\n. ${INSTALL_SCRIPT_TEMPLATE}\nwrite_boot_guard ${guard}`,
+      ]);
+      writeFileSync(bin, "new");
+      writeFileSync(`${bin}.prev`, "old");
+      writeFileSync(marker, '{"hash":"x","attempts":0}');
+
+      for (let i = 1; i <= 4; i += 1) {
+        expect(start().status).to.equal(0);
+        expect(readFileSync(bin, "utf8"), `запуск ${i}`).to.equal("new");
+      }
+
+      const fifth = start();
+
+      expect(fifth.status).to.equal(0);
+      expect(fifth.stdout).to.include("возвращена прежняя");
+      expect(readFileSync(bin, "utf8")).to.equal("old");
+      expect(existsSync(marker)).to.equal(false);
+      expect(existsSync(`${marker}.starts`)).to.equal(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("boot-guard: без маркера обновления — ничего не трогает, счётчик сбрасывается", () => {
+    const root = mkdtempSync(join(tmpdir(), "wg-guard-"));
+    const guard = join(root, "boot-guard.sh");
+    const bin = join(root, "agent");
+
+    try {
+      spawnSync("sh", [
+        "-c",
+        `WG_ADMIN_INSTALL_LIB=1\n. ${INSTALL_SCRIPT_TEMPLATE}\nwrite_boot_guard ${guard}`,
+      ]);
+      writeFileSync(bin, "current");
+      writeFileSync(`${bin}.prev`, "old");
+      writeFileSync(join(root, ".agent-update.starts"), "4");
+
+      const result = spawnSync(guard, [], {
+        env: {
+          PATH: "/usr/bin:/bin",
+          WG_AGENT_CONFIG_DIR: root,
+          WG_AGENT_BIN: bin,
+        },
+      });
+
+      expect(result.status).to.equal(0);
+      expect(readFileSync(bin, "utf8")).to.equal("current");
+      expect(existsSync(join(root, ".agent-update.starts"))).to.equal(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("--key-file: ключ читается из файла без пробелов и переводов строк; нет файла — ошибка", () => {
+    const root = mkdtempSync(join(tmpdir(), "wg-key-"));
+    const keyFile = join(root, "agent.key");
+    const parse = (args: string) =>
+      spawnSync(
+        "sh",
+        [
+          "-c",
+          `WG_ADMIN_INSTALL_LIB=1\n. ${INSTALL_SCRIPT_TEMPLATE}\nparse_args ${args}\nprintf '%s' "$KEY"`,
+        ],
+        { env: { PATH: "/usr/bin:/bin" }, encoding: "utf8" },
+      );
+
+    try {
+      writeFileSync(keyFile, "prefix.secret\r\n");
+
+      const ok = parse(`--key-file ${keyFile}`);
+
+      expect(ok.status, ok.stderr).to.equal(0);
+      expect(ok.stdout).to.equal("prefix.secret");
+
+      const missing = parse(`--key-file ${root}/none`);
+
+      expect(missing.status).to.not.equal(0);
+      expect(missing.stderr).to.include("Файл ключа не читается");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("WG_ADMIN_INSTALL_LIB=1 — только функции, установка не запускается", () => {
+    const result = spawnSync(
+      "sh",
+      [
+        "-c",
+        `WG_ADMIN_INSTALL_LIB=1\n. ${INSTALL_SCRIPT_TEMPLATE}\ntype install_agent >/dev/null && echo loaded`,
+      ],
+      { env: { PATH: "/usr/bin:/bin" }, encoding: "utf8" },
+    );
+
+    expect(result.status, result.stderr).to.equal(0);
+    expect(result.stdout.trim()).to.equal("loaded");
   });
 
   it("бинарь — по ключу агента с проверкой sha256; служба systemd; удаление откатывает хост", () => {
@@ -130,8 +283,8 @@ describe("renderInstallScript", () => {
     expect(script).to.include("Restart=always");
     expect(script).to.include("--uninstall");
     const uninstall = script.slice(
-      script.indexOf('if [ "$ACTION" = uninstall ]'),
-      script.indexOf("exit 0"),
+      script.indexOf("uninstall_agent() {"),
+      script.indexOf("\ninstall_agent() {"),
     );
 
     expect(uninstall).to.include("cleanup");
@@ -214,8 +367,10 @@ describe("WgProvisionService", () => {
 
 describe("uninstall-plan", () => {
   it("удаление — тем же установщиком с --uninstall", () => {
-    const [step] = buildUninstallPlan();
+    const [step] = buildUninstallPlan("/tmp/wg-admin.x1");
 
-    expect(step.command).to.include(`sh ${INSTALL_SCRIPT_PATH} --uninstall`);
+    expect(step.command).to.include(
+      "sh /tmp/wg-admin.x1/install.sh --uninstall",
+    );
   });
 });

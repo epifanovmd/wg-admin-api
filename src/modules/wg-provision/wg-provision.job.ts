@@ -12,10 +12,10 @@ import { EWgNodeStatus, WgNodeService, WgSecretBox } from "../wg-node";
 import { renderInstallScript } from "./install-script";
 import {
   buildProvisionPlan,
-  INSTALL_SCRIPT_PATH,
   isInsecureBackendUrl,
+  workFiles,
 } from "./provision-plan";
-import { runSshPlan } from "./ssh-plan";
+import { createWorkDir, removeWorkDir, runSshPlan } from "./ssh-plan";
 import { SshRunner, SshRunnerFactory } from "./ssh-runner";
 import { IWgProvisionJobData, WG_PROVISION_QUEUE } from "./wg-provision.types";
 
@@ -48,6 +48,7 @@ export class WgProvisionNodeJob implements IJobHandler<IWgProvisionJobData> {
   async handle(ctx: JobContext<IWgProvisionJobData>): Promise<void> {
     const data = ctx.data;
     const runner = this._sshFactory();
+    let workDir: string | null = null;
 
     try {
       if (isInsecureBackendUrl(data.backendUrl)) {
@@ -69,14 +70,20 @@ export class WgProvisionNodeJob implements IJobHandler<IWgProvisionJobData> {
       });
 
       await ctx.progress(0.08, "Загрузка установщика");
+      workDir = await createWorkDir(runner);
+
+      const files = workFiles(workDir);
+
       await runner.upload(
-        INSTALL_SCRIPT_PATH,
+        files.script,
         Buffer.from(renderInstallScript(data.backendUrl), "utf8"),
       );
+      await runner.upload(
+        files.key,
+        Buffer.from(this._secrets.open(data.agentKeyEnc), "utf8"),
+      );
 
-      const plan = buildProvisionPlan({
-        agentKey: this._secrets.open(data.agentKeyEnc),
-      });
+      const plan = buildProvisionPlan(workDir);
 
       await runSshPlan(ctx, runner, plan, data.username, {
         from: 0.1,
@@ -95,6 +102,7 @@ export class WgProvisionNodeJob implements IJobHandler<IWgProvisionJobData> {
             false,
           );
     } finally {
+      if (workDir) await removeWorkDir(runner, workDir);
       runner.end();
     }
   }

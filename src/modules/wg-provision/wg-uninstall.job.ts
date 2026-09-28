@@ -10,8 +10,8 @@ import {
 } from "../../core";
 import { WgNodeService, WgSecretBox } from "../wg-node";
 import { renderInstallScript } from "./install-script";
-import { buildUninstallPlan, INSTALL_SCRIPT_PATH } from "./provision-plan";
-import { runSshPlan } from "./ssh-plan";
+import { buildUninstallPlan, workFiles } from "./provision-plan";
+import { createWorkDir, removeWorkDir, runSshPlan } from "./ssh-plan";
 import { SshRunner, SshRunnerFactory } from "./ssh-runner";
 import { SSH_RUNNER_FACTORY } from "./wg-provision.job";
 import { IWgUninstallJobData, WG_UNINSTALL_QUEUE } from "./wg-provision.types";
@@ -41,6 +41,7 @@ export class WgUninstallNodeJob implements IJobHandler<IWgUninstallJobData> {
   async handle(ctx: JobContext<IWgUninstallJobData>): Promise<void> {
     const data = ctx.data;
     const runner = this._sshFactory();
+    let workDir: string | null = null;
 
     try {
       await ctx.progress(0.05, "Подключение по SSH");
@@ -56,13 +57,14 @@ export class WgUninstallNodeJob implements IJobHandler<IWgUninstallJobData> {
           : undefined,
       });
 
+      workDir = await createWorkDir(runner);
       // Бэкенд для удаления не нужен — адрес в установщике не используется.
       await runner.upload(
-        INSTALL_SCRIPT_PATH,
+        workFiles(workDir).script,
         Buffer.from(renderInstallScript(""), "utf8"),
       );
 
-      const plan = buildUninstallPlan();
+      const plan = buildUninstallPlan(workDir);
 
       await runSshPlan(ctx, runner, plan, data.username, {
         from: 0.1,
@@ -80,6 +82,7 @@ export class WgUninstallNodeJob implements IJobHandler<IWgUninstallJobData> {
             false,
           );
     } finally {
+      if (workDir) await removeWorkDir(runner, workDir);
       runner.end();
     }
   }

@@ -13,6 +13,10 @@ import (
 	"wgadmin/agent/internal/state"
 )
 
+// CommandTimeout — таймаут одной команды отката: wg-quick down и iptables
+// занимают доли секунды, а весь откат должен уложиться в TimeoutStopSec службы.
+const CommandTimeout = 15 * time.Second
+
 var (
 	tunnelName = regexp.MustCompile(`^wgt\d+$`)
 	ifaceName  = regexp.MustCompile(`^[\w.-]{1,15}$`)
@@ -54,7 +58,7 @@ func Commands(configDir string, owned state.Owned) []string {
 // следующем старте агент поднимет всё заново.
 func Owned(configDir, stateFile string) {
 	for _, command := range Commands(configDir, state.LoadOwned(stateFile)) {
-		shell.Run(command, 60*time.Second)
+		shell.Run(command, CommandTimeout)
 	}
 	logx.Info("Созданное агентом на хосте откачено")
 }

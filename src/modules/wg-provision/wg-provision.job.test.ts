@@ -4,9 +4,10 @@ import { expect } from "chai";
 import sinon from "sinon";
 
 import { uuid } from "../../test/helpers";
-import { INSTALL_SCRIPT_PATH } from "./provision-plan";
 import { WgProvisionNodeJob } from "./wg-provision.job";
 import { WgUninstallNodeJob } from "./wg-uninstall.job";
+
+const WORK_DIR = "/tmp/wg-admin.Ab3dEf9h";
 
 describe("WgProvisionNodeJob", () => {
   const makeRunner = () => {
@@ -18,7 +19,11 @@ describe("WgProvisionNodeJob", () => {
       exec: sinon.stub().callsFake(async (command: string) => {
         calls.push(`exec:${command}`);
 
-        return { code: 0, stdout: "", stderr: "" };
+        return {
+          code: 0,
+          stdout: command.startsWith("mktemp") ? `${WORK_DIR}\n` : "",
+          stderr: "",
+        };
       }),
       upload: sinon.stub().callsFake(async (path: string) => {
         calls.push(`upload:${path}`);
@@ -42,7 +47,7 @@ describe("WgProvisionNodeJob", () => {
     log: sinon.stub().resolves(),
   });
 
-  it("загружает установщик с адресом бэкенда и запускает его с ключом агента", async () => {
+  it("установщик и ключ — файлами в свой каталог mktemp; ключа нет ни в одной команде", async () => {
     const runner = makeRunner();
     const job = new WgProvisionNodeJob(
       { setStatus: sinon.stub().resolves() } as any,
@@ -52,18 +57,57 @@ describe("WgProvisionNodeJob", () => {
 
     await job.handle(makeCtx() as any);
 
-    const upload = runner.calls.indexOf(`upload:${INSTALL_SCRIPT_PATH}`);
+    const mktemp = runner.calls.findIndex(call => call.includes("mktemp -d"));
+    const script = runner.calls.indexOf(`upload:${WORK_DIR}/install.sh`);
+    const key = runner.calls.indexOf(`upload:${WORK_DIR}/agent.key`);
     const install = runner.calls.findIndex(call =>
-      call.includes(`sh ${INSTALL_SCRIPT_PATH} --key`),
+      call.includes(
+        `sh ${WORK_DIR}/install.sh --key-file ${WORK_DIR}/agent.key`,
+      ),
     );
 
-    expect(upload).to.be.greaterThan(-1);
-    expect(install).to.be.greaterThan(upload);
+    expect(mktemp).to.be.greaterThan(-1);
+    expect(script).to.be.greaterThan(mktemp);
+    expect(key).to.be.greaterThan(mktemp);
+    expect(install).to.be.greaterThan(Math.max(script, key));
     expect(runner.upload.firstCall.args[1].toString()).to.include(
       "BACKEND_URL='http://api'",
     );
-    expect(runner.calls.join("\n")).to.not.include("agent-key");
+    expect(runner.upload.secondCall.args[1].toString()).to.equal("agent-key");
+
+    const commands = runner.calls.filter(call => call.startsWith("exec:"));
+
+    expect(commands.join("\n")).to.not.include("agent-key");
+    expect(commands.join("\n")).to.not.include(
+      Buffer.from("agent-key").toString("base64"),
+    );
+    expect(runner.calls.at(-1)).to.equal(`exec:rm -rf ${WORK_DIR}`);
     expect(runner.end.calledOnce).to.be.true;
+  });
+
+  it("mktemp вернул неожиданный путь — установка не запускается", async () => {
+    const runner = makeRunner();
+
+    runner.exec.callsFake(async (command: string) => {
+      runner.calls.push(`exec:${command}`);
+
+      return { code: 0, stdout: "/etc; rm -rf /\n", stderr: "" };
+    });
+
+    const job = new WgProvisionNodeJob(
+      { setStatus: sinon.stub().resolves() } as any,
+      { open: (v: string) => v } as any,
+      () => runner as any,
+    );
+
+    try {
+      await job.handle(makeCtx() as any);
+      expect.fail("должно было упасть");
+    } catch (err: any) {
+      expect(err.code).to.equal("WG_PROVISION_WORKDIR_FAILED");
+    }
+    expect(runner.upload.called).to.be.false;
+    expect(runner.calls.join("\n")).to.not.include("rm -rf /etc");
   });
 
   it("вывод установщика — в лог задачи построчно по ходу выполнения, без повторов", async () => {
@@ -76,10 +120,16 @@ describe("WgProvisionNodeJob", () => {
     });
     runner.exec.callsFake(
       async (
-        _command: string,
+        command: string,
         _timeout: number,
         onLine?: (l: string) => void,
       ) => {
+        if (command.startsWith("mktemp")) {
+          return { code: 0, stdout: WORK_DIR, stderr: "" };
+        }
+        if (command.startsWith("rm -rf")) {
+          return { code: 0, stdout: "", stderr: "" };
+        }
         onLine?.("▶ [0s] Зависимости");
         // Строка уже в логе, пока команда ещё выполняется.
         expect(logged).to.include("▶ [0s] Зависимости");
@@ -150,7 +200,11 @@ describe("WgUninstallNodeJob", () => {
       exec: sinon.stub().callsFake(async (command: string) => {
         commands.push(command);
 
-        return { code: 0, stdout: "", stderr: "" };
+        return {
+          code: 0,
+          stdout: command.startsWith("mktemp") ? WORK_DIR : "",
+          stderr: "",
+        };
       }),
       upload: sinon.stub().resolves(),
       end: sinon.stub(),
@@ -164,8 +218,11 @@ describe("WgUninstallNodeJob", () => {
 
     await job.handle(ctx() as any);
 
-    expect(runner.upload.firstCall.args[0]).to.equal(INSTALL_SCRIPT_PATH);
-    expect(commands.some(c => c.includes("--uninstall"))).to.be.true;
+    expect(runner.upload.firstCall.args[0]).to.equal(`${WORK_DIR}/install.sh`);
+    expect(runner.upload.callCount).to.equal(1);
+    expect(
+      commands.some(c => c.includes(`sh ${WORK_DIR}/install.sh --uninstall`)),
+    ).to.be.true;
     expect(nodes.detachAgent.calledOnceWith(data.nodeId, data.actorId)).to.be
       .true;
     expect(runner.end.calledOnce).to.be.true;
@@ -174,7 +231,13 @@ describe("WgUninstallNodeJob", () => {
   it("шаг упал — агент не отвязывается, ошибка задачи", async () => {
     const runner = {
       connect: sinon.stub().resolves(),
-      exec: sinon.stub().resolves({ code: 1, stdout: "", stderr: "boom" }),
+      exec: sinon
+        .stub()
+        .callsFake(async (command: string) =>
+          command.startsWith("mktemp")
+            ? { code: 0, stdout: WORK_DIR, stderr: "" }
+            : { code: 1, stdout: "", stderr: "boom" },
+        ),
       upload: sinon.stub().resolves(),
       end: sinon.stub(),
     };

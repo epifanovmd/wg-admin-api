@@ -1,5 +1,10 @@
 import { JobContext, JobError } from "../../core";
-import { IProvisionStep, withSudo } from "./provision-plan";
+import {
+  IProvisionStep,
+  withSudo,
+  WORK_DIR_COMMAND,
+  WORK_DIR_PATTERN,
+} from "./provision-plan";
 import { SshRunner } from "./ssh-runner";
 
 /**
@@ -39,4 +44,33 @@ export const runSshPlan = async (
       );
     }
   }
+};
+
+/** Рабочий каталог на VPS (`mktemp -d` от пользователя SSH, без sudo). */
+export const createWorkDir = async (
+  runner: Pick<SshRunner, "exec">,
+): Promise<string> => {
+  const result = await runner.exec(WORK_DIR_COMMAND, 30_000);
+  const dir = result.stdout.trim();
+
+  if (result.code !== 0 || !WORK_DIR_PATTERN.test(dir)) {
+    throw new JobError(
+      "WG_PROVISION_WORKDIR_FAILED",
+      `Не удалось создать рабочий каталог: ${(result.stderr || dir).slice(0, 200)}`,
+      false,
+    );
+  }
+
+  return dir;
+};
+
+/**
+ * Удалить рабочий каталог, если план до этого не дошёл (обрыв, ошибка
+ * загрузки): ключ агента не остаётся на диске. Ошибки не мешают итогу задачи.
+ */
+export const removeWorkDir = async (
+  runner: Pick<SshRunner, "exec">,
+  dir: string,
+): Promise<void> => {
+  await runner.exec(`rm -rf ${dir}`, 30_000).catch(() => undefined);
 };

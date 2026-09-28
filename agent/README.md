@@ -66,7 +66,10 @@
   пишет отметку `.agent-update` в каталоге конфигов и завершается без отката
   (systemd перезапускает его на новом бинаре). Отметка снимается
   при первом успешном ответе бэкенда; три запуска без связи с бэкендом —
-  возврат `.prev`. sha256 выполняющегося бинаря уходит в отчёте (`codeHash`).
+  возврат `.prev`. Версию, падающую раньше этой проверки, откатывает
+  `ExecStartPre` службы — `/etc/wg-admin/boot-guard.sh`: пока лежит отметка,
+  он считает запуски и на 5-м возвращает `.prev`. sha256 выполняющегося
+  бинаря уходит в отчёте (`codeHash`).
 - **Безопасность** — при `http://` бэкенде не на localhost агент пишет
   предупреждение в журнал: ключ и приватные ключи идут в открытом виде.
 - **Повторы** — после ошибки связи экспонента 1–60 с со случайным разбросом.
@@ -93,6 +96,8 @@ systemd. Бэкенд собирает бинари в своём образе �
 ```bash
 # на VPS (Linux с systemd), ключ — из ответа создания ноды или ротации ключа
 curl -fsSL https://<бэкенд>/api/v1/wg-agent/install.sh | sudo sh -s -- --key <ключ>
+# ключ из файла — не виден в списке процессов (ps) во время установки
+curl -fsSL https://<бэкенд>/api/v1/wg-agent/install.sh | sudo sh -s -- --key-file <файл>
 # удаление: откат созданного агентом, возврат хоста к состоянию до установки
 curl -fsSL https://<бэкенд>/api/v1/wg-agent/install.sh | sudo sh -s -- --uninstall
 ```
@@ -102,8 +107,9 @@ curl -fsSL https://<бэкенд>/api/v1/wg-agent/install.sh | sudo sh -s -- --u
 `wireguard-go`; всё на месте — без `apt-get update`), включает ip_forward,
 скачивает бинарь своей архитектуры по ключу агента и
 сверяет sha256 из заголовка `X-Agent-Sha256`, пишет `/etc/wg-admin/agent.env`
-(0600) и unit `wg-admin-agent.service` (`Restart=always`, каталог конфигов
-`/etc/wg-admin/wireguard`). Работающий агент перезапускается сигналом HUP — без отката. Строки вывода —
+(0600) и unit `wg-admin-agent.service` (`Restart=always` с паузой 1→30 с и
+без лимита запусков; `KillMode=process` — перезапуск не завершает
+`wireguard-go`; каталог конфигов `/etc/wg-admin/wireguard`). Работающий агент перезапускается сигналом HUP — без отката. Строки вывода —
 с временем от начала (`▶ [12s] …`). Тот же скрипт выполняет установка по SSH
 из админки (модуль wg-provision).
 
@@ -146,6 +152,11 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
   -o dist/wg-admin-agent-linux-amd64 ./cmd/wg-admin-agent
 ../scripts/go-agent.sh test   # то же в контейнере golang (версия Go из go.mod)
 ```
+
+Изменение кода агента (кроме тестов и README) требует поднять
+`agent/VERSION`: CI сверяет с последним тегом `v*`
+(`scripts/check-agent-version.sh`, там же — ветка Go в Dockerfile-ах против
+`go.mod`).
 
 Версия — `agent/VERSION`. Протокол — `internal/protocol`, зеркало
 `src/modules/wg-agent/wg-agent-protocol.ts` (менять синхронно). Файлы

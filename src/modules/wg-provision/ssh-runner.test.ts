@@ -33,14 +33,18 @@ describe("SshRunner.upload", () => {
   it("завершается, когда удалённая команда закрыла канал", async () => {
     // `close` канала ssh2 приходит только после чтения stdout.
     const received: Buffer[] = [];
+    const commands: string[] = [];
     const runner = new SshRunner();
     const client = (runner as unknown as { _client: { exec: unknown } })
       ._client;
 
     client.exec = (
-      _command: string,
+      command: string,
       callback: (err: Error | undefined, stream: Duplex) => void,
-    ) => callback(undefined, fakeChannel(received));
+    ) => {
+      commands.push(command);
+      callback(undefined, fakeChannel(received));
+    };
 
     const done = runner.upload("/tmp/x/file.txt", Buffer.from("hello"));
     const timeout = new Promise<string>(resolve =>
@@ -49,6 +53,8 @@ describe("SshRunner.upload", () => {
 
     expect(await Promise.race([done.then(() => "ok"), timeout])).to.equal("ok");
     expect(Buffer.concat(received).toString()).to.equal("hello");
+    // Файл (установщик, ключ агента) — только владельцу.
+    expect(commands[0]).to.match(/^umask 077 && /);
   });
 });
 
