@@ -186,8 +186,8 @@ prom-client не использует.
 | ----------------- | ------------- | -------------------------------------------------------------------------------- |
 | `JobUpdatedEvent` | `job:updated` | комната `job_<id>`; комната scope `<scopeType>_<scopeId>`, без scope — владельцу |
 
-Комната `job` (`room:subscribe { type: "job", id }`) — владельцу или по
-`IJobAccessPolicy`.
+Комната `job` (`room:subscribe { type: "job", id }`) — суперпользователю (по
+актуальным правам из БД через `AccessService`), владельцу или по `IJobAccessPolicy`.
 
 ## Очереди модуля
 

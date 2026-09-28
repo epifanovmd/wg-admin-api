@@ -43,7 +43,7 @@ export class WgEndpointController extends Controller {
    * (напрямую или через релей-ноду).
    * @summary Создание точки подключения
    */
-  @Security("jwt", ["permission:wg:endpoint:manage"])
+  @Security("jwt", ["permission:wg:endpoint:create"])
   @ValidateBody(CreateWgEndpointSchema)
   @SuccessResponse(201, "Created")
   @Post()
@@ -92,7 +92,7 @@ export class WgEndpointController extends Controller {
    * автоматически, клиентские конфиги перевыпускать не нужно.
    * @summary Изменение точки подключения
    */
-  @Security("jwt", ["permission:wg:endpoint:manage"])
+  @Security("jwt", ["permission:wg:endpoint:update"])
   @ValidateBody(UpdateWgEndpointSchema)
   @Patch("{id}")
   updateWgEndpoint(
@@ -106,7 +106,7 @@ export class WgEndpointController extends Controller {
    * Удалить точку подключения; используемая интерфейсами — 409.
    * @summary Удаление точки подключения
    */
-  @Security("jwt", ["permission:wg:endpoint:manage"])
+  @Security("jwt", ["permission:wg:endpoint:delete"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}")
   async deleteWgEndpoint(@Path() id: UUID): Promise<void> {

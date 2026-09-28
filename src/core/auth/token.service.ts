@@ -98,6 +98,7 @@ export class TokenService {
       roles: [...subject.roles],
       permissions: [...new Set(subject.permissions)],
       emailVerified: subject.emailVerified,
+      pat: Date.now(),
     };
 
     const [accessToken, refreshToken] = await createTokenAsync([
@@ -148,14 +149,19 @@ export class TokenService {
     const decoded = await this.decode(token, "access");
     const context = TokenService.toContext(decoded);
 
-    if (
-      await getSessionRevocations().isRevoked(
-        context.sessionId,
-        context.userId,
-        decoded.iat,
-      )
-    ) {
+    const revocation = await getSessionRevocations().check(
+      context.sessionId,
+      context.userId,
+      decoded.iat,
+      decoded.pat,
+    );
+
+    if (revocation === "revoked") {
       throw AuthTokenError.SESSION_REVOKED();
+    }
+
+    if (revocation === "privileges-changed") {
+      throw AuthTokenError.PRIVILEGES_CHANGED();
     }
 
     if (scopes && scopes.length > 0) {
@@ -173,6 +179,15 @@ export class TokenService {
   /** Отозвать все выданные пользователю access-токены (удаление аккаунта). */
   revokeUser(userId: string): Promise<void> {
     return getSessionRevocations().revokeUser(userId);
+  }
+
+  /**
+   * Права пользователя изменились: его access-токены, выданные раньше,
+   * отклоняются с `AUTH_PRIVILEGES_CHANGED` — клиент получает новые права
+   * обновлением токена, сессия не завершается.
+   */
+  markPrivilegesChanged(userId: string): Promise<void> {
+    return getSessionRevocations().markPrivilegesChanged(userId);
   }
 
   /** Refresh-токен: подпись и назначение; сессию сверяет AuthService. */

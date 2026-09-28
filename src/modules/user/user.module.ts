@@ -1,5 +1,5 @@
-import { Module } from "../../core";
-import { PermissionRepository } from "../permission";
+import { asGrantResolver, Module } from "../../core";
+import { PermissionController, PermissionRepository } from "../permission";
 import { Permission } from "../permission/permission.entity";
 import { RoleController, RoleRepository, RoleService } from "../role";
 import { Role } from "../role/role.entity";
@@ -14,6 +14,7 @@ import { User } from "./user.entity";
 import { UserListener } from "./user.listener";
 import { UserRepository } from "./user.repository";
 import { UserService } from "./user.service";
+import { UserGrantResolver } from "./user-grant.resolver";
 
 @Module({
   entities: [User, Role, Permission, EmailChangeRequest],
@@ -24,9 +25,11 @@ import { UserService } from "./user.service";
     RoleService,
     RoleController,
     PermissionRepository,
+    PermissionController,
     EmailChangeService,
     UserController,
     UserService,
+    asGrantResolver(UserGrantResolver),
     asSocketListener(UserListener),
   ],
   bootstrappers: [AdminBootstrap, SeedBootstrap],

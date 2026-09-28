@@ -65,7 +65,7 @@ src/modules/session/
 (`TokenService.revokeSessions`, ошибка отзыва — в лог) → публикует
 `SessionTerminatedEvent(sessionId, userId, reason)` на каждую сессию.
 `reason`: `sign-out`, `sign-out-all`, `terminated`, `others-terminated`, `evicted`,
-`expired`, `refresh-reuse`, `password-changed`, `privileges-changed`.
+`expired`, `refresh-reuse`, `password-changed`.
 
 ## Отзыв access-токенов
 
@@ -74,7 +74,10 @@ src/modules/session/
 `TokenService.verify` проверяет его одной командой `MGET` на запрос (с локальным
 кэшем ответа на 1 с): завершённая сессия получает 401 `AUTH_SESSION_REVOKED` сразу на
 этой реплике и не позже чем через 1 с — на остальных. Удаление пользователя отзывает
-все его токены (`revoked:user:<id>`, токены с `iat` не позже отметки).
+все его токены (`revoked:user:<id>`, токены с `iat` не позже отметки). Смена прав
+(`TokenService.markPrivilegesChanged`) пишет `privileges:changed:<userId>` (мс):
+токены, выданные не позже (по claim `pat` — момент выдачи в мс), получают 401
+`AUTH_PRIVILEGES_CHANGED`; клиент обновляет токен refresh-токеном, сессия остаётся.
 
 ## Фоновая очистка
 
@@ -88,7 +91,7 @@ src/modules/session/
 | ---------------------------- | -------- | ------------------------------------------------------------------------------------------- |
 | `SessionTerminatedEvent`     | session  | `session:terminated { sessionId }` → `toUser`; `disconnectSession(userId, sessionId)`       |
 | `PasswordChangedEvent`       | user     | с `currentSessionId` — `terminateAllOther`, без — `terminateAllByUser` (`password-changed`) |
-| `UserPrivilegesChangedEvent` | user     | `terminateAllByUser(userId)` (`privileges-changed`)                                         |
+| `UserPrivilegesChangedEvent` | user     | `TokenService.markPrivilegesChanged(userId)`: прежние access-токены — 401, сессии остаются  |
 | `UserDeletedEvent`           | user     | `TokenService.revokeUser(userId)` + `disconnectUser(userId)` (сессии удаляются каскадом)    |
 
 Ошибка обработчика логируется и не пробрасывается.

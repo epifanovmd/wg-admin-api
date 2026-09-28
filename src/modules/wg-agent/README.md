@@ -71,6 +71,6 @@ MTU 1480), пробросы — из интерфейсов, обслужива�
 образе бэкенда) и считает sha256. `GET /api/v1/wg/agent/release` (право `wg:node:view`) —
 версия и хэши по архитектурам; нода, чей `agentCodeHash` отличается от хэша
 её архитектуры, — кандидат на обновление. `POST
-/api/v1/wg/agent/nodes/{nodeId}/update` (право `wg:node:manage`) — команда
+/api/v1/wg/agent/nodes/{nodeId}/update` (право `wg:node:agent`) — команда
 `agent-update` с `hash` бинаря архитектуры ноды (`osInfo.arch`); архитектура
 неизвестна или бинаря нет — 404 `WG_AGENT_BINARY_NOT_BUILT`.

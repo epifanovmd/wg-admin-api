@@ -34,7 +34,8 @@ live-хранилище (TTL 60 с) — `activeRoute` в DTO.
 
 ## Эндпоинты (`/api/v1/wg/forwards`, тег WgForward)
 
-CRUD; права `wg:forward:view` / `wg:forward:manage`.
+CRUD; права `wg:forward:view` (чтение), `wg:forward:create`, `wg:forward:update`
+(изменение, включение и маршрут), `wg:forward:delete`.
 
 ## Сокет
 

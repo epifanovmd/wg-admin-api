@@ -94,12 +94,16 @@ export class JobsService {
   }
 
   /** Может ли пользователь видеть задачу (подписка на комнату сокета). */
-  async canView(userId: string, id: string): Promise<boolean> {
+  async canView(
+    userId: string,
+    id: string,
+    isSuperUser = false,
+  ): Promise<boolean> {
     const run = await this._runs.findById(id);
 
     if (!run) return false;
 
-    return this.canAccess({ userId, isSuperUser: false }, run, "view");
+    return this.canAccess({ userId, isSuperUser }, run, "view");
   }
 
   private async findAccessible(

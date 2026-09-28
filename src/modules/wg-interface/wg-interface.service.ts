@@ -11,6 +11,7 @@ import {
   pgErrorCode,
   toPage,
 } from "../../core";
+import { hasPermission } from "../../core/auth/has-permission";
 import { isSuperUser } from "../../core/auth/user-context";
 import type { AuthContext } from "../../types/koa";
 import { WgEndpoint, WgEndpointService } from "../wg-endpoint";
@@ -32,6 +33,7 @@ import {
   findInterfaceOrFail,
   interfaceCopyNodes,
 } from "./wg-interface.lookup";
+import { WgInterfacePermissions } from "./wg-interface.permissions";
 import type { IWgInterfaceFilters } from "./wg-interface.repository";
 import { WgInterfaceRepository } from "./wg-interface.repository";
 import { EWgInterfaceStatus } from "./wg-interface.types";
@@ -403,7 +405,11 @@ export class WgInterfaceService {
       (body.customPostUp !== undefined && body.customPostUp !== null) ||
       (body.customPostDown !== undefined && body.customPostDown !== null);
 
-    if (touchesHooks && !isSuperUser(actor)) {
+    const canSetHooks =
+      isSuperUser(actor) ||
+      hasPermission(actor.permissions, WgInterfacePermissions.INTERFACE_HOOKS);
+
+    if (touchesHooks && !canSetHooks) {
       throw WgInterfaceError.CUSTOM_HOOKS_FORBIDDEN();
     }
   }

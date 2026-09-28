@@ -139,14 +139,19 @@ export class ProfileController extends Controller {
    * @param body Данные для обновления профиля
    * @returns Обновленный профиль пользователя
    */
-  @Security("jwt", ["permission:profile:manage"])
+  @Security("jwt", ["permission:profile:update"])
   @Patch("update/{userId}")
   @ValidateBody(UpdateProfileSchema)
   async updateProfile(
+    @Request() req: KoaRequest,
     @Path() userId: UUID,
     @Body() body: IProfileUpdateRequestDto,
   ): Promise<ProfileDto> {
-    const profile = await this._profileService.updateProfile(userId, body);
+    const profile = await this._profileService.updateProfileOf(
+      getContextUser(req),
+      userId,
+      body,
+    );
 
     return this._profileService.toProfileDto(profile);
   }
@@ -158,10 +163,13 @@ export class ProfileController extends Controller {
    * @summary Очистка профиля другого пользователя
    * @param userId ID пользователя, профиль которого необходимо очистить
    */
-  @Security("jwt", ["permission:profile:manage"])
+  @Security("jwt", ["permission:profile:delete"])
   @SuccessResponse(204, "No Content")
   @Delete("delete/{userId}")
-  async deleteProfile(@Path() userId: UUID): Promise<void> {
-    await this._profileService.deleteProfile(userId);
+  async deleteProfile(
+    @Request() req: KoaRequest,
+    @Path() userId: UUID,
+  ): Promise<void> {
+    await this._profileService.clearProfileOf(getContextUser(req), userId);
   }
 }

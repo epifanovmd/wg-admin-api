@@ -5,7 +5,6 @@ import {
   WgCommandTimeoutJob,
 } from "./command-maintenance.jobs";
 import { WgNodeOfflineJob } from "./node-offline.job";
-import { WgAccessService } from "./wg-access.service";
 import { WgNodeController } from "./wg-node.controller";
 import { WgNode } from "./wg-node.entity";
 import { WgNodeListener } from "./wg-node.listener";
@@ -23,7 +22,6 @@ import { WgSecretBox } from "./wg-secret-box.service";
     WgNodeRepository,
     WgNodeCommandRepository,
     WgSecretBox,
-    WgAccessService,
     WgNodeService,
     WgNodeCommandService,
     WgNodeController,

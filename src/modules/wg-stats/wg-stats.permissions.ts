@@ -4,9 +4,11 @@ import { definePermissions } from "../permission";
  * Права статистики. `wg:stats:own` — статистика собственных пиров; выдаётся
  * роли `user` при засеве (`WgSeedBootstrap`).
  */
-export const WgStatsPermissions = definePermissions("wg", {
-  /** Глобальная статистика: overview, серии, live любой ноды/пира. */
-  STATS_VIEW: "wg:stats:view",
-  /** Статистика только своих пиров. */
-  STATS_OWN: "wg:stats:own",
-});
+export const WgStatsPermissions = definePermissions(
+  "wg",
+  { key: "wg:stats", label: "Статистика" },
+  {
+    STATS_VIEW: { name: "wg:stats:view", label: "Глобальная статистика" },
+    STATS_OWN: { name: "wg:stats:own", label: "Статистика своих пиров" },
+  },
+);

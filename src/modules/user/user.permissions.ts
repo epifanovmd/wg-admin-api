@@ -1,9 +1,13 @@
 import { definePermissions } from "../permission";
 
 /** Права модуля пользователей. */
-export const UserPermissions = definePermissions("user", {
-  /** Просмотр пользователей и их профилей. */
-  VIEW: "user:view",
-  /** Редактирование, удаление пользователей и назначение привилегий. */
-  MANAGE: "user:manage",
-});
+export const UserPermissions = definePermissions(
+  "user",
+  { key: "user", label: "Пользователи" },
+  {
+    VIEW: { name: "user:view", label: "Просмотр" },
+    UPDATE: { name: "user:update", label: "Изменение контактов" },
+    DELETE: { name: "user:delete", label: "Удаление" },
+    PRIVILEGES: { name: "user:privileges", label: "Назначение ролей и прав" },
+  },
+);

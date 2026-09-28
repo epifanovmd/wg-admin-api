@@ -2,12 +2,15 @@ import { inject } from "inversify";
 import { FindOptionsWhere } from "typeorm";
 
 import {
+  AccessService,
   EventBus,
   Injectable,
   IPaginatedDto,
   normalizePagination,
   toPage,
 } from "../../core";
+import { isSuperUser } from "../../core/auth/user-context";
+import type { AuthContext } from "../../types/koa";
 import { IProfileUpdateRequestDto, ProfileDto, PublicProfileDto } from "./dto";
 import { ProfileUpdatedEvent } from "./events";
 import { Profile } from "./profile.entity";
@@ -20,6 +23,7 @@ export class ProfileService {
   constructor(
     @inject(ProfileRepository) private _profileRepository: ProfileRepository,
     @inject(EventBus) private _eventBus: EventBus,
+    @inject(AccessService) private _access: AccessService,
   ) {}
 
   toProfileDto(profile: Profile): ProfileDto {
@@ -82,6 +86,23 @@ export class ProfileService {
     return profile;
   }
 
+  /** Изменить чужой профиль; профиль суперпользователя — только суперпользователь. */
+  async updateProfileOf(
+    actor: AuthContext,
+    userId: string,
+    body: IProfileUpdateRequestDto,
+  ) {
+    await this._assertCanEdit(actor, userId);
+
+    return this.updateProfile(userId, body);
+  }
+
+  /** Очистить чужой профиль; профиль суперпользователя — только суперпользователь. */
+  async clearProfileOf(actor: AuthContext, userId: string): Promise<void> {
+    await this._assertCanEdit(actor, userId);
+    await this.deleteProfile(userId);
+  }
+
   /**
    * «Удалить» профиль: очистить личные данные. Запись остаётся — профиль
    * существует у пользователя всегда (1:1 с `users`).
@@ -107,6 +128,15 @@ export class ProfileService {
       this._eventBus.emit(
         new ProfileUpdatedEvent(this.toPublicProfileDto(profile)),
       );
+    }
+  }
+
+  private async _assertCanEdit(
+    actor: AuthContext,
+    userId: string,
+  ): Promise<void> {
+    if (!isSuperUser(actor) && (await this._access.isSuperUser(userId))) {
+      throw ProfileError.SUPERUSER_EDIT();
     }
   }
 }

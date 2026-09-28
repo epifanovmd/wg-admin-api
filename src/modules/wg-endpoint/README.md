@@ -34,7 +34,8 @@ multi-inject `WG_ENDPOINT_USAGE` (`asWgEndpointUsage`, реализует wg-int
 
 ## Эндпоинты (`/api/v1/wg/endpoints`, тег WgEndpoint)
 
-CRUD + options; права `wg:endpoint:view` / `wg:endpoint:manage`.
+CRUD + options; права `wg:endpoint:view` (чтение), `wg:endpoint:create`,
+`wg:endpoint:update`, `wg:endpoint:delete`.
 Удаление используемой точки — 409 (FK RESTRICT от интерфейсов).
 
 ## События

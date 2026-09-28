@@ -12,6 +12,10 @@ export const RoleError = defineErrors("ROLE", {
     message:
       "Изменять роль admin и выдавать право «*» может только суперпользователь",
   },
+  SYSTEM_ROLE: {
+    status: HttpStatus.CONFLICT,
+    message: "Системную роль удалить нельзя",
+  },
   OWN_ROLE: {
     status: HttpStatus.FORBIDDEN,
     message: "Нельзя менять права собственной роли",

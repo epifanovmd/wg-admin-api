@@ -46,7 +46,7 @@ export class WgForwardController extends Controller {
    * адрес), путь и режим маршрута.
    * @summary Создание проброса
    */
-  @Security("jwt", ["permission:wg:forward:manage"])
+  @Security("jwt", ["permission:wg:forward:create"])
   @ValidateBody(CreateWgForwardSchema)
   @SuccessResponse(201, "Created")
   @Post()
@@ -81,7 +81,7 @@ export class WgForwardController extends Controller {
    * direct) — агент релея применит сразу.
    * @summary Изменение проброса
    */
-  @Security("jwt", ["permission:wg:forward:manage"])
+  @Security("jwt", ["permission:wg:forward:update"])
   @ValidateBody(UpdateWgForwardSchema)
   @Patch("{id}")
   updateWgForward(
@@ -94,7 +94,7 @@ export class WgForwardController extends Controller {
   /**
    * @summary Удаление проброса
    */
-  @Security("jwt", ["permission:wg:forward:manage"])
+  @Security("jwt", ["permission:wg:forward:delete"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}")
   async deleteWgForward(@Path() id: UUID): Promise<void> {

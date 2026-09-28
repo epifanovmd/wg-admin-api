@@ -427,20 +427,25 @@ flowchart LR
 
 Права выдаются ролями; суперпользователь (`*`) может всё.
 
-| Раздел     | Права                                                                                          |
-| ---------- | ---------------------------------------------------------------------------------------------- |
-| Ноды       | `wg:node:view`, `wg:node:manage` (создание, ключ агента, журнал), `wg:node:provision` (SSH)    |
-| Точки      | `wg:endpoint:view`, `wg:endpoint:manage`                                                       |
-| Интерфейсы | `wg:interface:view`, `wg:interface:manage`                                                     |
-| Пиры       | `wg:peer:view`, `wg:peer:manage`, `wg:peer:own` — свои пиры, конфиг и QR, включение-выключение |
-| Пробросы   | `wg:forward:view`, `wg:forward:manage`                                                         |
-| Прокси     | `wg:socks:view`, `wg:socks:manage`                                                             |
-| Статистика | `wg:stats:view` — вся, `wg:stats:own` — по своим пирам                                         |
+| Раздел     | Права                                                                                                                                                                                                                                           |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ноды       | `wg:node:view` (и метрики), `wg:node:create`, `wg:node:update`, `wg:node:delete`, `wg:node:agent` (ключ и обновление агента), `wg:node:logs` (журнал агента), `wg:node:provision` (SSH)                                                         |
+| Точки      | `wg:endpoint:view`, `wg:endpoint:create`, `wg:endpoint:update`, `wg:endpoint:delete`                                                                                                                                                            |
+| Интерфейсы | `wg:interface:view`, `wg:interface:create`, `wg:interface:update`, `wg:interface:delete`, `wg:interface:control` (включение, выключение, перезапуск), `wg:interface:move`, `wg:interface:replicas`, `wg:interface:hooks` (свои PostUp/PostDown) |
+| Пиры       | `wg:peer:view`, `wg:peer:create`, `wg:peer:update`, `wg:peer:delete`, `wg:peer:toggle` (включение-выключение любых), `wg:peer:psk`, `wg:peer:assign` (владелец), `wg:peer:own` — свои пиры, конфиг и QR, включение-выключение                   |
+| Пробросы   | `wg:forward:view`, `wg:forward:create`, `wg:forward:update`, `wg:forward:delete`                                                                                                                                                                |
+| Прокси     | `wg:socks:view`, `wg:socks:create`, `wg:socks:update`, `wg:socks:delete`, `wg:socks:users`, `wg:socks:secrets` (пароли пользователей), `wg:socks:clients` (сертификаты и клиенты устройств)                                                     |
+| Статистика | `wg:stats:view` — вся, `wg:stats:own` — по своим пирам                                                                                                                                                                                          |
 
 Роль `user` по умолчанию получает `wg:peer:own` и `wg:stats:own`: обычный
 пользователь видит только свои подключения.
 
-Свои PostUp/PostDown для интерфейса может задать только суперпользователь.
+Свои PostUp/PostDown для интерфейса задаёт только обладатель `wg:interface:hooks`
+(или суперпользователь).
+
+Сокет-комнаты проверяют актуальные права из БД на каждом входе; HTTP-запросы —
+права из access-токена, который после смены прав отклоняется и обновляется
+клиентом.
 
 **Ключ агента** — API-ключ с правом только на протокол своей ноды. Выдаётся при
 создании ноды, при ротации и при установке по SSH; секрет показывается один

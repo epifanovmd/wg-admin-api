@@ -51,6 +51,10 @@ export const UserError = defineErrors("USER", {
     status: HttpStatus.FORBIDDEN,
     message: "Собственный аккаунт удаляется через my/delete",
   },
+  SUPERUSER_EDIT: {
+    status: HttpStatus.FORBIDDEN,
+    message: "Данные суперпользователя меняет только суперпользователь",
+  },
   SUPERUSER_DELETE: {
     status: HttpStatus.FORBIDDEN,
     message: "Нельзя удалить суперпользователя",

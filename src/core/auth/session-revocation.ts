@@ -34,6 +34,10 @@ export const accessTokenTtlMs = (): number =>
 
 export const REVOKED_SESSION_PREFIX = "revoked:session:";
 export const REVOKED_USER_PREFIX = "revoked:user:";
+export const PRIVILEGES_CHANGED_PREFIX = "privileges:changed:";
+
+/** Итог проверки токена: отозван, выдан до смены прав или действителен (`null`). */
+export type TokenRevocation = "revoked" | "privileges-changed" | null;
 
 /** Состояние отзыва для одного access-токена. */
 export interface IRevocationState {
@@ -41,13 +45,20 @@ export interface IRevocationState {
   sessionRevoked: boolean;
   /** Все токены пользователя, выданные до этого момента (секунды), отозваны. */
   userRevokedAt: number | null;
+  /** Права пользователя изменились в этот момент (мс): токены до него устарели. */
+  privilegesChangedAt: number | null;
 }
 
 /** Хранилище отметок об отзыве: Redis (общий для реплик) или память. */
 export interface IRevocationBackend {
   revokeSessions(ids: string[], ttlMs: number): Promise<void>;
   revokeUser(userId: string, atSec: number, ttlMs: number): Promise<void>;
-  /** Одна операция на проверку: и сессия, и пользователь. */
+  markPrivilegesChanged(
+    userId: string,
+    atMs: number,
+    ttlMs: number,
+  ): Promise<void>;
+  /** Одна операция на проверку: сессия, пользователь и смена прав. */
   lookup(sessionId: string, userId: string): Promise<IRevocationState>;
 }
 
@@ -78,10 +89,19 @@ export class MemoryRevocationBackend implements IRevocationBackend {
     });
   }
 
+  async markPrivilegesChanged(userId: string, atMs: number, ttlMs: number) {
+    this._sweep();
+    this._entries.set(PRIVILEGES_CHANGED_PREFIX + userId, {
+      value: atMs,
+      expiresAt: Date.now() + ttlMs,
+    });
+  }
+
   async lookup(sessionId: string, userId: string): Promise<IRevocationState> {
     return {
       sessionRevoked: this._get(REVOKED_SESSION_PREFIX + sessionId) !== null,
       userRevokedAt: this._get(REVOKED_USER_PREFIX + userId),
+      privilegesChangedAt: this._get(PRIVILEGES_CHANGED_PREFIX + userId),
     };
   }
 
@@ -110,7 +130,10 @@ export class MemoryRevocationBackend implements IRevocationBackend {
   }
 }
 
-/** Redis: `revoked:session:<id>` и `revoked:user:<id>` с TTL, проверка — один MGET. */
+/**
+ * Redis: `revoked:session:<id>`, `revoked:user:<id>` и
+ * `privileges:changed:<id>` с TTL, проверка — один MGET.
+ */
 export class RedisRevocationBackend implements IRevocationBackend {
   constructor(private readonly _redis: Redis) {}
 
@@ -133,22 +156,58 @@ export class RedisRevocationBackend implements IRevocationBackend {
     );
   }
 
+  async markPrivilegesChanged(userId: string, atMs: number, ttlMs: number) {
+    await this._redis.set(
+      PRIVILEGES_CHANGED_PREFIX + userId,
+      String(atMs),
+      "PX",
+      ttlMs,
+    );
+  }
+
   async lookup(sessionId: string, userId: string): Promise<IRevocationState> {
-    const [session, user] = await this._redis.mget(
+    const [session, user, privileges] = await this._redis.mget(
       REVOKED_SESSION_PREFIX + sessionId,
       REVOKED_USER_PREFIX + userId,
+      PRIVILEGES_CHANGED_PREFIX + userId,
     );
 
     return {
       sessionRevoked: session !== null,
       userRevokedAt: user === null ? null : Number(user),
+      privilegesChangedAt: privileges === null ? null : Number(privileges),
     };
   }
 }
 
-const isRevokedBy = (state: IRevocationState, issuedAtSec: number) =>
-  state.sessionRevoked ||
-  (state.userRevokedAt !== null && issuedAtSec <= state.userRevokedAt);
+/**
+ * Вердикт по состоянию. Смена прав сравнивается в миллисекундах (`issuedAtMs`
+ * из токена): токен, выданный сразу после смены, уже действителен. Без него —
+ * по секундам `iat`, с запасом в сторону «устарел».
+ */
+const verdictOf = (
+  state: IRevocationState,
+  issuedAtSec: number,
+  issuedAtMs: number | undefined,
+): TokenRevocation => {
+  if (
+    state.sessionRevoked ||
+    (state.userRevokedAt !== null && issuedAtSec <= state.userRevokedAt)
+  ) {
+    return "revoked";
+  }
+
+  const issuedMs = issuedAtMs ?? issuedAtSec * 1000 + 999;
+
+  if (
+    state.privilegesChangedAt !== null &&
+    issuedMs <= state.privilegesChangedAt
+  ) {
+    return "privileges-changed";
+  }
+
+  return null;
+};
 
 export interface SessionRevocationOptions {
   /** Общий бэкенд реплик; `undefined` — только память процесса. */
@@ -207,19 +266,42 @@ export class SessionRevocationList {
     await this._shared?.revokeUser(userId, atSec, ttl);
   }
 
-  /** Токен сессии `sessionId`, выданный в `issuedAtSec`, отозван. */
-  async isRevoked(
+  /**
+   * Права пользователя изменились: его access-токены, выданные до этого
+   * момента, отклоняются как устаревшие — клиент обновляет их refresh-токеном
+   * (сессия остаётся).
+   */
+  async markPrivilegesChanged(userId: string): Promise<void> {
+    const ttl = this._ttlMs();
+    const atMs = Date.now();
+
+    await this._local.markPrivilegesChanged(userId, atMs, ttl);
+    this._cache.clear();
+    await this._shared?.markPrivilegesChanged(userId, atMs, ttl);
+  }
+
+  /**
+   * Проверка access-токена сессии `sessionId`, выданного в `issuedAtSec`
+   * (`issuedAtMs` — точнее, если есть в токене).
+   */
+  async check(
     sessionId: string,
     userId: string,
     issuedAtSec: number,
-  ): Promise<boolean> {
-    if (isRevokedBy(await this._local.lookup(sessionId, userId), issuedAtSec)) {
-      return true;
-    }
+    issuedAtMs?: number,
+  ): Promise<TokenRevocation> {
+    const local = verdictOf(
+      await this._local.lookup(sessionId, userId),
+      issuedAtSec,
+      issuedAtMs,
+    );
+
+    if (local === "revoked") return local;
 
     const shared = await this._lookupShared(sessionId, userId);
+    const remote = shared ? verdictOf(shared, issuedAtSec, issuedAtMs) : null;
 
-    return shared ? isRevokedBy(shared, issuedAtSec) : false;
+    return remote === "revoked" ? remote : (local ?? remote);
   }
 
   private async _lookupShared(

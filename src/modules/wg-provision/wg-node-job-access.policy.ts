@@ -1,7 +1,12 @@
 import { inject } from "inversify";
 
-import { IJobAccessPolicy, Injectable, JobAccessAction } from "../../core";
-import { WgAccessService, WgNodePermissions } from "../wg-node";
+import {
+  AccessService,
+  IJobAccessPolicy,
+  Injectable,
+  JobAccessAction,
+} from "../../core";
+import { WgNodePermissions } from "../wg-node";
 import { WG_NODE_JOB_SCOPE } from "./wg-provision.types";
 
 /**
@@ -12,9 +17,7 @@ import { WG_NODE_JOB_SCOPE } from "./wg-provision.types";
 export class WgNodeJobAccessPolicy implements IJobAccessPolicy {
   readonly scopeType = WG_NODE_JOB_SCOPE;
 
-  constructor(
-    @inject(WgAccessService) private readonly _access: WgAccessService,
-  ) {}
+  constructor(@inject(AccessService) private readonly _access: AccessService) {}
 
   canAccess(userId: string, _nodeId: string, action: JobAccessAction) {
     return this._access.can(

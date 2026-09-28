@@ -79,7 +79,7 @@ export class WgAgentUpdateController extends Controller {
    * собран — 404.
    * @summary Обновить агента
    */
-  @Security("jwt", ["permission:wg:node:manage"])
+  @Security("jwt", ["permission:wg:node:agent"])
   @SuccessResponse(201, "Created")
   @Post("nodes/{nodeId}/update")
   async updateWgAgent(

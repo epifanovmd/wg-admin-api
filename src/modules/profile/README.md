@@ -60,10 +60,12 @@ src/modules/profile/
 | `DELETE` | `/my/delete`       | jwt                                                                       | Очистить свой профиль: имя, фамилия, дата рождения, пол → `null`; запись остаётся. 204              |
 | `GET`    | `/all`             | jwt, `permission:profile:view` + `@ValidateQuery(ProfileListQuerySchema)` | `IProfileListDto` = `IPaginatedDto<PublicProfileDto>`; `limit` по умолчанию 20, ≤ 100; `offset` ≥ 0 |
 | `GET`    | `/{userId}`        | jwt                                                                       | Профиль пользователя по `userId` → `PublicProfileDto`                                               |
-| `PATCH`  | `/update/{userId}` | jwt, `permission:profile:manage` + `@ValidateBody(UpdateProfileSchema)`   | Обновить профиль другого пользователя → `ProfileDto`                                                |
-| `DELETE` | `/delete/{userId}` | jwt, `permission:profile:manage`                                          | Очистить профиль другого пользователя (запись остаётся). 204                                        |
+| `PATCH`  | `/update/{userId}` | jwt, `permission:profile:update` + `@ValidateBody(UpdateProfileSchema)`   | Обновить профиль другого пользователя → `ProfileDto`                                                |
+| `DELETE` | `/delete/{userId}` | jwt, `permission:profile:delete`                                          | Очистить профиль другого пользователя (запись остаётся). 204                                        |
 
-`{userId}` — `UUID` (неверный формат → 400 `VALIDATION_ERROR`).
+`{userId}` — `UUID` (неверный формат → 400 `VALIDATION_ERROR`). Профиль
+суперпользователя через `update/{userId}` и `delete/{userId}` меняет только
+суперпользователь (`PROFILE_SUPERUSER_EDIT`, 403).
 
 ### Валидация обновления (`UpdateProfileSchema`)
 
@@ -76,14 +78,16 @@ src/modules/profile/
 
 ## Сервис `ProfileService`
 
-| Метод                                       | Описание                                                                                  |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `getProfiles(offset?, limit?)`              | `IPaginatedDto<PublicProfileDto>` через `normalizePagination`/`toPage`; `createdAt DESC`. |
-| `getProfileByAttr(where)`                   | Поиск по произвольным условиям (с `user`). Нет — `PROFILE_NOT_FOUND` (404).               |
-| `getProfileByUserId(userId)`                | Профиль по `userId`. Нет — `PROFILE_NOT_FOUND` (404).                                     |
-| `updateProfile(userId, body)`               | Обновление. Публикует `ProfileUpdatedEvent`.                                              |
-| `deleteProfile(userId)`                     | Очистка личных полей (запись остаётся). Публикует `ProfileUpdatedEvent`. Нет — 404.       |
-| `toProfileDto(p)` / `toPublicProfileDto(p)` | Сборка DTO.                                                                               |
+| Метод                                       | Описание                                                                                        |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `getProfiles(offset?, limit?)`              | `IPaginatedDto<PublicProfileDto>` через `normalizePagination`/`toPage`; `createdAt DESC`.       |
+| `getProfileByAttr(where)`                   | Поиск по произвольным условиям (с `user`). Нет — `PROFILE_NOT_FOUND` (404).                     |
+| `getProfileByUserId(userId)`                | Профиль по `userId`. Нет — `PROFILE_NOT_FOUND` (404).                                           |
+| `updateProfile(userId, body)`               | Обновление. Публикует `ProfileUpdatedEvent`.                                                    |
+| `deleteProfile(userId)`                     | Очистка личных полей (запись остаётся). Публикует `ProfileUpdatedEvent`. Нет — 404.             |
+| `updateProfileOf(actor, userId, body)`      | `updateProfile` чужого профиля; цель — суперпользователь, актор нет → `PROFILE_SUPERUSER_EDIT`. |
+| `clearProfileOf(actor, userId)`             | `deleteProfile` чужого профиля с той же проверкой (`AccessService.isSuperUser`).                |
+| `toProfileDto(p)` / `toPublicProfileDto(p)` | Сборка DTO.                                                                                     |
 
 ## DTO
 
@@ -96,7 +100,9 @@ src/modules/profile/
 ## Ошибки и права
 
 - `ProfileError.NOT_FOUND` → `PROFILE_NOT_FOUND` (404).
-- `ProfilePermissions = definePermissions("profile", { VIEW: "profile:view", MANAGE: "profile:manage" })`.
+- `ProfileError.SUPERUSER_EDIT` → `PROFILE_SUPERUSER_EDIT` (403).
+- `ProfilePermissions` (группа «Профили», чужие профили): `profile:view` — просмотр,
+  `profile:update` — изменение, `profile:delete` — очистка.
 
 ## События
 

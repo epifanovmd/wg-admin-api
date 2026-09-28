@@ -1,8 +1,7 @@
 import { inject } from "inversify";
 
-import { Injectable } from "../../core";
+import { AccessService, Injectable } from "../../core";
 import { ISocketRoomPolicy } from "../socket";
-import { WgAccessService } from "./wg-access.service";
 import { WgNodePermissions } from "./wg-node.permissions";
 
 export const wgNodeRoom = (id: string): string => `wg-node_${id}`;
@@ -12,9 +11,7 @@ export const wgNodeRoom = (id: string): string => `wg-node_${id}`;
 export class WgNodeRoomPolicy implements ISocketRoomPolicy {
   readonly type = "wg-node";
 
-  constructor(
-    @inject(WgAccessService) private readonly _access: WgAccessService,
-  ) {}
+  constructor(@inject(AccessService) private readonly _access: AccessService) {}
 
   room(id: string): string {
     return wgNodeRoom(id);

@@ -14,5 +14,4 @@ export type TSessionEndReason =
   | "evicted"
   | "expired"
   | "refresh-reuse"
-  | "password-changed"
-  | "privileges-changed";
+  | "password-changed";

@@ -7,6 +7,7 @@ export * from "./socket-client-registry";
 export * from "./socket-emitter.service";
 export * from "./socket-event-listener.interface";
 export * from "./socket-handler.interface";
+export * from "./socket-room.service";
 export * from "./socket-rooms";
 export * from "./socket-server.service";
 export * from "./socket-validation";

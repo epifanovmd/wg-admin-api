@@ -43,7 +43,7 @@ export const WgInterfaceError = defineErrors("WG_IFACE", {
   },
   CUSTOM_HOOKS_FORBIDDEN: {
     status: HttpStatus.FORBIDDEN,
-    message: "Произвольные PostUp/PostDown может задавать только администратор",
+    message: "Нет права задавать произвольные PostUp/PostDown",
   },
   MOVE_TO_REPLICA: {
     status: HttpStatus.CONFLICT,

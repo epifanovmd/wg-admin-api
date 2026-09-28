@@ -180,521 +180,63 @@
 				"description": "Идентификатор сущности в пути или теле запроса. tsoa проверяет формат до\nконтроллера: неверный uuid → 422, а не ошибка Postgres.",
 				"pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
 			},
-			"KnownRole": {
-				"type": "string",
-				"enum": [
-					"admin",
-					"user",
-					"guest"
-				],
-				"description": "Тип для предопределённых ролей (автодополнение в IDE)."
-			},
-			"TRole": {
-				"anyOf": [
-					{
-						"$ref": "#/components/schemas/KnownRole"
-					},
-					{
-						"allOf": [
-							{
-								"type": "string"
-							},
-							{
-								"properties": {},
-								"type": "object"
-							}
-						]
-					}
-				],
-				"description": "Роль — произвольная строка; предопределённые значения дают автодополнение."
-			},
-			"KnownPermission": {
-				"type": "string",
-				"enum": [
-					"*",
-					"user:view",
-					"user:manage",
-					"role:view",
-					"role:manage",
-					"profile:view",
-					"profile:manage",
-					"apikey:manage",
-					"audit:view"
-				],
-				"description": "Тип для предопределённых permissions (автодополнение в IDE)."
-			},
 			"TPermission": {
-				"anyOf": [
-					{
-						"$ref": "#/components/schemas/KnownPermission"
-					},
-					{
-						"allOf": [
-							{
-								"type": "string"
-							},
-							{
-								"properties": {},
-								"type": "object"
-							}
-						]
-					}
-				],
-				"description": "Permission — произвольная строка; предопределённые значения дают автодополнение."
+				"type": "string",
+				"description": "Право — строка `domain:action` (или `domain:*` — wildcard). Модуль объявляет\nсвои права сам через `definePermissions`; каталог с подписями отдаёт\n`GET /api/v1/permissions`."
 			},
-			"IPermissionDto": {
+			"IPermissionCatalogItemDto": {
+				"description": "Право в каталоге: имя и подпись.",
 				"properties": {
-					"id": {
-						"type": "string"
-					},
 					"name": {
 						"$ref": "#/components/schemas/TPermission"
 					},
-					"createdAt": {
-						"type": "string",
-						"format": "date-time"
-					},
-					"updatedAt": {
-						"type": "string",
-						"format": "date-time"
+					"label": {
+						"type": "string"
 					}
 				},
 				"required": [
-					"id",
 					"name",
-					"createdAt",
-					"updatedAt"
+					"label"
 				],
 				"type": "object",
 				"additionalProperties": false
 			},
-			"IRoleDto": {
+			"IPermissionCatalogGroupDto": {
+				"description": "Группа прав каталога (обычно — сущность домена).",
 				"properties": {
-					"id": {
+					"key": {
+						"type": "string",
+						"description": "`*`, `<домен>` или `<домен>:<сущность>`."
+					},
+					"label": {
 						"type": "string"
-					},
-					"name": {
-						"$ref": "#/components/schemas/TRole"
-					},
-					"createdAt": {
-						"type": "string",
-						"format": "date-time"
-					},
-					"updatedAt": {
-						"type": "string",
-						"format": "date-time"
 					},
 					"permissions": {
 						"items": {
-							"$ref": "#/components/schemas/IPermissionDto"
+							"$ref": "#/components/schemas/IPermissionCatalogItemDto"
 						},
 						"type": "array"
 					}
 				},
 				"required": [
-					"id",
-					"name",
-					"createdAt",
-					"updatedAt",
+					"key",
+					"label",
 					"permissions"
 				],
 				"type": "object",
 				"additionalProperties": false
 			},
-			"RoleName": {
-				"type": "string",
-				"description": "Имя роли в теле запроса API. Обычная строка: `TRole` с `string & {}`\ntsoa проверить не может и отклоняет любое значение. Известные роли — `Roles`.",
-				"minLength": 1,
-				"maxLength": 100
-			},
-			"ICreateRoleRequestDto": {
+			"IPermissionCatalogDto": {
 				"properties": {
-					"name": {
-						"$ref": "#/components/schemas/RoleName"
-					}
-				},
-				"required": [
-					"name"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"PermissionName": {
-				"type": "string",
-				"description": "Имя права в теле запроса API (`домен:действие`). Обычная строка: `TPermission`\nс `string & {}` tsoa проверить не может. Известные права — `Permissions`.",
-				"minLength": 1,
-				"maxLength": 100
-			},
-			"IRolePermissionsRequestDto": {
-				"properties": {
-					"permissions": {
+					"groups": {
 						"items": {
-							"$ref": "#/components/schemas/PermissionName"
+							"$ref": "#/components/schemas/IPermissionCatalogGroupDto"
 						},
 						"type": "array"
 					}
 				},
 				"required": [
-					"permissions"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"UserDto": {
-				"description": "Пользователь для владельца и администрирования.",
-				"properties": {
-					"id": {
-						"type": "string"
-					},
-					"email": {
-						"type": "string",
-						"nullable": true
-					},
-					"emailVerified": {
-						"type": "boolean"
-					},
-					"phone": {
-						"type": "string",
-						"nullable": true
-					},
-					"username": {
-						"type": "string",
-						"nullable": true
-					},
-					"profile": {
-						"$ref": "#/components/schemas/ProfileDto"
-					},
-					"roles": {
-						"items": {
-							"$ref": "#/components/schemas/IRoleDto"
-						},
-						"type": "array"
-					},
-					"directPermissions": {
-						"items": {
-							"$ref": "#/components/schemas/IPermissionDto"
-						},
-						"type": "array"
-					},
-					"createdAt": {
-						"type": "string",
-						"format": "date-time"
-					},
-					"updatedAt": {
-						"type": "string",
-						"format": "date-time"
-					}
-				},
-				"required": [
-					"id",
-					"email",
-					"phone",
-					"username",
-					"roles",
-					"directPermissions",
-					"createdAt",
-					"updatedAt"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"ProfileDto": {
-				"description": "Профиль владельца.",
-				"properties": {
-					"id": {
-						"type": "string"
-					},
-					"userId": {
-						"type": "string"
-					},
-					"firstName": {
-						"type": "string",
-						"nullable": true
-					},
-					"lastName": {
-						"type": "string",
-						"nullable": true
-					},
-					"birthDate": {
-						"type": "string",
-						"format": "date-time",
-						"nullable": true
-					},
-					"gender": {
-						"type": "string",
-						"nullable": true
-					},
-					"locale": {
-						"type": "string",
-						"nullable": true
-					},
-					"createdAt": {
-						"type": "string",
-						"format": "date-time"
-					},
-					"updatedAt": {
-						"type": "string",
-						"format": "date-time"
-					},
-					"user": {
-						"$ref": "#/components/schemas/UserDto"
-					}
-				},
-				"required": [
-					"id",
-					"userId",
-					"firstName",
-					"lastName",
-					"birthDate",
-					"gender",
-					"locale",
-					"createdAt",
-					"updatedAt"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IUserUpdateRequestDto": {
-				"properties": {
-					"email": {
-						"type": "string"
-					},
-					"phone": {
-						"type": "string"
-					}
-				},
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IUserConfirmEmailChangeDto": {
-				"properties": {
-					"code": {
-						"type": "string",
-						"description": "Код из письма, отправленного на новый адрес (6 цифр)."
-					}
-				},
-				"required": [
-					"code"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IUserDeleteDto": {
-				"properties": {
-					"password": {
-						"type": "string",
-						"description": "Текущий пароль — подтверждение удаления аккаунта."
-					}
-				},
-				"required": [
-					"password"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IUserAdminListDto": {
-				"description": "Список пользователей для администрирования (`user:view`).",
-				"properties": {
-					"items": {
-						"items": {
-							"$ref": "#/components/schemas/UserDto"
-						},
-						"type": "array"
-					},
-					"total": {
-						"type": "number",
-						"format": "double",
-						"description": "Всего элементов, подходящих под фильтр."
-					},
-					"offset": {
-						"type": "number",
-						"format": "double"
-					},
-					"limit": {
-						"type": "number",
-						"format": "double"
-					}
-				},
-				"required": [
-					"items",
-					"total",
-					"offset",
-					"limit"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IUserOptionDto": {
-				"properties": {
-					"id": {
-						"type": "string"
-					},
-					"name": {
-						"type": "string",
-						"nullable": true
-					}
-				},
-				"required": [
-					"id",
-					"name"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IUserOptionsDto": {
-				"properties": {
-					"data": {
-						"items": {
-							"$ref": "#/components/schemas/IUserOptionDto"
-						},
-						"type": "array"
-					}
-				},
-				"required": [
-					"data"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IUserPrivilegesRequestDto": {
-				"properties": {
-					"roles": {
-						"items": {
-							"$ref": "#/components/schemas/RoleName"
-						},
-						"type": "array",
-						"description": "Роли для назначения пользователю (заменяет текущие роли)."
-					},
-					"permissions": {
-						"items": {
-							"$ref": "#/components/schemas/PermissionName"
-						},
-						"type": "array",
-						"description": "Прямые разрешения, выданные этому пользователю дополнительно к разрешениям ролей.\nЗаменяет текущие прямые разрешения."
-					}
-				},
-				"required": [
-					"roles",
-					"permissions"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IUserVerifyEmailDto": {
-				"properties": {
-					"code": {
-						"type": "string",
-						"description": "Код из письма (6 цифр)."
-					}
-				},
-				"required": [
-					"code"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IUserChangePasswordDto": {
-				"properties": {
-					"currentPassword": {
-						"type": "string"
-					},
-					"newPassword": {
-						"type": "string"
-					}
-				},
-				"required": [
-					"currentPassword",
-					"newPassword"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IProfileUpdateRequestDto": {
-				"properties": {
-					"firstName": {
-						"type": "string",
-						"nullable": true,
-						"maxLength": 40
-					},
-					"lastName": {
-						"type": "string",
-						"nullable": true,
-						"maxLength": 40
-					},
-					"birthDate": {
-						"type": "string",
-						"format": "date-time",
-						"nullable": true
-					},
-					"gender": {
-						"type": "string",
-						"nullable": true,
-						"maxLength": 20
-					},
-					"locale": {
-						"type": "string",
-						"nullable": true,
-						"description": "Язык пользователя: `ru`, `en`, `en-US`. Письма — на `ru`/`en`, прочие\nязыки получают письма на `ru`.",
-						"maxLength": 10
-					}
-				},
-				"type": "object",
-				"additionalProperties": false
-			},
-			"PublicProfileDto": {
-				"description": "Профиль глазами другого пользователя.",
-				"properties": {
-					"id": {
-						"type": "string"
-					},
-					"userId": {
-						"type": "string"
-					},
-					"firstName": {
-						"type": "string",
-						"nullable": true
-					},
-					"lastName": {
-						"type": "string",
-						"nullable": true
-					}
-				},
-				"required": [
-					"id",
-					"userId",
-					"firstName",
-					"lastName"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IProfileListDto": {
-				"properties": {
-					"items": {
-						"items": {
-							"$ref": "#/components/schemas/PublicProfileDto"
-						},
-						"type": "array"
-					},
-					"total": {
-						"type": "number",
-						"format": "double",
-						"description": "Всего элементов, подходящих под фильтр."
-					},
-					"offset": {
-						"type": "number",
-						"format": "double"
-					},
-					"limit": {
-						"type": "number",
-						"format": "double"
-					}
-				},
-				"required": [
-					"items",
-					"total",
-					"offset",
-					"limit"
+					"groups"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -2669,6 +2211,132 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"KnownRole": {
+				"type": "string",
+				"enum": [
+					"admin",
+					"user",
+					"guest"
+				],
+				"description": "Тип для предопределённых ролей (автодополнение в IDE)."
+			},
+			"TRole": {
+				"anyOf": [
+					{
+						"$ref": "#/components/schemas/KnownRole"
+					},
+					{
+						"allOf": [
+							{
+								"type": "string"
+							},
+							{
+								"properties": {},
+								"type": "object"
+							}
+						]
+					}
+				],
+				"description": "Роль — произвольная строка; предопределённые значения дают автодополнение."
+			},
+			"IPermissionDto": {
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"$ref": "#/components/schemas/TPermission"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"createdAt",
+					"updatedAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IRoleDto": {
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"$ref": "#/components/schemas/TRole"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"permissions": {
+						"items": {
+							"$ref": "#/components/schemas/IPermissionDto"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"createdAt",
+					"updatedAt",
+					"permissions"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"RoleName": {
+				"type": "string",
+				"description": "Имя роли в теле запроса API. Обычная строка: `TRole` с `string & {}`\ntsoa проверить не может и отклоняет любое значение. Известные роли — `Roles`.",
+				"minLength": 1,
+				"maxLength": 100
+			},
+			"ICreateRoleRequestDto": {
+				"properties": {
+					"name": {
+						"$ref": "#/components/schemas/RoleName"
+					}
+				},
+				"required": [
+					"name"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"PermissionName": {
+				"type": "string",
+				"description": "Имя права в теле запроса API (`домен:действие`).",
+				"minLength": 1,
+				"maxLength": 100
+			},
+			"IRolePermissionsRequestDto": {
+				"properties": {
+					"permissions": {
+						"items": {
+							"$ref": "#/components/schemas/PermissionName"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"permissions"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"WgSocksUserDto": {
 				"properties": {
 					"id": {
@@ -4179,6 +3847,275 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"UserDto": {
+				"description": "Пользователь для владельца и администрирования.",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"email": {
+						"type": "string",
+						"nullable": true
+					},
+					"emailVerified": {
+						"type": "boolean"
+					},
+					"phone": {
+						"type": "string",
+						"nullable": true
+					},
+					"username": {
+						"type": "string",
+						"nullable": true
+					},
+					"profile": {
+						"$ref": "#/components/schemas/ProfileDto"
+					},
+					"roles": {
+						"items": {
+							"$ref": "#/components/schemas/IRoleDto"
+						},
+						"type": "array"
+					},
+					"directPermissions": {
+						"items": {
+							"$ref": "#/components/schemas/IPermissionDto"
+						},
+						"type": "array"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"email",
+					"phone",
+					"username",
+					"roles",
+					"directPermissions",
+					"createdAt",
+					"updatedAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ProfileDto": {
+				"description": "Профиль владельца.",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"userId": {
+						"type": "string"
+					},
+					"firstName": {
+						"type": "string",
+						"nullable": true
+					},
+					"lastName": {
+						"type": "string",
+						"nullable": true
+					},
+					"birthDate": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"gender": {
+						"type": "string",
+						"nullable": true
+					},
+					"locale": {
+						"type": "string",
+						"nullable": true
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"user": {
+						"$ref": "#/components/schemas/UserDto"
+					}
+				},
+				"required": [
+					"id",
+					"userId",
+					"firstName",
+					"lastName",
+					"birthDate",
+					"gender",
+					"locale",
+					"createdAt",
+					"updatedAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IUserUpdateRequestDto": {
+				"properties": {
+					"email": {
+						"type": "string"
+					},
+					"phone": {
+						"type": "string"
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IUserConfirmEmailChangeDto": {
+				"properties": {
+					"code": {
+						"type": "string",
+						"description": "Код из письма, отправленного на новый адрес (6 цифр)."
+					}
+				},
+				"required": [
+					"code"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IUserDeleteDto": {
+				"properties": {
+					"password": {
+						"type": "string",
+						"description": "Текущий пароль — подтверждение удаления аккаунта."
+					}
+				},
+				"required": [
+					"password"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IUserAdminListDto": {
+				"description": "Список пользователей для администрирования (`user:view`).",
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/UserDto"
+						},
+						"type": "array"
+					},
+					"total": {
+						"type": "number",
+						"format": "double",
+						"description": "Всего элементов, подходящих под фильтр."
+					},
+					"offset": {
+						"type": "number",
+						"format": "double"
+					},
+					"limit": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"items",
+					"total",
+					"offset",
+					"limit"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IUserOptionDto": {
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string",
+						"nullable": true
+					}
+				},
+				"required": [
+					"id",
+					"name"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IUserOptionsDto": {
+				"properties": {
+					"data": {
+						"items": {
+							"$ref": "#/components/schemas/IUserOptionDto"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IUserPrivilegesRequestDto": {
+				"properties": {
+					"roles": {
+						"items": {
+							"$ref": "#/components/schemas/RoleName"
+						},
+						"type": "array",
+						"description": "Роли для назначения пользователю (заменяет текущие роли)."
+					},
+					"permissions": {
+						"items": {
+							"$ref": "#/components/schemas/PermissionName"
+						},
+						"type": "array",
+						"description": "Прямые разрешения, выданные этому пользователю дополнительно к разрешениям ролей.\nЗаменяет текущие прямые разрешения."
+					}
+				},
+				"required": [
+					"roles",
+					"permissions"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IUserVerifyEmailDto": {
+				"properties": {
+					"code": {
+						"type": "string",
+						"description": "Код из письма (6 цифр)."
+					}
+				},
+				"required": [
+					"code"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IUserChangePasswordDto": {
+				"properties": {
+					"currentPassword": {
+						"type": "string"
+					},
+					"newPassword": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"currentPassword",
+					"newPassword"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"SessionDto": {
 				"properties": {
 					"id": {
@@ -4236,6 +4173,96 @@
 					"items": {
 						"items": {
 							"$ref": "#/components/schemas/SessionDto"
+						},
+						"type": "array"
+					},
+					"total": {
+						"type": "number",
+						"format": "double",
+						"description": "Всего элементов, подходящих под фильтр."
+					},
+					"offset": {
+						"type": "number",
+						"format": "double"
+					},
+					"limit": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"items",
+					"total",
+					"offset",
+					"limit"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IProfileUpdateRequestDto": {
+				"properties": {
+					"firstName": {
+						"type": "string",
+						"nullable": true,
+						"maxLength": 40
+					},
+					"lastName": {
+						"type": "string",
+						"nullable": true,
+						"maxLength": 40
+					},
+					"birthDate": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"gender": {
+						"type": "string",
+						"nullable": true,
+						"maxLength": 20
+					},
+					"locale": {
+						"type": "string",
+						"nullable": true,
+						"description": "Язык пользователя: `ru`, `en`, `en-US`. Письма — на `ru`/`en`, прочие\nязыки получают письма на `ru`.",
+						"maxLength": 10
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"PublicProfileDto": {
+				"description": "Профиль глазами другого пользователя.",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"userId": {
+						"type": "string"
+					},
+					"firstName": {
+						"type": "string",
+						"nullable": true
+					},
+					"lastName": {
+						"type": "string",
+						"nullable": true
+					}
+				},
+				"required": [
+					"id",
+					"userId",
+					"firstName",
+					"lastName"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IProfileListDto": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/PublicProfileDto"
 						},
 						"type": "array"
 					},
@@ -5240,7 +5267,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:apikey:manage"
+							"permission:apikey:create"
 						]
 					}
 				],
@@ -5288,7 +5315,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:apikey:manage"
+							"permission:apikey:view"
 						]
 					}
 				],
@@ -5340,7 +5367,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:apikey:manage"
+							"permission:apikey:revoke"
 						]
 					}
 				],
@@ -5356,393 +5383,16 @@
 				]
 			}
 		},
-		"/api/v1/roles": {
+		"/api/v1/permissions": {
 			"get": {
-				"operationId": "GetRoles",
-				"responses": {
-					"200": {
-						"description": "Список ролей",
-						"content": {
-							"application/json": {
-								"schema": {
-									"items": {
-										"$ref": "#/components/schemas/IRoleDto"
-									},
-									"type": "array"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Получить все роли с их правами.",
-				"summary": "Список ролей",
-				"tags": [
-					"Role"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:role:view"
-						]
-					}
-				],
-				"parameters": []
-			},
-			"post": {
-				"operationId": "CreateRole",
-				"responses": {
-					"201": {
-						"description": "Created",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IRoleDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Создать новую роль.",
-				"summary": "Создание роли",
-				"tags": [
-					"Role"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:role:manage"
-						]
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"description": "Название роли",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/ICreateRoleRequestDto",
-								"description": "Название роли"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/roles/{id}": {
-			"delete": {
-				"operationId": "DeleteRole",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Удалить роль.",
-				"summary": "Удаление роли",
-				"tags": [
-					"Role"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:role:manage"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "ID роли",
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/roles/{id}/permissions": {
-			"patch": {
-				"operationId": "SetRolePermissions",
-				"responses": {
-					"200": {
-						"description": "Обновлённая роль",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IRoleDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Установить права для роли.\nЗаменяет текущий набор прав роли указанным. Роль `admin`, право `*` и\nсобственную роль меняет только суперпользователь. Все пользователи роли\nполучают `user:privileges-changed`, их сессии завершаются.",
-				"summary": "Установка прав роли",
-				"tags": [
-					"Role"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:role:manage"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "ID роли",
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				],
-				"requestBody": {
-					"description": "Список прав",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IRolePermissionsRequestDto",
-								"description": "Список прав"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/user/my": {
-			"get": {
-				"operationId": "GetMyUser",
-				"responses": {
-					"200": {
-						"description": "Пользователь",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/UserDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Получить пользователя.\nЭтот эндпоинт позволяет получить данные пользователя, который выполнил запрос.",
-				"summary": "Получение данных текущего пользователя",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": []
-			}
-		},
-		"/api/v1/user/my/update": {
-			"patch": {
-				"operationId": "UpdateMyUser",
-				"responses": {
-					"200": {
-						"description": "Пользователь (email — прежний до подтверждения)",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/UserDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Обновить email и/или телефон текущего пользователя.\nТелефон меняется сразу. Email — нет: создаётся запрос на смену, код\nуходит на новый адрес, уведомление — на старый; адрес меняется после\n`POST my/email/confirm`. Повторный запрос — не чаще раза в минуту (429).\nЗанятые email/телефон → 409 (`USER_EMAIL_TAKEN` / `USER_PHONE_TAKEN`).",
-				"summary": "Обновление данных текущего пользователя",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"description": "Обновленные данные пользователя",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IUserUpdateRequestDto",
-								"description": "Обновленные данные пользователя"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/user/my/email/confirm": {
-			"post": {
-				"operationId": "ConfirmEmailChange",
-				"responses": {
-					"200": {
-						"description": "Пользователь с новым email",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/UserDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Подтвердить смену email кодом из письма на новый адрес. Email\nменяется и считается подтверждённым. Неверный код расходует попытку\n(`USER_EMAIL_CHANGE_INVALID_CODE`, в `details.attemptsLeft` — остаток);\nпосле 5 неверных или по истечении 15 минут запрос аннулируется.",
-				"summary": "Подтверждение смены email",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"description": "Код подтверждения",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IUserConfirmEmailChangeDto",
-								"description": "Код подтверждения"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/user/my/delete": {
-			"post": {
-				"operationId": "DeleteMyUser",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Удалить текущего пользователя. Требуется текущий пароль.\nPOST, а не DELETE: тело DELETE-запроса не разбирается body-parser-ом.",
-				"summary": "Удаление текущего пользователя",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IUserDeleteDto"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/user/my/username": {
-			"patch": {
-				"operationId": "SetUsername",
+				"operationId": "GetPermissionCatalog",
 				"responses": {
 					"200": {
 						"description": "Ok",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/UserDto"
+									"$ref": "#/components/schemas/IPermissionCatalogDto"
 								}
 							}
 						}
@@ -5758,291 +5408,10 @@
 						}
 					}
 				},
-				"description": "Установить username для текущего пользователя.",
-				"summary": "Установка username",
+				"description": "Каталог прав по группам с подписями — для редакторов ролей и прав\nпользователей. Первая группа — «Система» (полный доступ `*`).",
+				"summary": "Каталог прав",
 				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"properties": {
-									"username": {
-										"type": "string"
-									}
-								},
-								"required": [
-									"username"
-								],
-								"type": "object"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/user/all": {
-			"get": {
-				"operationId": "GetUsers",
-				"responses": {
-					"200": {
-						"description": "Страница пользователей",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IUserAdminListDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Получить пользователей постранично (администрирование), новые первыми.",
-				"summary": "Получение всех пользователей",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:user:view"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "Смещение, по умолчанию 0",
-						"in": "query",
-						"name": "offset",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					},
-					{
-						"description": "Размер страницы: по умолчанию 20, не больше 100",
-						"in": "query",
-						"name": "limit",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					},
-					{
-						"description": "Поиск по email, минимум 2 символа",
-						"in": "query",
-						"name": "query",
-						"required": false,
-						"schema": {
-							"type": "string"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/user/options": {
-			"get": {
-				"operationId": "GetUserOptions",
-				"responses": {
-					"200": {
-						"description": "Список опций",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IUserOptionsDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Получить опции пользователей для выпадающих списков (id + name).\nname — имя и фамилия или email если профиль не заполнен.",
-				"summary": "Опции пользователей",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:user:view"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "Поиск по email, имени или фамилии",
-						"in": "query",
-						"name": "query",
-						"required": false,
-						"schema": {
-							"type": "string"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/user/{id}": {
-			"get": {
-				"operationId": "GetUserById",
-				"responses": {
-					"200": {
-						"description": "Пользователь по ID",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/UserDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Получить пользователя по ID.",
-				"summary": "Получение пользователя по ID",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:user:view"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "ID пользователя, которого нужно получить",
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/user/setPrivileges/{id}": {
-			"patch": {
-				"operationId": "SetPrivileges",
-				"responses": {
-					"200": {
-						"description": "Обновленный пользователь с привилегиями",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/UserDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Установить роли и прямые права пользователя.\nРоли и права должны существовать. Свои привилегии менять нельзя; роль\n`admin` и право `*` выдаёт только суперпользователь.",
-				"summary": "Установка привилегий для пользователя",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:user:manage"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "ID пользователя, для которого необходимо установить привилегии",
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				],
-				"requestBody": {
-					"description": "Запрос, содержащий роль и разрешения",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IUserPrivilegesRequestDto",
-								"description": "Запрос, содержащий роль и разрешения"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/user/verify-email/request": {
-			"post": {
-				"operationId": "RequestVerifyEmail",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Отправить код подтверждения на email текущего пользователя.\nПовторная отправка — не чаще раза в минуту (429).",
-				"summary": "Запрос подтверждения email",
-				"tags": [
-					"User"
+					"Permission"
 				],
 				"security": [
 					{
@@ -6050,530 +5419,6 @@
 					}
 				],
 				"parameters": []
-			}
-		},
-		"/api/v1/user/verify-email": {
-			"post": {
-				"operationId": "VerifyEmail",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Подтвердить email текущего пользователя кодом из письма.",
-				"summary": "Подтверждение email-адреса",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"description": "Код подтверждения",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IUserVerifyEmailDto",
-								"description": "Код подтверждения"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/user/update/{id}": {
-			"patch": {
-				"operationId": "UpdateUser",
-				"responses": {
-					"200": {
-						"description": "Обновленный пользователь",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/UserDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Обновить email/телефон другого пользователя — сразу, без подтверждения\nкодом. Новый email сбрасывает `emailVerified`.",
-				"summary": "Обновление другого пользователя",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:user:manage"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "ID пользователя, которого необходимо обновить",
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				],
-				"requestBody": {
-					"description": "Данные для обновления пользователя",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IUserUpdateRequestDto",
-								"description": "Данные для обновления пользователя"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/user/changePassword": {
-			"post": {
-				"operationId": "ChangePassword",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Изменить пароль текущего пользователя. Требуется текущий пароль;\nостальные сессии завершаются, текущая остаётся.",
-				"summary": "Изменение пароля",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"description": "Текущий и новый пароль",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IUserChangePasswordDto",
-								"description": "Текущий и новый пароль"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/user/delete/{id}": {
-			"delete": {
-				"operationId": "DeleteUser",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Удалить другого пользователя. Себя и суперпользователя удалить нельзя.",
-				"summary": "Удаление другого пользователя",
-				"tags": [
-					"User"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:user:manage"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "ID пользователя, которого необходимо удалить",
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/profile/my": {
-			"get": {
-				"operationId": "GetMyProfile",
-				"responses": {
-					"200": {
-						"description": "Пользователь",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ProfileDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Получить профиль текущего пользователя.\nЭтот эндпоинт позволяет получить данные профиля пользователя, который выполнил запрос.\nИспользуется для получения информации о текущем пользователе, например, его имени, email, и других данных.",
-				"summary": "Получение профиля текущего пользователя",
-				"tags": [
-					"Profile"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": []
-			}
-		},
-		"/api/v1/profile/my/update": {
-			"patch": {
-				"operationId": "UpdateMyProfile",
-				"responses": {
-					"200": {
-						"description": "Обновленный профиль пользователя",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ProfileDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Обновить профиль текущего пользователя.\nЭтот эндпоинт позволяет пользователю обновить свои данные, такие как имя, email и другие параметры профиля.",
-				"summary": "Обновление профиля текущего пользователя",
-				"tags": [
-					"Profile"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"description": "Обновленные данные профиля",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IProfileUpdateRequestDto",
-								"description": "Обновленные данные профиля"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/profile/my/delete": {
-			"delete": {
-				"operationId": "DeleteMyProfile",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Очистить профиль текущего пользователя.\nЛичные данные (имя, фамилия, дата рождения, пол) обнуляются,\nсама запись профиля остаётся.",
-				"summary": "Очистка профиля текущего пользователя",
-				"tags": [
-					"Profile"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": []
-			}
-		},
-		"/api/v1/profile/all": {
-			"get": {
-				"operationId": "GetProfiles",
-				"responses": {
-					"200": {
-						"description": "Страница профилей",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IProfileListDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Получить все профили постранично, новые первыми.",
-				"summary": "Получение всех профилей",
-				"tags": [
-					"Profile"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:profile:view"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "Смещение, по умолчанию 0",
-						"in": "query",
-						"name": "offset",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					},
-					{
-						"description": "Размер страницы: по умолчанию 20, не больше 100",
-						"in": "query",
-						"name": "limit",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/profile/{userId}": {
-			"get": {
-				"operationId": "GetProfileById",
-				"responses": {
-					"200": {
-						"description": "Пользователь по ID",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/PublicProfileDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Получить профиль по ID.\nЭтот эндпоинт позволяет получить профиль другого пользователя по его ID. Доступен только для администраторов.",
-				"summary": "Получение профиля по ID",
-				"tags": [
-					"Profile"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [
-					{
-						"description": "ID пользователя, профиль которого нужно получить",
-						"in": "path",
-						"name": "userId",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/profile/update/{userId}": {
-			"patch": {
-				"operationId": "UpdateProfile",
-				"responses": {
-					"200": {
-						"description": "Обновленный профиль пользователя",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ProfileDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Обновить профиль другого пользователя.\nЭтот эндпоинт позволяет администраторам обновлять профиль других пользователей.",
-				"summary": "Обновление профиля другого пользователя",
-				"tags": [
-					"Profile"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:profile:manage"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "ID пользователя, профиль которого необходимо обновить",
-						"in": "path",
-						"name": "userId",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				],
-				"requestBody": {
-					"description": "Данные для обновления профиля",
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IProfileUpdateRequestDto",
-								"description": "Данные для обновления профиля"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/profile/delete/{userId}": {
-			"delete": {
-				"operationId": "DeleteProfile",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Очистить профиль другого пользователя.\nЛичные данные обнуляются, запись профиля остаётся.",
-				"summary": "Очистка профиля другого пользователя",
-				"tags": [
-					"Profile"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:profile:manage"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"description": "ID пользователя, профиль которого необходимо очистить",
-						"in": "path",
-						"name": "userId",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
 			}
 		},
 		"/api/v1/wg/nodes": {
@@ -6609,7 +5454,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:manage"
+							"permission:wg:node:create"
 						]
 					}
 				],
@@ -6822,7 +5667,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:manage"
+							"permission:wg:node:update"
 						]
 					}
 				],
@@ -6872,7 +5717,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:manage"
+							"permission:wg:node:delete"
 						]
 					}
 				],
@@ -6921,7 +5766,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:manage"
+							"permission:wg:node:agent"
 						]
 					}
 				],
@@ -6970,7 +5815,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:manage"
+							"permission:wg:node:logs"
 						]
 					}
 				],
@@ -7028,7 +5873,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:endpoint:manage"
+							"permission:wg:endpoint:create"
 						]
 					}
 				],
@@ -7233,7 +6078,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:endpoint:manage"
+							"permission:wg:endpoint:update"
 						]
 					}
 				],
@@ -7283,7 +6128,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:endpoint:manage"
+							"permission:wg:endpoint:delete"
 						]
 					}
 				],
@@ -7332,7 +6177,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:manage"
+							"permission:wg:interface:create"
 						]
 					}
 				],
@@ -7570,7 +6415,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:manage"
+							"permission:wg:interface:update"
 						]
 					}
 				],
@@ -7620,7 +6465,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:manage"
+							"permission:wg:interface:delete"
 						]
 					}
 				],
@@ -7669,7 +6514,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:manage"
+							"permission:wg:interface:control"
 						]
 					}
 				],
@@ -7718,7 +6563,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:manage"
+							"permission:wg:interface:control"
 						]
 					}
 				],
@@ -7767,7 +6612,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:manage"
+							"permission:wg:interface:move"
 						]
 					}
 				],
@@ -7826,7 +6671,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:manage"
+							"permission:wg:interface:replicas"
 						]
 					}
 				],
@@ -7878,7 +6723,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:manage"
+							"permission:wg:interface:replicas"
 						]
 					}
 				],
@@ -7935,7 +6780,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:manage"
+							"permission:wg:interface:control"
 						]
 					}
 				],
@@ -7984,7 +6829,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:manage"
+							"permission:wg:peer:create"
 						]
 					}
 				],
@@ -8223,7 +7068,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:manage"
+							"permission:wg:peer:update"
 						]
 					}
 				],
@@ -8273,7 +7118,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:manage"
+							"permission:wg:peer:delete"
 						]
 					}
 				],
@@ -8416,7 +7261,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:manage"
+							"permission:wg:peer:psk"
 						]
 					}
 				],
@@ -8465,7 +7310,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:manage"
+							"permission:wg:peer:psk"
 						]
 					}
 				],
@@ -8514,7 +7359,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:manage"
+							"permission:wg:peer:assign"
 						]
 					}
 				],
@@ -8573,7 +7418,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:manage"
+							"permission:wg:peer:assign"
 						]
 					}
 				],
@@ -9303,6 +8148,204 @@
 				]
 			}
 		},
+		"/api/v1/roles": {
+			"get": {
+				"operationId": "GetRoles",
+				"responses": {
+					"200": {
+						"description": "Список ролей",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/IRoleDto"
+									},
+									"type": "array"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Получить все роли с их правами.",
+				"summary": "Список ролей",
+				"tags": [
+					"Role"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:role:view"
+						]
+					}
+				],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "CreateRole",
+				"responses": {
+					"201": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IRoleDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Создать новую роль.",
+				"summary": "Создание роли",
+				"tags": [
+					"Role"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:role:create"
+						]
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Название роли",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ICreateRoleRequestDto",
+								"description": "Название роли"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/roles/{id}": {
+			"delete": {
+				"operationId": "DeleteRole",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Удалить роль. Системные роли (`admin`, `user`, `guest`) не удаляются,\nсобственную роль удаляет только суперпользователь.",
+				"summary": "Удаление роли",
+				"tags": [
+					"Role"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:role:delete"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "ID роли",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/roles/{id}/permissions": {
+			"patch": {
+				"operationId": "SetRolePermissions",
+				"responses": {
+					"200": {
+						"description": "Обновлённая роль",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IRoleDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Установить права для роли.\nЗаменяет текущий набор прав роли указанным. Роль `admin`, право `*` и\nсобственную роль меняет только суперпользователь. Все пользователи роли\nполучают `user:privileges-changed` с новыми правами; их прежние\naccess-токены отклоняются (`AUTH_PRIVILEGES_CHANGED`), сессии остаются.",
+				"summary": "Установка прав роли",
+				"tags": [
+					"Role"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:role:update"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "ID роли",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "Список прав",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IRolePermissionsRequestDto",
+								"description": "Список прав"
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/wg/socks": {
 			"post": {
 				"operationId": "CreateWgSocks",
@@ -9336,7 +8379,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:create"
 						]
 					}
 				],
@@ -9472,7 +8515,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:update"
 						]
 					}
 				],
@@ -9521,7 +8564,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:delete"
 						]
 					}
 				],
@@ -9570,7 +8613,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:users"
 						]
 					}
 				],
@@ -9629,7 +8672,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:users"
 						]
 					}
 				],
@@ -9686,7 +8729,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:users"
 						]
 					}
 				],
@@ -9743,7 +8786,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:secrets"
 						]
 					}
 				],
@@ -9800,7 +8843,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:clients"
 						]
 					}
 				],
@@ -9859,7 +8902,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:clients"
 						]
 					}
 				],
@@ -9917,7 +8960,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:manage"
+							"permission:wg:socks:clients"
 						]
 					}
 				],
@@ -10100,7 +9143,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:forward:manage"
+							"permission:wg:forward:create"
 						]
 					}
 				],
@@ -10253,7 +9296,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:forward:manage"
+							"permission:wg:forward:update"
 						]
 					}
 				],
@@ -10302,7 +9345,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:forward:manage"
+							"permission:wg:forward:delete"
 						]
 					}
 				],
@@ -10932,7 +9975,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:manage"
+							"permission:wg:node:agent"
 						]
 					}
 				],
@@ -10940,6 +9983,695 @@
 					{
 						"in": "path",
 						"name": "nodeId",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/user/my": {
+			"get": {
+				"operationId": "GetMyUser",
+				"responses": {
+					"200": {
+						"description": "Пользователь",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Получить пользователя.\nЭтот эндпоинт позволяет получить данные пользователя, который выполнил запрос.",
+				"summary": "Получение данных текущего пользователя",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			}
+		},
+		"/api/v1/user/my/update": {
+			"patch": {
+				"operationId": "UpdateMyUser",
+				"responses": {
+					"200": {
+						"description": "Пользователь (email — прежний до подтверждения)",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Обновить email и/или телефон текущего пользователя.\nТелефон меняется сразу. Email — нет: создаётся запрос на смену, код\nуходит на новый адрес, уведомление — на старый; адрес меняется после\n`POST my/email/confirm`. Повторный запрос — не чаще раза в минуту (429).\nЗанятые email/телефон → 409 (`USER_EMAIL_TAKEN` / `USER_PHONE_TAKEN`).",
+				"summary": "Обновление данных текущего пользователя",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Обновленные данные пользователя",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IUserUpdateRequestDto",
+								"description": "Обновленные данные пользователя"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/user/my/email/confirm": {
+			"post": {
+				"operationId": "ConfirmEmailChange",
+				"responses": {
+					"200": {
+						"description": "Пользователь с новым email",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Подтвердить смену email кодом из письма на новый адрес. Email\nменяется и считается подтверждённым. Неверный код расходует попытку\n(`USER_EMAIL_CHANGE_INVALID_CODE`, в `details.attemptsLeft` — остаток);\nпосле 5 неверных или по истечении 15 минут запрос аннулируется.",
+				"summary": "Подтверждение смены email",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Код подтверждения",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IUserConfirmEmailChangeDto",
+								"description": "Код подтверждения"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/user/my/delete": {
+			"post": {
+				"operationId": "DeleteMyUser",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Удалить текущего пользователя. Требуется текущий пароль.\nPOST, а не DELETE: тело DELETE-запроса не разбирается body-parser-ом.",
+				"summary": "Удаление текущего пользователя",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IUserDeleteDto"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/user/my/username": {
+			"patch": {
+				"operationId": "SetUsername",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Установить username для текущего пользователя.",
+				"summary": "Установка username",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"properties": {
+									"username": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"username"
+								],
+								"type": "object"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/user/all": {
+			"get": {
+				"operationId": "GetUsers",
+				"responses": {
+					"200": {
+						"description": "Страница пользователей",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IUserAdminListDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Получить пользователей постранично (администрирование), новые первыми.",
+				"summary": "Получение всех пользователей",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:user:view"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "Смещение, по умолчанию 0",
+						"in": "query",
+						"name": "offset",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "Размер страницы: по умолчанию 20, не больше 100",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "Поиск по email, минимум 2 символа",
+						"in": "query",
+						"name": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/user/options": {
+			"get": {
+				"operationId": "GetUserOptions",
+				"responses": {
+					"200": {
+						"description": "Список опций",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IUserOptionsDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Получить опции пользователей для выпадающих списков (id + name).\nname — имя и фамилия или email если профиль не заполнен.",
+				"summary": "Опции пользователей",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:user:view"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "Поиск по email, имени или фамилии",
+						"in": "query",
+						"name": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/user/{id}": {
+			"get": {
+				"operationId": "GetUserById",
+				"responses": {
+					"200": {
+						"description": "Пользователь по ID",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Получить пользователя по ID.",
+				"summary": "Получение пользователя по ID",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:user:view"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "ID пользователя, которого нужно получить",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/user/setPrivileges/{id}": {
+			"patch": {
+				"operationId": "SetPrivileges",
+				"responses": {
+					"200": {
+						"description": "Обновленный пользователь с привилегиями",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Установить роли и прямые права пользователя.\nРоли и права должны существовать. Свои привилегии менять нельзя; роль\n`admin` и право `*` выдаёт только суперпользователь.",
+				"summary": "Установка привилегий для пользователя",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:user:privileges"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "ID пользователя, для которого необходимо установить привилегии",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "Запрос, содержащий роль и разрешения",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IUserPrivilegesRequestDto",
+								"description": "Запрос, содержащий роль и разрешения"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/user/verify-email/request": {
+			"post": {
+				"operationId": "RequestVerifyEmail",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Отправить код подтверждения на email текущего пользователя.\nПовторная отправка — не чаще раза в минуту (429).",
+				"summary": "Запрос подтверждения email",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			}
+		},
+		"/api/v1/user/verify-email": {
+			"post": {
+				"operationId": "VerifyEmail",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Подтвердить email текущего пользователя кодом из письма.",
+				"summary": "Подтверждение email-адреса",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Код подтверждения",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IUserVerifyEmailDto",
+								"description": "Код подтверждения"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/user/update/{id}": {
+			"patch": {
+				"operationId": "UpdateUser",
+				"responses": {
+					"200": {
+						"description": "Обновленный пользователь",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Обновить email/телефон другого пользователя — сразу, без подтверждения\nкодом. Новый email сбрасывает `emailVerified`.",
+				"summary": "Обновление другого пользователя",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:user:update"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "ID пользователя, которого необходимо обновить",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "Данные для обновления пользователя",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IUserUpdateRequestDto",
+								"description": "Данные для обновления пользователя"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/user/changePassword": {
+			"post": {
+				"operationId": "ChangePassword",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Изменить пароль текущего пользователя. Требуется текущий пароль;\nостальные сессии завершаются, текущая остаётся.",
+				"summary": "Изменение пароля",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Текущий и новый пароль",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IUserChangePasswordDto",
+								"description": "Текущий и новый пароль"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/user/delete/{id}": {
+			"delete": {
+				"operationId": "DeleteUser",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Удалить другого пользователя. Себя и суперпользователя удалить нельзя.",
+				"summary": "Удаление другого пользователя",
+				"tags": [
+					"User"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:user:delete"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "ID пользователя, которого необходимо удалить",
+						"in": "path",
+						"name": "id",
 						"required": true,
 						"schema": {
 							"$ref": "#/components/schemas/UUID"
@@ -11076,6 +10808,339 @@
 					}
 				],
 				"parameters": []
+			}
+		},
+		"/api/v1/profile/my": {
+			"get": {
+				"operationId": "GetMyProfile",
+				"responses": {
+					"200": {
+						"description": "Пользователь",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProfileDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Получить профиль текущего пользователя.\nЭтот эндпоинт позволяет получить данные профиля пользователя, который выполнил запрос.\nИспользуется для получения информации о текущем пользователе, например, его имени, email, и других данных.",
+				"summary": "Получение профиля текущего пользователя",
+				"tags": [
+					"Profile"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			}
+		},
+		"/api/v1/profile/my/update": {
+			"patch": {
+				"operationId": "UpdateMyProfile",
+				"responses": {
+					"200": {
+						"description": "Обновленный профиль пользователя",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProfileDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Обновить профиль текущего пользователя.\nЭтот эндпоинт позволяет пользователю обновить свои данные, такие как имя, email и другие параметры профиля.",
+				"summary": "Обновление профиля текущего пользователя",
+				"tags": [
+					"Profile"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Обновленные данные профиля",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IProfileUpdateRequestDto",
+								"description": "Обновленные данные профиля"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/profile/my/delete": {
+			"delete": {
+				"operationId": "DeleteMyProfile",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Очистить профиль текущего пользователя.\nЛичные данные (имя, фамилия, дата рождения, пол) обнуляются,\nсама запись профиля остаётся.",
+				"summary": "Очистка профиля текущего пользователя",
+				"tags": [
+					"Profile"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			}
+		},
+		"/api/v1/profile/all": {
+			"get": {
+				"operationId": "GetProfiles",
+				"responses": {
+					"200": {
+						"description": "Страница профилей",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IProfileListDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Получить все профили постранично, новые первыми.",
+				"summary": "Получение всех профилей",
+				"tags": [
+					"Profile"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:profile:view"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "Смещение, по умолчанию 0",
+						"in": "query",
+						"name": "offset",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "Размер страницы: по умолчанию 20, не больше 100",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/profile/{userId}": {
+			"get": {
+				"operationId": "GetProfileById",
+				"responses": {
+					"200": {
+						"description": "Пользователь по ID",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PublicProfileDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Получить профиль по ID.\nЭтот эндпоинт позволяет получить профиль другого пользователя по его ID. Доступен только для администраторов.",
+				"summary": "Получение профиля по ID",
+				"tags": [
+					"Profile"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "ID пользователя, профиль которого нужно получить",
+						"in": "path",
+						"name": "userId",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/profile/update/{userId}": {
+			"patch": {
+				"operationId": "UpdateProfile",
+				"responses": {
+					"200": {
+						"description": "Обновленный профиль пользователя",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProfileDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Обновить профиль другого пользователя.\nЭтот эндпоинт позволяет администраторам обновлять профиль других пользователей.",
+				"summary": "Обновление профиля другого пользователя",
+				"tags": [
+					"Profile"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:profile:update"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "ID пользователя, профиль которого необходимо обновить",
+						"in": "path",
+						"name": "userId",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "Данные для обновления профиля",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IProfileUpdateRequestDto",
+								"description": "Данные для обновления профиля"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/profile/delete/{userId}": {
+			"delete": {
+				"operationId": "DeleteProfile",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Очистить профиль другого пользователя.\nЛичные данные обнуляются, запись профиля остаётся.",
+				"summary": "Очистка профиля другого пользователя",
+				"tags": [
+					"Profile"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:profile:delete"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"description": "ID пользователя, профиль которого необходимо очистить",
+						"in": "path",
+						"name": "userId",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
 			}
 		},
 		"/api/v1/auth/sign-up": {

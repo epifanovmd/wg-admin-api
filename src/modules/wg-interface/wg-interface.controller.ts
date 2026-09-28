@@ -62,7 +62,7 @@ export class WgInterfaceController extends Controller {
    * только суперпользователь.
    * @summary Создание интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:manage"])
+  @Security("jwt", ["permission:wg:interface:create"])
   @ValidateBody(CreateWgInterfaceSchema)
   @SuccessResponse(201, "Created")
   @Post()
@@ -118,7 +118,7 @@ export class WgInterfaceController extends Controller {
    * конфигурацию автоматически.
    * @summary Изменение интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:manage"])
+  @Security("jwt", ["permission:wg:interface:update"])
   @ValidateBody(UpdateWgInterfaceSchema)
   @Patch("{id}")
   updateWgInterface(
@@ -133,7 +133,7 @@ export class WgInterfaceController extends Controller {
    * Удалить интерфейс; с пирами — 409.
    * @summary Удаление интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:manage"])
+  @Security("jwt", ["permission:wg:interface:delete"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}")
   async deleteWgInterface(@Path() id: UUID): Promise<void> {
@@ -144,7 +144,7 @@ export class WgInterfaceController extends Controller {
    * Включить интерфейс (агент поднимет его).
    * @summary Включение интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:manage"])
+  @Security("jwt", ["permission:wg:interface:control"])
   @Post("{id}/enable")
   enableWgInterface(@Path() id: UUID): Promise<WgInterfaceDto> {
     return this._service.setEnabled(id, true);
@@ -154,7 +154,7 @@ export class WgInterfaceController extends Controller {
    * Выключить интерфейс (агент опустит его, пиры отключатся).
    * @summary Выключение интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:manage"])
+  @Security("jwt", ["permission:wg:interface:control"])
   @Post("{id}/disable")
   disableWgInterface(@Path() id: UUID): Promise<WgInterfaceDto> {
     return this._service.setEnabled(id, false);
@@ -166,7 +166,7 @@ export class WgInterfaceController extends Controller {
    * подключения (publicHost новой ноды).
    * @summary Перенос интерфейса на другую ноду
    */
-  @Security("jwt", ["permission:wg:interface:manage"])
+  @Security("jwt", ["permission:wg:interface:move"])
   @ValidateBody(MoveWgInterfaceSchema)
   @Post("{id}/move")
   moveWgInterface(
@@ -182,7 +182,7 @@ export class WgInterfaceController extends Controller {
    * трафик (авто по здоровью или закреплённая копия — `activeReplicaNodeId`).
    * @summary Реплика интерфейса на ноде
    */
-  @Security("jwt", ["permission:wg:interface:manage"])
+  @Security("jwt", ["permission:wg:interface:replicas"])
   @ValidateBody(AddWgInterfaceReplicaSchema)
   @SuccessResponse(201, "Created")
   @Post("{id}/replicas")
@@ -197,7 +197,7 @@ export class WgInterfaceController extends Controller {
    * Убрать реплику: агент ноды снимет интерфейс.
    * @summary Удаление реплики интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:manage"])
+  @Security("jwt", ["permission:wg:interface:replicas"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}/replicas/{nodeId}")
   async removeWgInterfaceReplica(
@@ -211,7 +211,7 @@ export class WgInterfaceController extends Controller {
    * Перезапустить интерфейс на ноде (`wg-quick down && up`).
    * @summary Перезапуск интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:manage"])
+  @Security("jwt", ["permission:wg:interface:control"])
   @SuccessResponse(201, "Created")
   @Post("{id}/restart")
   restartWgInterface(

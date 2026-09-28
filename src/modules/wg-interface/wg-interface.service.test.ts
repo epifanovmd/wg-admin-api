@@ -18,7 +18,7 @@ const superUser = { userId: uuid(), roles: ["admin"], permissions: ["*"] };
 const manager = {
   userId: uuid(),
   roles: ["user"],
-  permissions: ["wg:interface:manage"],
+  permissions: ["wg:interface:create", "wg:interface:update"],
 };
 
 describe("WgInterfaceService", () => {
@@ -158,7 +158,7 @@ describe("WgInterfaceService", () => {
     expect(dto.id).to.equal(iface.id);
   });
 
-  it("create: произвольные хуки не для суперпользователя — 403", async () => {
+  it("create: произвольные хуки без права wg:interface:hooks — 403", async () => {
     try {
       await service.create(manager as any, {
         nodeId: uuid(),
@@ -171,6 +171,30 @@ describe("WgInterfaceService", () => {
     } catch (err: any) {
       expect(err.code).to.equal("WG_IFACE_CUSTOM_HOOKS_FORBIDDEN");
     }
+  });
+
+  it("create: право wg:interface:hooks разрешает произвольные хуки", async () => {
+    const iface = makeIface({ customPostUp: "iptables ..." });
+
+    txRepo.save.callsFake(async (data: any) => ({ ...iface, ...data }));
+    repo.findWithRelations.resolves(iface);
+
+    const dto = await service.create(
+      {
+        ...manager,
+        permissions: [...manager.permissions, "wg:interface:hooks"],
+      } as any,
+      {
+        nodeId: uuid(),
+        name: "wg0",
+        listenPort: 51820,
+        addressCidr: "10.0.0.1/24",
+        customPostUp: "iptables ...",
+      },
+    );
+
+    expect(txRepo.save.firstCall.args[0].customPostUp).to.equal("iptables ...");
+    expect(dto.id).to.equal(iface.id);
   });
 
   it("create: занятый порт точки подключения — 409", async () => {

@@ -12,9 +12,9 @@ import { SessionService } from "./session.service";
 
 /**
  * Жизненный цикл сессий по доменным событиям. Завершение сессии рвёт её
- * сокеты (access-токен отзывает сам `SessionService`); смена пароля и прав
- * завершает сессии; удаление пользователя отзывает все его access-токены и
- * рвёт сокеты.
+ * сокеты (access-токен отзывает сам `SessionService`); смена пароля
+ * завершает сессии, смена прав — устаревает access-токены (сессии остаются);
+ * удаление пользователя отзывает все его access-токены и рвёт сокеты.
  */
 @Injectable()
 export class SessionListener implements ISocketEventListener {
@@ -53,13 +53,11 @@ export class SessionListener implements ISocketEventListener {
       ),
     );
 
+    // Сессии остаются: токены с прежними правами отклоняются, клиент
+    // получает новые права обновлением токена.
     this._eventBus.on(UserPrivilegesChangedEvent, event =>
       this._safely("privileges-changed", () =>
-        this._sessionService.terminateAllByUser(
-          event.userId,
-          undefined,
-          "privileges-changed",
-        ),
+        this._tokenService.markPrivilegesChanged(event.userId),
       ),
     );
 

@@ -20,7 +20,10 @@ describe("SessionListener", () => {
     terminateAllOther: sinon.SinonStub;
   };
   let handlers: Record<string, (event: unknown) => Promise<void>>;
-  let tokenService: { revokeUser: sinon.SinonStub };
+  let tokenService: {
+    revokeUser: sinon.SinonStub;
+    markPrivilegesChanged: sinon.SinonStub;
+  };
 
   const userId = uuid();
   const sessionId = uuid2();
@@ -36,7 +39,10 @@ describe("SessionListener", () => {
       terminateAllOther: sinon.stub().resolves(),
     };
     handlers = {};
-    tokenService = { revokeUser: sinon.stub().resolves() };
+    tokenService = {
+      revokeUser: sinon.stub().resolves(),
+      markPrivilegesChanged: sinon.stub().resolves(),
+    };
 
     const eventBus = {
       on: (EventClass: { name: string }, handler: any) => {
@@ -92,12 +98,14 @@ describe("SessionListener", () => {
     expect(sessionService.terminateAllOther.called).to.be.false;
   });
 
-  it("UserPrivilegesChangedEvent terminates all sessions", async () => {
+  it("UserPrivilegesChangedEvent устаревает access-токены, сессии остаются", async () => {
     await handlers.UserPrivilegesChangedEvent(
       new UserPrivilegesChangedEvent(userId, [], []),
     );
 
-    expect(sessionService.terminateAllByUser.calledOnceWith(userId)).to.be.true;
+    expect(tokenService.markPrivilegesChanged.calledOnceWith(userId)).to.be
+      .true;
+    expect(sessionService.terminateAllByUser.called).to.be.false;
   });
 
   it("UserDeletedEvent revokes access tokens and disconnects every socket", async () => {

@@ -359,6 +359,25 @@ describe("TokenService", () => {
       expect(err).to.include({ code: "AUTH_SESSION_REVOKED" });
     });
 
+    it("rejects tokens issued before a privileges change with AUTH_PRIVILEGES_CHANGED", async () => {
+      const { accessToken } = await service.issue(makeUser(), "session-4");
+
+      await service.markPrivilegesChanged("user-1");
+
+      const err = await service.verify(accessToken).catch(e => e);
+
+      expect(err).to.include({ status: 401, code: "AUTH_PRIVILEGES_CHANGED" });
+
+      await new Promise(resolve => setTimeout(resolve, 2));
+
+      const { accessToken: fresh } = await service.issue(
+        makeUser(),
+        "session-4",
+      );
+
+      expect((await service.verify(fresh)).sessionId).to.equal("session-4");
+    });
+
     it("verifyAccess returns the token expiry", async () => {
       const { accessToken } = await service.issue(makeUser(), "session-1");
       const { context, expiresAt } = await service.verifyAccess(accessToken);

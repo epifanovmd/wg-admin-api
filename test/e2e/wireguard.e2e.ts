@@ -349,7 +349,7 @@ describe("wireguard", () => {
       );
     });
 
-    it("произвольные хуки без прав суперпользователя — 403", async () => {
+    it("произвольные хуки без права wg:interface:hooks — 403", async () => {
       expectStatus(
         await call(user, "POST", "/api/v1/wg/interfaces", {
           nodeId: nodeA.id,

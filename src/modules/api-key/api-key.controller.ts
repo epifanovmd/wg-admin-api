@@ -41,7 +41,7 @@ export class ApiKeyController extends Controller {
    * этом ответе — сохраните его: в БД хранится лишь хеш.
    * @summary Создание API-ключа
    */
-  @Security("jwt", ["permission:apikey:manage"])
+  @Security("jwt", ["permission:apikey:create"])
   @ValidateBody(CreateApiKeySchema)
   @SuccessResponse(201, "Created")
   @Post()
@@ -60,7 +60,7 @@ export class ApiKeyController extends Controller {
    * Все API-ключи, новые первыми. Секреты не возвращаются.
    * @summary Список API-ключей
    */
-  @Security("jwt", ["permission:apikey:manage"])
+  @Security("jwt", ["permission:apikey:view"])
   @ValidateQuery(ListApiKeysQuerySchema)
   @Get()
   listApiKeys(
@@ -74,7 +74,7 @@ export class ApiKeyController extends Controller {
    * Отозвать ключ: запросы с ним сразу получают 401. Повторный отзыв — 204.
    * @summary Отзыв API-ключа
    */
-  @Security("jwt", ["permission:apikey:manage"])
+  @Security("jwt", ["permission:apikey:revoke"])
   @SuccessResponse(204, "No Content")
   @Post("{id}/revoke")
   async revokeApiKey(

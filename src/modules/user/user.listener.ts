@@ -1,8 +1,12 @@
 import { inject } from "inversify";
 
-import { EventBus, Injectable, logger } from "../../core";
-import { RolePermissionsChangedEvent } from "../role";
-import { ISocketEventListener, SocketEmitterService } from "../socket";
+import { AccessService, EventBus, Injectable, logger } from "../../core";
+import { RoleDeletedEvent, RolePermissionsChangedEvent } from "../role";
+import {
+  ISocketEventListener,
+  SocketEmitterService,
+  SocketRoomService,
+} from "../socket";
 import {
   EmailChangedEvent,
   EmailVerifiedEvent,
@@ -20,6 +24,8 @@ export class UserListener implements ISocketEventListener {
     @inject(SocketEmitterService)
     private readonly _emitter: SocketEmitterService,
     @inject(UserService) private readonly _userService: UserService,
+    @inject(AccessService) private readonly _access: AccessService,
+    @inject(SocketRoomService) private readonly _rooms: SocketRoomService,
   ) {}
 
   register(): void {
@@ -50,15 +56,35 @@ export class UserListener implements ISocketEventListener {
       });
     });
 
+    // Клиенту — эффективные права (роли ∪ прямые); из комнат, на которые
+    // права больше нет, сокеты выводятся.
     this._eventBus.on(
       UserPrivilegesChangedEvent,
-      (event: UserPrivilegesChangedEvent) => {
-        this._emitter.toUser(event.userId, "user:privileges-changed", {
-          roles: event.roles,
-          permissions: event.permissions,
-        });
+      async (event: UserPrivilegesChangedEvent) => {
+        try {
+          const grant = await this._access.grantOf(event.userId);
+
+          this._emitter.toUser(event.userId, "user:privileges-changed", grant);
+          await this._rooms.revalidateUser(event.userId);
+        } catch (err) {
+          logger.error(
+            { err, userId: event.userId },
+            "Не удалось применить смену прав к соединениям пользователя",
+          );
+        }
       },
     );
+
+    this._eventBus.on(RoleDeletedEvent, async (event: RoleDeletedEvent) => {
+      try {
+        await this._userService.notifyUsersPrivilegesChanged(event.memberIds);
+      } catch (err) {
+        logger.error(
+          { err, roleId: event.roleId },
+          "Не удалось пересчитать права пользователей удалённой роли",
+        );
+      }
+    });
 
     this._eventBus.on(
       RolePermissionsChangedEvent,

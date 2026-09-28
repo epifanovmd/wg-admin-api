@@ -1,6 +1,7 @@
 import { inject } from "inversify";
 
 import {
+  ALL_PERMISSIONS,
   EventBus,
   Injectable,
   isSuperUser,
@@ -10,21 +11,26 @@ import { AuthContext } from "../../types/koa";
 import {
   getRegisteredPermissions,
   PermissionRepository,
-  Permissions,
   TPermission,
 } from "../permission";
-import { RolePermissionsChangedEvent } from "./events";
+import {
+  RoleCreatedEvent,
+  RoleDeletedEvent,
+  RolePermissionsChangedEvent,
+} from "./events";
 import { Role } from "./role.entity";
 import { RoleError } from "./role.errors";
 import { RoleRepository } from "./role.repository";
 import { KnownRole, Roles, TRole } from "./role.types";
+
+const SYSTEM_ROLES = new Set<string>(Object.values(Roles));
 
 /**
  * Права ролей по умолчанию. Обычным ролям просмотр и управление
  * пользователями не выдаются — это делается точечно.
  */
 const ROLE_DEFAULT_PERMISSIONS: Record<KnownRole, TPermission[]> = {
-  [Roles.ADMIN]: [Permissions.ALL],
+  [Roles.ADMIN]: [ALL_PERMISSIONS],
   [Roles.USER]: [],
   [Roles.GUEST]: [],
 };
@@ -44,14 +50,27 @@ export class RoleService {
     return this._roleRepository.findAll();
   }
 
-  /** Создать новую роль. */
+  /** Роль по ID с правами. */
+  async getRole(roleId: string): Promise<Role> {
+    const role = await this._roleRepository.findById(roleId);
+
+    if (!role) {
+      throw RoleError.NOT_FOUND();
+    }
+
+    return role;
+  }
+
+  /** Создать новую роль. Эмитит `RoleCreatedEvent`. */
   async createRole(name: TRole): Promise<Role> {
     if (await this._roleRepository.findByName(name)) {
       throw RoleError.ALREADY_EXISTS({ name });
     }
 
+    let role: Role;
+
     try {
-      return await this._roleRepository.createAndSave({ name });
+      role = await this._roleRepository.createAndSave({ name });
     } catch (err) {
       // Параллельное создание той же роли.
       if (isUniqueViolation(err)) {
@@ -59,17 +78,35 @@ export class RoleService {
       }
       throw err;
     }
+
+    this._eventBus.emit(new RoleCreatedEvent(role.id, role.name));
+
+    return role;
   }
 
-  /** Удалить роль по ID. */
-  async deleteRole(roleId: string): Promise<void> {
-    const role = await this._roleRepository.findById(roleId);
+  /**
+   * Удалить роль. Системные роли не удаляются; собственную роль удаляет
+   * только суперпользователь. Эмитит `RoleDeletedEvent` с бывшими
+   * пользователями роли — их права пересчитываются.
+   */
+  async deleteRole(actor: AuthContext, roleId: string): Promise<void> {
+    const role = await this.getRole(roleId);
 
-    if (!role) {
-      throw RoleError.NOT_FOUND();
+    if (SYSTEM_ROLES.has(role.name)) {
+      throw RoleError.SYSTEM_ROLE({ name: role.name });
     }
 
+    if (!isSuperUser(actor) && actor.roles.includes(role.name)) {
+      throw RoleError.OWN_ROLE();
+    }
+
+    const memberIds = await this._roleRepository.findMemberIds(roleId);
+
     await this._roleRepository.delete({ id: roleId });
+
+    await this._eventBus.emitAsync(
+      new RoleDeletedEvent(role.id, role.name, memberIds),
+    );
   }
 
   /**
@@ -82,14 +119,10 @@ export class RoleService {
     roleId: string,
     permissions: TPermission[],
   ): Promise<Role> {
-    const role = await this._roleRepository.findById(roleId);
-
-    if (!role) {
-      throw RoleError.NOT_FOUND();
-    }
+    const role = await this.getRole(roleId);
 
     if (!isSuperUser(actor)) {
-      if (role.name === Roles.ADMIN || permissions.includes(Permissions.ALL)) {
+      if (role.name === Roles.ADMIN || permissions.includes(ALL_PERMISSIONS)) {
         throw RoleError.SUPERUSER_ONLY();
       }
 

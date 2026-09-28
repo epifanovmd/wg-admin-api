@@ -10,16 +10,27 @@ WireGuard-интерфейсы нод. Желаемое состояние жи�
 ноде, `^[a-zA-Z0-9_=+.-]{1,15}$`), listenPort (unique на ноде), addressCidr
 (+ addressV6Cidr), ключи, dns/mtu (дефолты клиентов), endpointId → точка
 подключения (`wg-endpoint`) + endpointPort, natEnabled (пресет masquerade),
-customPostUp/Down (только суперпользователь), enabled, status/statusMessage.
+customPostUp/Down (право `wg:interface:hooks`), enabled, status/statusMessage.
 
 Адрес подключения клиентов: `endpoint.host:endpointPort ?? listenPort`,
 иначе `node.publicHost:listenPort` (`resolveClientEndpoint`).
 
 ## Эндпоинты (`/api/v1/wg/interfaces`, тег WgInterface)
 
-CRUD + options (`wg:interface:view`/`manage`), `POST {id}/enable|disable`
-(желаемое состояние), `POST {id}/restart` (императивная команда агенту).
-Удаление с пирами — 409; конфликты имени/порта/порта точки — 409.
+| Право                   | Что даёт                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| `wg:interface:view`     | `GET /`, `/options`, `/{id}`                                                           |
+| `wg:interface:create`   | `POST /`                                                                               |
+| `wg:interface:update`   | `PATCH /{id}`                                                                          |
+| `wg:interface:delete`   | `DELETE /{id}`                                                                         |
+| `wg:interface:control`  | `POST {id}/enable\|disable` (желаемое состояние), `POST {id}/restart` (команда агенту) |
+| `wg:interface:move`     | `POST {id}/move`                                                                       |
+| `wg:interface:replicas` | `POST {id}/replicas`, `DELETE {id}/replicas/{nodeId}`                                  |
+| `wg:interface:hooks`    | задавать `customPostUp`/`customPostDown` при создании и изменении                      |
+
+Без `wg:interface:hooks` (и не суперпользователь) тело с произвольными
+PostUp/PostDown — 403 `WG_IFACE_CUSTOM_HOOKS_FORBIDDEN`. Удаление с пирами —
+409; конфликты имени/порта/порта точки — 409.
 
 Сервисы: `WgInterfaceService` — CRUD, перенос, включение, статусы;
 `WgInterfaceReplicaService` — реплики и копия, обслуживающая трафик релея;
@@ -51,7 +62,7 @@ UDP-порты релей-ноды общие для её relay-точек и с
 пробросом этой же ноды как релея — 409 `WG_IFACE_PORT_FORWARDED`.
 
 Перенос на другую ноду — `POST /api/v1/wg/interfaces/{id}/move` (право
-`wg:interface:manage`): ключ и пиры сохраняются, обе ноды получают новую
+`wg:interface:move`): ключ и пиры сохраняются, обе ноды получают новую
 версию конфигурации, релей точки пересинхронизирует линк. С точкой
 подключения клиентские конфиги не меняются. Проверки — как при изменении
 (уникальность имени/порта на ноде, релей ≠ нода, порты релея); на ту же
@@ -63,7 +74,7 @@ UDP-порты релей-ноды общие для её relay-точек и с
 
 ## Реплики
 
-Интерфейс может иметь копии на других нодах (`WgInterfaceReplica`,
+Интерфейс может иметь копии на других нодах (право `wg:interface:replicas`) (`WgInterfaceReplica`,
 `wg_interface_replicas`): тот же ключ, адреса и всегда тот же набор пиров —
 любое изменение интерфейса или его пиров поднимает версию всех копий
 (`markInterfaceDirty`). Имя и порт проверяются на ноде с учётом реплик чужих

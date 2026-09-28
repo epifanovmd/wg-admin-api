@@ -60,7 +60,7 @@ export class WgSocksController extends Controller {
    * Новый прокси на ноде со своим CA и серверным сертификатом.
    * @summary Создание прокси
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:create"])
   @ValidateBody(CreateWgSocksSchema)
   @SuccessResponse(201, "Created")
   @Post()
@@ -90,7 +90,7 @@ export class WgSocksController extends Controller {
   /**
    * @summary Изменение прокси
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:update"])
   @ValidateBody(UpdateWgSocksSchema)
   @Patch("{id}")
   updateWgSocks(
@@ -103,7 +103,7 @@ export class WgSocksController extends Controller {
   /**
    * @summary Удаление прокси
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:delete"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}")
   async deleteWgSocks(@Path() id: UUID): Promise<void> {
@@ -114,7 +114,7 @@ export class WgSocksController extends Controller {
    * Пользователь SOCKS5; без пароля — сгенерированный. Пароль — в ответе.
    * @summary Пользователь прокси
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:users"])
   @ValidateBody(CreateWgSocksUserSchema)
   @SuccessResponse(201, "Created")
   @Post("{id}/users")
@@ -129,7 +129,7 @@ export class WgSocksController extends Controller {
    * Включить/выключить пользователя или сменить пароль.
    * @summary Изменение пользователя прокси
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:users"])
   @ValidateBody(UpdateWgSocksUserSchema)
   @Patch("{id}/users/{userId}")
   updateWgSocksUser(
@@ -143,7 +143,7 @@ export class WgSocksController extends Controller {
   /**
    * @summary Удаление пользователя прокси
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:users"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}/users/{userId}")
   async removeWgSocksUser(
@@ -157,7 +157,7 @@ export class WgSocksController extends Controller {
    * Пароль пользователя (для настройки Telegram).
    * @summary Пароль пользователя прокси
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:secrets"])
   @Get("{id}/users/{userId}/secret")
   getWgSocksUserSecret(
     @Path() id: UUID,
@@ -170,7 +170,7 @@ export class WgSocksController extends Controller {
    * Новый клиентский сертификат (устройство).
    * @summary Клиент прокси
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:clients"])
   @ValidateBody(CreateWgSocksClientSchema)
   @SuccessResponse(201, "Created")
   @Post("{id}/clients")
@@ -185,7 +185,7 @@ export class WgSocksController extends Controller {
    * Отозвать сертификат: агент сразу перестаёт пускать устройство.
    * @summary Отзыв клиента прокси
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:clients"])
   @Post("{id}/clients/{clientId}/revoke")
   revokeWgSocksClient(
     @Path() id: UUID,
@@ -200,7 +200,7 @@ export class WgSocksController extends Controller {
    * Без `userId` берётся первый включённый пользователь.
    * @summary Клиент прокси для Mac
    */
-  @Security("jwt", ["permission:wg:socks:manage"])
+  @Security("jwt", ["permission:wg:socks:clients"])
   @Produces("application/zip")
   @Get("{id}/clients/{clientId}/mac")
   async getWgSocksMacClient(

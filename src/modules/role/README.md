@@ -9,7 +9,7 @@
 ```
 src/modules/role/
 ├── role.entity.ts          # Role (таблица roles)
-├── role.repository.ts      # findById/findByName/findByNames/findAll/ensureByName
+├── role.repository.ts      # findById/findByName/findByNames/findAll/ensureByName/findMemberIds
 ├── role.service.ts         # RoleService
 ├── role.controller.ts      # REST, /api/v1/roles
 ├── role.types.ts           # const Roles, TRole
@@ -17,7 +17,7 @@ src/modules/role/
 ├── role.permissions.ts     # RolePermissions (definePermissions("role"))
 ├── role.dto.ts             # IRoleDto
 ├── dto/                    # Тела запросов
-├── events/                 # RolePermissionsChangedEvent
+├── events/                 # RoleCreatedEvent, RoleDeletedEvent, RolePermissionsChangedEvent
 └── validation/             # CreateRoleSchema, SetRolePermissionsSchema
 ```
 
@@ -36,11 +36,19 @@ src/modules/role/
 | Метод    | Путь               | Право         | Ответ        | Описание                                                 |
 | -------- | ------------------ | ------------- | ------------ | -------------------------------------------------------- |
 | `GET`    | `/`                | `role:view`   | `IRoleDto[]` | Все роли с правами                                       |
-| `POST`   | `/`                | `role:manage` | `IRoleDto`   | Создать роль; существующая → `ROLE_ALREADY_EXISTS` (409) |
-| `DELETE` | `{id}`             | `role:manage` | 204          | Удалить роль                                             |
-| `PATCH`  | `{id}/permissions` | `role:manage` | `IRoleDto`   | Заменить права роли                                      |
+| `POST`   | `/`                | `role:create` | `IRoleDto`   | Создать роль; существующая → `ROLE_ALREADY_EXISTS` (409) |
+| `DELETE` | `{id}`             | `role:delete` | 204          | Удалить роль (см. «Удаление»)                            |
+| `PATCH`  | `{id}/permissions` | `role:update` | `IRoleDto`   | Заменить права роли                                      |
 
 `{id}` — `UUID`.
+
+## Удаление `deleteRole(actor, roleId)`
+
+- Нет роли — `ROLE_NOT_FOUND` (404); системные роли `admin`/`user`/`guest` не удаляются
+  (`ROLE_SYSTEM_ROLE`, 409).
+- Собственную роль удаляет только суперпользователь (`ROLE_OWN_ROLE`, 403).
+- Перед удалением собираются пользователи роли (`findMemberIds`); после —
+  `RoleDeletedEvent` через `emitAsync` (обработчики отрабатывают до ответа).
 
 ## Правила `setRolePermissions(actor, roleId, permissions)`
 
@@ -49,21 +57,20 @@ src/modules/role/
   собственную роль — тоже (`ROLE_OWN_ROLE`, 403). Нет роли — `ROLE_NOT_FOUND` (404).
 - После сохранения эмитится `RolePermissionsChangedEvent`; `UserListener` превращает его в
   `UserPrivilegesChangedEvent` для каждого пользователя роли (socket
-  `user:privileges-changed`, завершение сессий — модуль session).
+  `user:privileges-changed`; прежние access-токены отклоняются — модуль session).
 
 ## Засев `seedDefaultPermissions()`
 
 Вызывается `AdminBootstrap` при старте. Идемпотентен и безопасен для нескольких реплик:
 все права из реестра (`getRegisteredPermissions()`: объявленные модулями через
-`definePermissions` и совместимый `Permissions`, включая `apikey:manage`,
-`audit:view`) и роли создаются через `INSERT … ON CONFLICT DO NOTHING`;
+`definePermissions`, включая `apikey:*`, `audit:view`) и роли создаются через `INSERT … ON CONFLICT DO NOTHING`;
 роли, у которых уже есть права, не трогаются (ручные изменения сохраняются).
 
-| Роль    | Права по умолчанию                  |
-| ------- | ----------------------------------- |
-| `admin` | `*`                                 |
-| `user`  | — (без `user:view` / `user:manage`) |
-| `guest` | —                                   |
+| Роль    | Права по умолчанию           |
+| ------- | ---------------------------- |
+| `admin` | `*`                          |
+| `user`  | — (без прав модуля `user:*`) |
+| `guest` | —                            |
 
 ## Ошибки (`RoleError`, коды `ROLE_*`)
 
@@ -72,17 +79,23 @@ src/modules/role/
 | `ROLE_NOT_FOUND`      | 404    | нет роли                                               |
 | `ROLE_ALREADY_EXISTS` | 409    | имя занято (в т. ч. гонка создания)                    |
 | `ROLE_SUPERUSER_ONLY` | 403    | изменение `admin` или выдача `*` не суперпользователем |
-| `ROLE_OWN_ROLE`       | 403    | изменение прав собственной роли                        |
+| `ROLE_OWN_ROLE`       | 403    | изменение прав или удаление собственной роли           |
+| `ROLE_SYSTEM_ROLE`    | 409    | удаление `admin`/`user`/`guest`                        |
 
 ## Права
 
-`RolePermissions = definePermissions("role", { VIEW: "role:view", MANAGE: "role:manage" })`.
+`RolePermissions` (группа «Роли»): `role:view` — просмотр, `role:create` — создание,
+`role:update` — изменение прав роли, `role:delete` — удаление.
 
 ## События
 
-| Событие                       | Когда                   | Поля                                |
-| ----------------------------- | ----------------------- | ----------------------------------- |
-| `RolePermissionsChangedEvent` | набор прав роли заменён | `roleId`, `roleName`, `permissions` |
+| Событие                       | Когда                      | Поля                                |
+| ----------------------------- | -------------------------- | ----------------------------------- |
+| `RoleCreatedEvent`            | роль создана (без прав)    | `roleId`, `roleName`                |
+| `RoleDeletedEvent`            | роль удалена (`emitAsync`) | `roleId`, `roleName`, `memberIds`   |
+| `RolePermissionsChangedEvent` | набор прав роли заменён    | `roleId`, `roleName`, `permissions` |
+
+`RoleService.getRole(roleId)` — роль с правами или `ROLE_NOT_FOUND`.
 
 ## Зависимости
 

@@ -22,11 +22,11 @@ import {
   toPage,
   verifyPassword,
 } from "../../core";
+import { ALL_PERMISSIONS } from "../../core/auth/superuser";
 import { AuthContext } from "../../types/koa";
 import { MailerService } from "../mailer";
 import { OtpRepository, OtpService } from "../otp";
 import { PermissionRepository } from "../permission";
-import { Permissions } from "../permission/permission.types";
 import { Profile } from "../profile/profile.entity";
 import { RoleRepository } from "../role";
 import { Role } from "../role/role.entity";
@@ -63,8 +63,8 @@ const isSuperUserEntity = (user: User): boolean =>
   (user.roles ?? []).some(
     role =>
       role.name === Roles.ADMIN ||
-      (role.permissions ?? []).some(p => p.name === Permissions.ALL),
-  ) || (user.directPermissions ?? []).some(p => p.name === Permissions.ALL);
+      (role.permissions ?? []).some(p => p.name === ALL_PERMISSIONS),
+  ) || (user.directPermissions ?? []).some(p => p.name === ALL_PERMISSIONS);
 
 /** Сервис для управления пользователями: CRUD, права доступа, верификация email, смена пароля. */
 @Injectable()
@@ -246,12 +246,25 @@ export class UserService {
   /**
    * Изменение email/телефона администратором — сразу, без подтверждения.
    * Новый email сбрасывает `emailVerified` и получает код подтверждения.
+   * Суперпользователя меняет только суперпользователь.
    */
-  async updateUser(id: string, body: IUserUpdateRequestDto) {
-    const user = await this._userRepository.findById(id, { profile: true });
+  async updateUser(
+    actor: AuthContext,
+    id: string,
+    body: IUserUpdateRequestDto,
+  ) {
+    const user = await this._userRepository.findById(id, {
+      profile: true,
+      roles: { permissions: true },
+      directPermissions: true,
+    });
 
     if (!user) {
       throw UserError.NOT_FOUND();
+    }
+
+    if (isSuperUserEntity(user) && !isSuperUser(actor)) {
+      throw UserError.SUPERUSER_EDIT();
     }
 
     const patch: QueryDeepPartialEntity<User> = {};
@@ -393,6 +406,22 @@ export class UserService {
   async notifyRoleMembersPrivilegesChanged(roleId: string): Promise<void> {
     const users = await this._userRepository.findByRoleId(roleId);
 
+    await this._emitPrivilegesChanged(users);
+  }
+
+  /** Права пользователей изменились вне их записей (например, удалена роль). */
+  async notifyUsersPrivilegesChanged(userIds: string[]): Promise<void> {
+    if (userIds.length === 0) return;
+
+    const users = await this._userRepository.find({
+      where: { id: In(userIds) },
+      relations: { roles: true, directPermissions: true },
+    });
+
+    await this._emitPrivilegesChanged(users);
+  }
+
+  private async _emitPrivilegesChanged(users: User[]): Promise<void> {
     for (const user of users) {
       await this._eventBus.emitAsync(
         new UserPrivilegesChangedEvent(

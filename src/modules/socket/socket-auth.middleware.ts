@@ -104,7 +104,7 @@ export class SocketAuthMiddleware {
         return { ok: false, error: "Токен другой сессии" };
       }
 
-      socket.data = context;
+      socket.data = { ...context, subscriptions: socket.data.subscriptions };
       life.expiresAt = expiresAt.getTime();
       this._schedule(socket);
 

@@ -20,6 +20,8 @@ export type TokenPayload = {
   roles: string[];
   permissions: string[];
   emailVerified: boolean;
+  /** Момент выдачи в миллисекундах: сверка со сменой прав точнее `iat`. */
+  pat: number;
 };
 
 /** Промежуточный токен между вводом пароля и вводом второго фактора. */

@@ -58,7 +58,7 @@ export class RoleController extends Controller {
    * @param body Название роли
    * @returns Созданная роль
    */
-  @Security("jwt", ["permission:role:manage"])
+  @Security("jwt", ["permission:role:create"])
   @Post()
   @SuccessResponse(201, "Created")
   @ValidateBody(CreateRoleSchema)
@@ -69,30 +69,35 @@ export class RoleController extends Controller {
   }
 
   /**
-   * Удалить роль.
+   * Удалить роль. Системные роли (`admin`, `user`, `guest`) не удаляются,
+   * собственную роль удаляет только суперпользователь.
    *
    * @summary Удаление роли
    * @param id ID роли
    */
-  @Security("jwt", ["permission:role:manage"])
+  @Security("jwt", ["permission:role:delete"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}")
-  async deleteRole(@Path() id: UUID): Promise<void> {
-    await this._roleService.deleteRole(id);
+  async deleteRole(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+  ): Promise<void> {
+    await this._roleService.deleteRole(getContextUser(req), id);
   }
 
   /**
    * Установить права для роли.
    * Заменяет текущий набор прав роли указанным. Роль `admin`, право `*` и
    * собственную роль меняет только суперпользователь. Все пользователи роли
-   * получают `user:privileges-changed`, их сессии завершаются.
+   * получают `user:privileges-changed` с новыми правами; их прежние
+   * access-токены отклоняются (`AUTH_PRIVILEGES_CHANGED`), сессии остаются.
    *
    * @summary Установка прав роли
    * @param id ID роли
    * @param body Список прав
    * @returns Обновлённая роль
    */
-  @Security("jwt", ["permission:role:manage"])
+  @Security("jwt", ["permission:role:update"])
   @Patch("{id}/permissions")
   @ValidateBody(SetRolePermissionsSchema)
   setRolePermissions(

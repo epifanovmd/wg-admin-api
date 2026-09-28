@@ -57,7 +57,7 @@ export class WgNodeController extends Controller {
    * ответе — сохранить сразу.
    * @summary Создание ноды
    */
-  @Security("jwt", ["permission:wg:node:manage"])
+  @Security("jwt", ["permission:wg:node:create"])
   @ValidateBody(CreateWgNodeSchema)
   @SuccessResponse(201, "Created")
   @Post()
@@ -110,7 +110,7 @@ export class WgNodeController extends Controller {
    * Изменить ноду: переданные поля заменяются.
    * @summary Изменение ноды
    */
-  @Security("jwt", ["permission:wg:node:manage"])
+  @Security("jwt", ["permission:wg:node:update"])
   @ValidateBody(UpdateWgNodeSchema)
   @Patch("{id}")
   updateWgNode(
@@ -124,7 +124,7 @@ export class WgNodeController extends Controller {
    * Удалить ноду; ключ агента отзывается. Нода с интерфейсами — 409.
    * @summary Удаление ноды
    */
-  @Security("jwt", ["permission:wg:node:manage"])
+  @Security("jwt", ["permission:wg:node:delete"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}")
   async deleteWgNode(
@@ -139,7 +139,7 @@ export class WgNodeController extends Controller {
    * один раз.
    * @summary Ротация ключа агента
    */
-  @Security("jwt", ["permission:wg:node:manage"])
+  @Security("jwt", ["permission:wg:node:agent"])
   @SuccessResponse(201, "Created")
   @Post("{id}/agent-key")
   rotateWgAgentKey(
@@ -153,7 +153,7 @@ export class WgNodeController extends Controller {
    * Последние строки журнала агента ноды (синхронно, через команду агенту).
    * @summary Журнал агента
    */
-  @Security("jwt", ["permission:wg:node:manage"])
+  @Security("jwt", ["permission:wg:node:logs"])
   @Get("{id}/logs")
   wgNodeLogs(
     @Request() req: KoaRequest,

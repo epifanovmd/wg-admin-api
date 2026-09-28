@@ -1,8 +1,7 @@
 import { inject } from "inversify";
 
-import { Injectable } from "../../core";
+import { AccessService, Injectable } from "../../core";
 import { ISocketRoomPolicy } from "../socket";
-import { WgAccessService } from "../wg-node";
 import { WgEndpointPermissions } from "./wg-endpoint.permissions";
 
 export const WG_ENDPOINTS_ROOM = "wg-endpoints";
@@ -12,9 +11,7 @@ export const WG_ENDPOINTS_ROOM = "wg-endpoints";
 export class WgEndpointsRoomPolicy implements ISocketRoomPolicy {
   readonly type = WG_ENDPOINTS_ROOM;
 
-  constructor(
-    @inject(WgAccessService) private readonly _access: WgAccessService,
-  ) {}
+  constructor(@inject(AccessService) private readonly _access: AccessService) {}
 
   room(): string {
     return WG_ENDPOINTS_ROOM;

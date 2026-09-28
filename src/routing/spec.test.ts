@@ -1,5 +1,8 @@
 import { expect } from "chai";
+import { readdirSync } from "fs";
+import { join } from "path";
 
+import { getRegisteredPermissions } from "../modules/permission";
 import spec from "./swagger.json";
 
 type Schema = Record<string, any>;
@@ -79,5 +82,30 @@ describe("OpenAPI-спецификация", () => {
     );
 
     expect(problems).to.deep.equal([]);
+  });
+
+  it("права в security маршрутов объявлены модулями (definePermissions)", async () => {
+    const modulesDir = join(__dirname, "../modules");
+
+    const files = readdirSync(modulesDir, {
+      recursive: true,
+      encoding: "utf8",
+    }).filter(file => file.endsWith(".permissions.ts"));
+
+    for (const file of files) await import(join(modulesDir, file));
+
+    const registered = new Set(getRegisteredPermissions());
+    const unknown = Object.entries(spec.paths).flatMap(([route, ops]) =>
+      Object.entries(ops as Record<string, Schema>).flatMap(([method, op]) =>
+        ((op.security ?? []) as Record<string, string[]>[])
+          .flatMap(entry => Object.values(entry).flat())
+          .filter(scope => scope.startsWith("permission:"))
+          .map(scope => scope.slice("permission:".length))
+          .filter(name => !registered.has(name))
+          .map(name => `${method.toUpperCase()} ${route}: ${name}`),
+      ),
+    );
+
+    expect(unknown, unknown.join("\n")).to.be.empty;
   });
 });

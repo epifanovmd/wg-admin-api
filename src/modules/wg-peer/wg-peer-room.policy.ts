@@ -1,8 +1,7 @@
 import { inject } from "inversify";
 
-import { Injectable } from "../../core";
+import { AccessService, Injectable } from "../../core";
 import { ISocketRoomPolicy } from "../socket";
-import { WgAccessService } from "../wg-node";
 import { WgPeerPermissions } from "./wg-peer.permissions";
 import { WgPeerRepository } from "./wg-peer.repository";
 
@@ -17,7 +16,7 @@ export class WgPeerRoomPolicy implements ISocketRoomPolicy {
   readonly type = "wg-peer";
 
   constructor(
-    @inject(WgAccessService) private readonly _access: WgAccessService,
+    @inject(AccessService) private readonly _access: AccessService,
     @inject(WgPeerRepository) private readonly _peers: WgPeerRepository,
   ) {}
 
@@ -50,9 +49,7 @@ export const wgOwnPeersRoom = (userId: string): string =>
 export class WgOwnPeersRoomPolicy implements ISocketRoomPolicy {
   readonly type = "wg-peers-own";
 
-  constructor(
-    @inject(WgAccessService) private readonly _access: WgAccessService,
-  ) {}
+  constructor(@inject(AccessService) private readonly _access: AccessService) {}
 
   room(id: string): string {
     return wgOwnPeersRoom(id);

@@ -1,13 +1,16 @@
 import { expect } from "chai";
 
+import { ALL_PERMISSIONS } from "../../core/auth/superuser";
 import {
   definePermissions,
   getDomainPermissions,
+  getPermissionCatalog,
   getRegisteredPermissions,
   PermissionError,
   unregisterPermissionDomain,
 } from "./permission.registry";
-import { Permissions } from "./permission.types";
+
+const REPORT = { key: "report", label: "Отчёты" };
 
 const expectInvalid = (fn: () => unknown) => {
   try {
@@ -24,10 +27,10 @@ describe("permission registry", () => {
     unregisterPermissionDomain("bad");
   });
 
-  it("definePermissions возвращает объявление и регистрирует права", () => {
-    const perms = definePermissions("report", {
-      VIEW: "report:view",
-      ALL: "report:*",
+  it("definePermissions возвращает имена и регистрирует права", () => {
+    const perms = definePermissions("report", REPORT, {
+      VIEW: { name: "report:view", label: "Просмотр" },
+      ALL: { name: "report:*", label: "Всё" },
     });
 
     expect(perms.VIEW).to.equal("report:view");
@@ -38,11 +41,13 @@ describe("permission registry", () => {
     ]);
   });
 
-  it("повторное объявление идемпотентно и дополняет домен", () => {
-    definePermissions("report", { VIEW: "report:view" });
-    definePermissions("report", {
-      VIEW: "report:view",
-      EXPORT: "report:export",
+  it("повторное объявление идемпотентно и дополняет группу", () => {
+    definePermissions("report", REPORT, {
+      VIEW: { name: "report:view", label: "Просмотр" },
+    });
+    definePermissions("report", REPORT, {
+      VIEW: { name: "report:view", label: "Просмотр отчётов" },
+      EXPORT: { name: "report:export", label: "Выгрузка" },
     });
 
     expect(getDomainPermissions("report")).to.have.members([
@@ -52,40 +57,107 @@ describe("permission registry", () => {
     expect(
       getRegisteredPermissions().filter(p => p === "report:view"),
     ).to.have.length(1);
+    expect(
+      getPermissionCatalog().find(g => g.key === "report")?.permissions,
+    ).to.deep.equal([
+      { name: "report:view", label: "Просмотр отчётов" },
+      { name: "report:export", label: "Выгрузка" },
+    ]);
   });
 
-  it("реестр включает совместимый справочник Permissions и «*»", () => {
-    const all = getRegisteredPermissions();
+  it("каталог: первая группа — «Система» с полным доступом, дальше — объявленные", () => {
+    definePermissions(
+      "report",
+      { key: "report:daily", label: "Ежедневные" },
+      { VIEW: { name: "report:daily:view", label: "Просмотр" } },
+    );
 
-    expect(all).to.include(Permissions.ALL);
-    expect(all).to.include.members(Object.values(Permissions));
+    const catalog = getPermissionCatalog();
+
+    expect(catalog[0]).to.deep.equal({
+      key: "*",
+      label: "Система",
+      permissions: [{ name: ALL_PERMISSIONS, label: "Полный доступ" }],
+    });
+    expect(catalog.find(g => g.key === "report:daily")).to.deep.equal({
+      key: "report:daily",
+      label: "Ежедневные",
+      permissions: [{ name: "report:daily:view", label: "Просмотр" }],
+    });
+    expect(getRegisteredPermissions()).to.include(ALL_PERMISSIONS);
   });
 
   it("платформенные права объявлены", () => {
     expect(getRegisteredPermissions()).to.include.members([
-      "apikey:manage",
+      "apikey:view",
       "audit:view",
     ]);
   });
 
-  it("право чужого домена — ошибка объявления", () => {
-    expectInvalid(() => definePermissions("report", { X: "chat:view" }));
+  it("право вне группы или чужого домена — ошибка объявления", () => {
+    expectInvalid(() =>
+      definePermissions("report", REPORT, {
+        X: { name: "chat:view", label: "x" },
+      }),
+    );
+    expectInvalid(() =>
+      definePermissions(
+        "report",
+        { key: "report:daily", label: "x" },
+        { X: { name: "report:view", label: "x" } },
+      ),
+    );
+    expectInvalid(() =>
+      definePermissions(
+        "report",
+        { key: "chat", label: "x" },
+        { X: { name: "chat:view", label: "x" } },
+      ),
+    );
     expect(getDomainPermissions("report")).to.be.empty;
   });
 
-  it("некорректный домен или формат — ошибка объявления", () => {
-    expectInvalid(() => definePermissions("Bad", { X: "Bad:view" }));
-    expectInvalid(() => definePermissions("bad", { X: "bad" }));
-    expectInvalid(() => definePermissions("bad", { X: "bad:" }));
+  it("некорректный домен, группа или формат — ошибка объявления", () => {
+    const bad = { key: "bad", label: "x" };
+
     expectInvalid(() =>
-      definePermissions("bad", { X: `bad:${"a".repeat(100)}` }),
+      definePermissions(
+        "Bad",
+        { key: "Bad", label: "x" },
+        {
+          X: { name: "Bad:view", label: "x" },
+        },
+      ),
+    );
+    expectInvalid(() =>
+      definePermissions(
+        "bad",
+        { key: "bad", label: " " },
+        {
+          X: { name: "bad:view", label: "x" },
+        },
+      ),
+    );
+    expectInvalid(() =>
+      definePermissions("bad", bad, { X: { name: "bad", label: "x" } }),
+    );
+    expectInvalid(() =>
+      definePermissions("bad", bad, { X: { name: "bad:", label: "x" } }),
+    );
+    expectInvalid(() =>
+      definePermissions("bad", bad, {
+        X: { name: `bad:${"a".repeat(100)}`, label: "x" },
+      }),
     );
   });
 
-  it("снятие домена убирает его права", () => {
-    definePermissions("report", { VIEW: "report:view" });
+  it("снятие домена убирает его группы и права", () => {
+    definePermissions("report", REPORT, {
+      VIEW: { name: "report:view", label: "Просмотр" },
+    });
     unregisterPermissionDomain("report");
 
     expect(getRegisteredPermissions()).to.not.include("report:view");
+    expect(getPermissionCatalog().some(g => g.key === "report")).to.be.false;
   });
 });

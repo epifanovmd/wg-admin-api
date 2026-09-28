@@ -5,7 +5,6 @@ export * from "./ip-utils";
 export * from "./node-offline.job";
 export * from "./validation";
 export * from "./wg.config";
-export * from "./wg-access.service";
 export * from "./wg-keys";
 export * from "./wg-node.controller";
 export * from "./wg-node.entity";

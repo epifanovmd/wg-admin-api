@@ -18,12 +18,8 @@ import {
   SOCKET_EVENT_LISTENER,
 } from "./socket-event-listener.interface";
 import { ISocketHandler, SOCKET_HANDLER } from "./socket-handler.interface";
-import {
-  ISocketRoomPolicy,
-  ISocketRoomProvider,
-  SOCKET_ROOM_POLICY,
-  SOCKET_ROOM_PROVIDER,
-} from "./socket-rooms";
+import { SocketRoomService } from "./socket-room.service";
+import { ISocketRoomProvider, SOCKET_ROOM_PROVIDER } from "./socket-rooms";
 import { SocketServerService } from "./socket-server.service";
 
 @Injectable()
@@ -41,12 +37,11 @@ export class SocketBootstrap implements IBootstrap {
     private readonly handlers: ISocketHandler[],
     @multiInject(SOCKET_EVENT_LISTENER)
     private readonly eventListeners: ISocketEventListener[],
+    @inject(SocketRoomService)
+    private readonly roomService: SocketRoomService,
     @multiInject(SOCKET_ROOM_PROVIDER)
     @optional()
     private readonly roomProviders: ISocketRoomProvider[] = [],
-    @multiInject(SOCKET_ROOM_POLICY)
-    @optional()
-    private readonly roomPolicies: ISocketRoomPolicy[] = [],
   ) {}
 
   async initialize(): Promise<void> {
@@ -175,26 +170,18 @@ export class SocketBootstrap implements IBootstrap {
    * неизвестный тип или нет права — `ok: false`, комната не раскрывается.
    */
   private registerRoomSubscriptions(socket: TSocket): void {
-    const policies = new Map(this.roomPolicies.map(p => [p.type, p]));
-    const { userId } = socket.data;
-
     socket.on("room:subscribe", async (payload, ack) => {
-      const policy = policies.get(payload?.type);
-      const allowed =
-        !!policy &&
-        typeof payload?.id === "string" &&
-        (await policy.canJoin(userId, payload.id).catch(() => false));
-
-      if (allowed) socket.join(policy!.room(payload.id));
-      ack?.({ ok: allowed });
+      ack?.({
+        ok: await this.roomService.subscribe(
+          socket,
+          payload?.type,
+          payload?.id,
+        ),
+      });
     });
 
     socket.on("room:unsubscribe", (payload, ack) => {
-      const policy = policies.get(payload?.type);
-
-      if (policy && typeof payload?.id === "string") {
-        socket.leave(policy.room(payload.id));
-      }
+      this.roomService.unsubscribe(socket, payload?.type, payload?.id);
       ack?.({ ok: true });
     });
   }

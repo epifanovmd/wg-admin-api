@@ -32,6 +32,8 @@ export type JWTDecoded = {
   permissions?: string[];
   emailVerified?: boolean;
   jti?: string;
+  /** Момент выдачи, мс (access/refresh). */
+  pat?: number;
   iat: number;
   exp: number;
 };

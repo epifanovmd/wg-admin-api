@@ -224,7 +224,7 @@ export class WgPeerService {
     this._eventBus.emit(new WgPeerDeletedEvent(peer.id, peer.userId));
   }
 
-  /** Включение/выключение: право manage или свой пир с правом own. */
+  /** Включение/выключение: право toggle или свой пир с правом own. */
   async setEnabled(
     actor: AuthContext,
     id: string,
@@ -232,7 +232,7 @@ export class WgPeerService {
   ): Promise<WgPeerDto> {
     const peer = await this._findWithRelationsOrFail(id);
 
-    if (!this._canManage(actor) && !this._isOwnPeer(actor, peer)) {
+    if (!this._canToggle(actor) && !this._isOwnPeer(actor, peer)) {
       throw WgPeerError.NOT_FOUND();
     }
 
@@ -387,10 +387,10 @@ export class WgPeerService {
     );
   }
 
-  private _canManage(actor: AuthContext): boolean {
+  private _canToggle(actor: AuthContext): boolean {
     return (
       isSuperUser(actor) ||
-      hasPermission(actor.permissions, WgPeerPermissions.PEER_MANAGE)
+      hasPermission(actor.permissions, WgPeerPermissions.PEER_TOGGLE)
     );
   }
 

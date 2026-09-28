@@ -41,12 +41,14 @@ live-хранилище (TTL 60 с), поле `live` DTO.
 
 ## Эндпоинты (`/api/v1/wg/socks`, тег WgSocks)
 
-Права `wg:socks:view` / `wg:socks:manage`.
+Чтение — `wg:socks:view`.
 
-- CRUD сервиса.
+- CRUD сервиса — `wg:socks:create`, `wg:socks:update` (изменение и включение),
+  `wg:socks:delete`.
 - `/{id}/users` — добавление (пароль генерируется, если не задан), изменение,
-  удаление, `GET …/secret` — логин и пароль.
-- `/{id}/clients` — выпуск, `POST …/revoke`, `GET …/mac?userId=` — zip для
+  удаление — `wg:socks:users`; `GET …/secret` — логин и пароль,
+  `wg:socks:secrets`.
+- `/{id}/clients` (`wg:socks:clients`) — выпуск, `POST …/revoke`, `GET …/mac?userId=` — zip для
   macOS: `install.sh` (stunnel из Homebrew, автозапуск launchd, локальный
   SOCKS5 127.0.0.1:1080), `uninstall.sh`, README с настройками и ссылкой для
   Telegram.

@@ -96,9 +96,18 @@ export interface ISocketEmitEvents {
 
   /** Общая ошибка обработки socket-события */
   error: (...args: [ISocketErrorEventPayload]) => void;
+
+  /** Права на комнату больше нет: сокет из неё выведен */
+  "room:revoked": (...args: [ISocketRoomPayload]) => void;
 }
 
 // ─── Типы Socket ─────────────────────────────────────────────────────────────
+
+/** Данные соединения: контекст токена и подписки на комнаты сущностей. */
+export type ISocketData = AuthContext & {
+  /** Комната Socket.IO → сущность, на которую подписан сокет. */
+  subscriptions?: Record<string, ISocketRoomPayload>;
+};
 
 /** События между инстансами сервера (адаптер Redis и т.п.); шаблон их не задаёт. */
 export type TInterServerEvents = Record<string, (...args: any[]) => void>;
@@ -107,14 +116,14 @@ export type TSocket = SocketIO<
   ISocketEvents,
   ISocketEmitEvents,
   TInterServerEvents,
-  AuthContext
+  ISocketData
 >;
 
 export type TServer = Server<
   ISocketEvents,
   ISocketEmitEvents,
   TInterServerEvents,
-  AuthContext
+  ISocketData
 >;
 
 // ─── Ack и ошибки обработчиков с валидацией (`onValidated`) ──────────────

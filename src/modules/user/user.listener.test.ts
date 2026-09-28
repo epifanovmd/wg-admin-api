@@ -5,11 +5,12 @@ import sinon from "sinon";
 
 import { EventBus } from "../../core";
 import { createMockEmitter } from "../../test/helpers";
-import { RolePermissionsChangedEvent } from "../role";
+import { RoleDeletedEvent, RolePermissionsChangedEvent } from "../role";
 import {
   EmailChangedEvent,
   PasswordChangedEvent,
   UserDeletedEvent,
+  UserPrivilegesChangedEvent,
 } from "./events";
 import { UserListener } from "./user.listener";
 
@@ -18,15 +19,54 @@ describe("UserListener", () => {
   let emitter: ReturnType<typeof createMockEmitter> & {
     disconnectUser: sinon.SinonStub;
   };
-  let userService: { notifyRoleMembersPrivilegesChanged: sinon.SinonStub };
+  let userService: {
+    notifyRoleMembersPrivilegesChanged: sinon.SinonStub;
+    notifyUsersPrivilegesChanged: sinon.SinonStub;
+  };
+  let access: { grantOf: sinon.SinonStub };
+  let rooms: { revalidateUser: sinon.SinonStub };
 
   beforeEach(() => {
     eventBus = new EventBus();
     emitter = { ...createMockEmitter(), disconnectUser: sinon.stub() };
     userService = {
       notifyRoleMembersPrivilegesChanged: sinon.stub().resolves(),
+      notifyUsersPrivilegesChanged: sinon.stub().resolves(),
     };
-    new UserListener(eventBus, emitter as any, userService as any).register();
+    access = {
+      grantOf: sinon
+        .stub()
+        .resolves({ roles: ["user"], permissions: ["wg:peer:own", "x:y"] }),
+    };
+    rooms = { revalidateUser: sinon.stub().resolves() };
+    new UserListener(
+      eventBus,
+      emitter as any,
+      userService as any,
+      access as any,
+      rooms as any,
+    ).register();
+  });
+
+  it("смена прав: эффективные права пользователю и пересмотр его комнат", async () => {
+    await eventBus.emitAsync(
+      new UserPrivilegesChangedEvent("u1", ["user"], ["x:y"]),
+    );
+
+    expect(
+      emitter.toUser.calledWith("u1", "user:privileges-changed", {
+        roles: ["user"],
+        permissions: ["wg:peer:own", "x:y"],
+      }),
+    ).to.be.true;
+    expect(rooms.revalidateUser.calledOnceWith("u1")).to.be.true;
+  });
+
+  it("удаление роли — пересчёт прав её бывших пользователей", async () => {
+    await eventBus.emitAsync(new RoleDeletedEvent("r1", "moderator", ["u1"]));
+
+    expect(userService.notifyUsersPrivilegesChanged.calledOnceWith(["u1"])).to
+      .be.true;
   });
 
   it("should fan out role permission changes to role members", () => {

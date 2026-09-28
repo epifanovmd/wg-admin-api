@@ -33,6 +33,18 @@ export class RoleRepository extends BaseRepository<Role> {
     });
   }
 
+  /** ID пользователей, которым назначена роль. */
+  async findMemberIds(roleId: string): Promise<string[]> {
+    const rows: { user_id: string }[] = await this.manager
+      .createQueryBuilder()
+      .select("ur.user_id", "user_id")
+      .from("user_roles", "ur")
+      .where("ur.role_id = :roleId", { roleId })
+      .getRawMany();
+
+    return rows.map(row => row.user_id);
+  }
+
   /** Получить все роли со связанными разрешениями. */
   async findAll(): Promise<Role[]> {
     return this.find({

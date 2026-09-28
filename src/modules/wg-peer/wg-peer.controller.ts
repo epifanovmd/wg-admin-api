@@ -55,7 +55,7 @@ export class WgPeerController extends Controller {
    * существующего клиента (его приватный ключ не хранится).
    * @summary Создание пира
    */
-  @Security("jwt", ["permission:wg:peer:manage"])
+  @Security("jwt", ["permission:wg:peer:create"])
   @ValidateBody(CreateWgPeerSchema)
   @SuccessResponse(201, "Created")
   @Post()
@@ -115,7 +115,7 @@ export class WgPeerController extends Controller {
    * Изменить пира: переданные поля заменяются.
    * @summary Изменение пира
    */
-  @Security("jwt", ["permission:wg:peer:manage"])
+  @Security("jwt", ["permission:wg:peer:update"])
   @ValidateBody(UpdateWgPeerSchema)
   @Patch("{id}")
   updateWgPeer(
@@ -129,7 +129,7 @@ export class WgPeerController extends Controller {
    * Удалить пира; агент снимет его с интерфейса.
    * @summary Удаление пира
    */
-  @Security("jwt", ["permission:wg:peer:manage"])
+  @Security("jwt", ["permission:wg:peer:delete"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}")
   async deleteWgPeer(@Path() id: UUID): Promise<void> {
@@ -166,7 +166,7 @@ export class WgPeerController extends Controller {
    * Перевыпустить preshared-ключ; клиенту нужен новый конфиг.
    * @summary Ротация PSK
    */
-  @Security("jwt", ["permission:wg:peer:manage"])
+  @Security("jwt", ["permission:wg:peer:psk"])
   @Post("{id}/psk/rotate")
   rotateWgPeerPsk(@Path() id: UUID): Promise<WgPeerDto> {
     return this._service.rotatePresharedKey(id);
@@ -176,7 +176,7 @@ export class WgPeerController extends Controller {
    * Убрать preshared-ключ; клиенту нужен новый конфиг.
    * @summary Удаление PSK
    */
-  @Security("jwt", ["permission:wg:peer:manage"])
+  @Security("jwt", ["permission:wg:peer:psk"])
   @Delete("{id}/psk")
   removeWgPeerPsk(@Path() id: UUID): Promise<WgPeerDto> {
     return this._service.removePresharedKey(id);
@@ -186,7 +186,7 @@ export class WgPeerController extends Controller {
    * Назначить пира пользователю (он увидит его в «Моих пирах»).
    * @summary Назначение пира
    */
-  @Security("jwt", ["permission:wg:peer:manage"])
+  @Security("jwt", ["permission:wg:peer:assign"])
   @ValidateBody(AssignWgPeerSchema)
   @Post("{id}/assign")
   assignWgPeer(
@@ -200,7 +200,7 @@ export class WgPeerController extends Controller {
    * Отвязать пира от пользователя.
    * @summary Отвязка пира
    */
-  @Security("jwt", ["permission:wg:peer:manage"])
+  @Security("jwt", ["permission:wg:peer:assign"])
   @Post("{id}/revoke")
   revokeWgPeer(@Path() id: UUID): Promise<WgPeerDto> {
     return this._service.revoke(id);

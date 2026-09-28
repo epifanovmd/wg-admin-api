@@ -23,17 +23,22 @@
 
 ## Эндпоинты (`/api/v1/wg/nodes`, тег WgNode)
 
-| Метод          | Путь                     | Право                                                   |
-| -------------- | ------------------------ | ------------------------------------------------------- |
-| POST           | `/`                      | `wg:node:manage` (ответ содержит `agentKey` — один раз) |
-| GET            | `/`, `/options`, `/{id}` | `wg:node:view`                                          |
-| PATCH / DELETE | `/{id}`                  | `wg:node:manage` (удаление при интерфейсах — 409)       |
-| POST           | `/{id}/agent-key`        | `wg:node:manage` — ротация ключа агента                 |
-| GET            | `/{id}/logs`             | `wg:node:manage` — журнал агента (синхронно)            |
+| Метод  | Путь                     | Право                                                   |
+| ------ | ------------------------ | ------------------------------------------------------- |
+| POST   | `/`                      | `wg:node:create` (ответ содержит `agentKey` — один раз) |
+| GET    | `/`, `/options`, `/{id}` | `wg:node:view`                                          |
+| PATCH  | `/{id}`                  | `wg:node:update`                                        |
+| DELETE | `/{id}`                  | `wg:node:delete` (при интерфейсах — 409)                |
+| POST   | `/{id}/agent-key`        | `wg:node:agent` — ротация ключа агента                  |
+| GET    | `/{id}/logs`             | `wg:node:logs` — журнал агента (синхронно)              |
+
+`wg:node:agent` также даёт обновление агента (модуль wg-agent), `wg:node:provision` —
+установку и удаление агента по SSH (модуль wg-provision).
 
 ## Сокет
 
-Комната `wg-node_<id>` (policy `wg-node`, право `wg:node:view`). События:
+Комната `wg-node_<id>` (policy `wg-node`, право `wg:node:view` — по актуальным правам из БД через
+`AccessService` ядра). События:
 `wg:node:updated` (в комнату ноды и `wg-overview`).
 
 ## Общие сервисы домена
@@ -42,8 +47,6 @@
   (ключ `WG_SECRETS_KEY`, в dev/test — производный).
 - `wg-keys.ts` — генерация ключей WireGuard (X25519 через `node:crypto`,
   без вызова `wg`), PSK.
-- `WgAccessService` — эффективные права пользователя из БД с кэшем 10 с
-  (для политик комнат и слушателей).
 - `validation/wg-shared.validate.ts` — общие Zod-схемы домена (хосты, CIDR,
   AllowedIPs, DNS) — всё, что попадает в конфиги, валидируется строго.
 
