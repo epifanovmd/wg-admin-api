@@ -5,14 +5,18 @@ import sinon from "sinon";
 
 import { EventBus } from "../../core";
 import { createMockEmitter } from "../../test/helpers";
+import { ProfileUpdatedEvent } from "../profile/events";
 import { RoleDeletedEvent, RolePermissionsChangedEvent } from "../role";
 import {
   EmailChangedEvent,
+  EmailVerifiedEvent,
   PasswordChangedEvent,
+  UserChangedEvent,
   UserDeletedEvent,
+  UsernameChangedEvent,
   UserPrivilegesChangedEvent,
 } from "./events";
-import { UserListener } from "./user.listener";
+import { UserListener, USERS_ROOM } from "./user.listener";
 
 describe("UserListener", () => {
   let eventBus: EventBus;
@@ -22,6 +26,8 @@ describe("UserListener", () => {
   let userService: {
     notifyRoleMembersPrivilegesChanged: sinon.SinonStub;
     notifyUsersPrivilegesChanged: sinon.SinonStub;
+    getUser: sinon.SinonStub;
+    toUserDto: sinon.SinonStub;
   };
   let access: { grantOf: sinon.SinonStub };
   let rooms: { revalidateUser: sinon.SinonStub };
@@ -32,6 +38,11 @@ describe("UserListener", () => {
     userService = {
       notifyRoleMembersPrivilegesChanged: sinon.stub().resolves(),
       notifyUsersPrivilegesChanged: sinon.stub().resolves(),
+      getUser: sinon.stub().callsFake(async (id: string) => ({ id })),
+      toUserDto: sinon.stub().callsFake(async (user: { id: string }) => ({
+        id: user.id,
+        dto: true,
+      })),
     };
     access = {
       grantOf: sinon
@@ -60,6 +71,30 @@ describe("UserListener", () => {
       }),
     ).to.be.true;
     expect(rooms.revalidateUser.calledOnceWith("u1")).to.be.true;
+  });
+
+  it("изменения пользователя — user:updated со свежим UserDto в комнату users", async () => {
+    await eventBus.emitAsync(new UserChangedEvent("u1"));
+    await eventBus.emitAsync(new UsernameChangedEvent("u1", "neo"));
+    await eventBus.emitAsync(new EmailVerifiedEvent("u1"));
+    await eventBus.emitAsync(new ProfileUpdatedEvent({ userId: "u1" } as any));
+
+    const sent = emitter.toRoom
+      .getCalls()
+      .filter(c => c.args[0] === USERS_ROOM);
+
+    expect(sent).to.have.length(4);
+    expect(sent[0].args.slice(1)).to.deep.equal([
+      "user:updated",
+      { id: "u1", dto: true },
+    ]);
+  });
+
+  it("удаление пользователя — user:deleted в комнату users", () => {
+    eventBus.emit(new UserDeletedEvent("u1"));
+
+    expect(emitter.toRoom.calledWith(USERS_ROOM, "user:deleted", { id: "u1" }))
+      .to.be.true;
   });
 
   it("удаление роли — пересчёт прав её бывших пользователей", async () => {

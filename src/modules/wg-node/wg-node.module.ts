@@ -1,5 +1,9 @@
 import { asJobHandler, Module } from "../../core";
-import { asSocketListener, asSocketRoomPolicy } from "../socket";
+import {
+  asSocketListener,
+  asSocketRoomPolicy,
+  permissionRoomPolicy,
+} from "../socket";
 import {
   WgCommandRetentionJob,
   WgCommandTimeoutJob,
@@ -7,7 +11,8 @@ import {
 import { WgNodeOfflineJob } from "./node-offline.job";
 import { WgNodeController } from "./wg-node.controller";
 import { WgNode } from "./wg-node.entity";
-import { WgNodeListener } from "./wg-node.listener";
+import { WG_NODES_ROOM, WgNodeListener } from "./wg-node.listener";
+import { WgNodePermissions } from "./wg-node.permissions";
 import { WgNodeRepository } from "./wg-node.repository";
 import { WgNodeService } from "./wg-node.service";
 import { WgNodeCommand } from "./wg-node-command.entity";
@@ -26,6 +31,9 @@ import { WgSecretBox } from "./wg-secret-box.service";
     WgNodeCommandService,
     WgNodeController,
     asSocketRoomPolicy(WgNodeRoomPolicy),
+    asSocketRoomPolicy(
+      permissionRoomPolicy(WG_NODES_ROOM, WgNodePermissions.NODE_VIEW),
+    ),
     asSocketListener(WgNodeListener),
     asJobHandler(WgNodeOfflineJob),
     asJobHandler(WgCommandTimeoutJob),

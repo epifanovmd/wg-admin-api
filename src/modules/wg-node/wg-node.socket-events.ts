@@ -6,7 +6,9 @@ import type { WgNodeDto } from "./dto";
 
 declare module "../socket/socket.types" {
   interface ISocketEmitEvents {
-    /** Статус/состояние ноды изменились — в комнату ноды и в overview. */
+    /** Нода создана или изменена — в комнату списка нод и в комнату ноды. */
     "wg:node:updated": (...args: [WgNodeDto]) => void;
+    /** Нода удалена — в комнату списка нод и в комнату ноды. */
+    "wg:node:deleted": (...args: [{ id: string }]) => void;
   }
 }

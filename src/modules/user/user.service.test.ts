@@ -21,6 +21,7 @@ import { Roles } from "../role/role.types";
 import {
   EmailVerifiedEvent,
   PasswordChangedEvent,
+  UserChangedEvent,
   UserDeletedEvent,
   UserPrivilegesChangedEvent,
 } from "./events";
@@ -265,7 +266,11 @@ describe("UserService", () => {
       expect(savedUser.roles).to.deep.equal([userRole]);
       expect(txRepos.Profile.save.calledOnce).to.be.true;
       expect(mockUserRepo.save.called).to.be.false;
-      expect(eventBus.emit.called).to.be.false;
+
+      const event = eventBus.emit.lastCall.args[0];
+
+      expect(event).to.be.instanceOf(UserChangedEvent);
+      expect(event.userId).to.be.a("string");
     });
 
     it("should fail when a default role is missing", async () => {
@@ -311,6 +316,23 @@ describe("UserService", () => {
   });
 
   describe("updateUser", () => {
+    it("изменение контактов — UserChangedEvent", async () => {
+      mockUserRepo.findById.resolves(makeUser());
+      mockUserRepo.findOne.resolves(makeUser({ phone: "+79001112233" }));
+
+      await service.updateUser(superUser, uuid(), { phone: "89001112233" });
+
+      expect(
+        eventBus.emit
+          .getCalls()
+          .some(
+            c =>
+              c.args[0] instanceof UserChangedEvent &&
+              c.args[0].userId === uuid(),
+          ),
+      ).to.be.true;
+    });
+
     it("контакты суперпользователя меняет только суперпользователь — 403", async () => {
       mockUserRepo.findById.resolves(makeUser({ roles: [adminRole] }));
 

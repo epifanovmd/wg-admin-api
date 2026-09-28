@@ -46,9 +46,11 @@ PostUp/PostDown — 403 `WG_IFACE_CUSTOM_HOOKS_FORBIDDEN`. Удаление с �
 
 ## Сокет
 
-Комната `wg-interface_<id>` (policy `wg-interface`, право
-`wg:interface:view`); события `wg:interface:updated`, `wg:interface:deleted`
-(также в `wg-overview`).
+Комнаты: `wg-interfaces` — список (`permissionRoomPolicy`, `wg:interface:view`),
+`wg-interface_<id>` — страница интерфейса (policy `wg-interface`, `wg:interface:view`).
+`WgInterfaceListener` шлёт `wg:interface:updated` (DTO) и `wg:interface:deleted {id}`
+в `wg-interfaces` и `wg-interface_<id>`; в комнаты нод и `wg-overview` изменения
+интерфейсов не идут. Статистика (`wg:interface:stats`, `wg:peers:stats`) — модуль wg-stats.
 
 Интерфейс нельзя подключить через точку, чей релей — его же нода: 409
 `WG_IFACE_ENDPOINT_RELAY_IS_NODE`. Такие пары (если остались в данных) не

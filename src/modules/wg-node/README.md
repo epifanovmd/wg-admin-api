@@ -37,9 +37,22 @@
 
 ## Сокет
 
-Комната `wg-node_<id>` (policy `wg-node`, право `wg:node:view` — по актуальным правам из БД через
-`AccessService` ядра). События:
-`wg:node:updated` (в комнату ноды и `wg-overview`).
+Вход в комнаты — по актуальным правам из БД через `AccessService` ядра.
+
+- `wg-nodes` — список нод (`permissionRoomPolicy`, `wg:node:view`);
+- `wg-node_<id>` — страница ноды (policy `wg-node`, `wg:node:view`).
+
+`WgNodeListener`:
+
+| Событие                                          | Сокет                   | Куда                       |
+| ------------------------------------------------ | ----------------------- | -------------------------- |
+| `WgNodeCreatedEvent`                             | `wg:node:updated` (DTO) | `wg-nodes`                 |
+| `WgNodeUpdatedEvent`, `WgNodeStatusChangedEvent` | `wg:node:updated` (DTO) | `wg-nodes`, `wg-node_<id>` |
+| `WgNodeDeletedEvent`                             | `wg:node:deleted {id}`  | `wg-nodes`, `wg-node_<id>` |
+
+В `wg-node_<id>` также идут `wg:node:stats`, `wg:node:links` (wg-stats) и `job:updated`
+задач установки агента (scope ноды, wg-provision). Константа `WG_OVERVIEW_ROOM`
+объявлена здесь, комната — модуля wg-stats (только статистика).
 
 ## Общие сервисы домена
 

@@ -17,7 +17,7 @@ describe("JobsSocketListener", () => {
       ...overrides,
     }) as any;
 
-  it("в комнату задачи и в комнату scope", () => {
+  it("в комнату задачи, в комнату scope и владельцу (его список задач)", () => {
     const bus = new EventBus();
     const emitter = createMockEmitter();
 
@@ -31,7 +31,10 @@ describe("JobsSocketListener", () => {
       "job:updated",
     ]);
     expect(emitter.toRoom.secondCall.args[0]).to.equal("workspace_w1");
-    expect(emitter.toUser.called).to.be.false;
+    expect(emitter.toUser.firstCall.args.slice(0, 2)).to.deep.equal([
+      "u1",
+      "job:updated",
+    ]);
   });
 
   it("без scope — владельцу", () => {

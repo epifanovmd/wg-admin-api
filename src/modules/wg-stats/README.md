@@ -55,10 +55,11 @@
 
 ## Комната overview
 
-`wg-overview` (policy `wg-overview`, право `wg:stats:view`); туда же идут
-`wg:node:updated`, `wg:interface:updated`, `wg:peer:updated` из соседних
-модулей — дашборд живёт полностью на сокете. После проб связности нод —
-`wg:stats:mesh` (матрица целиком).
+`wg-overview` (policy `wg-overview`, право `wg:stats:view`) — только статистика:
+`wg:stats:overview`, `wg:node:stats`, `wg:peers:stats`, после проб связности нод —
+`wg:stats:mesh` (матрица целиком). Изменения нод, интерфейсов и пиров дашборд берёт
+из комнат списков `wg-nodes`, `wg-interfaces`, `wg-peers` (модули wg-node,
+wg-interface, wg-peer).
 
 ## Здоровье туннелей
 

@@ -7,7 +7,11 @@ export class WgPeerCreatedEvent {
 
 /** Пир изменён (конфигурация, держатель, включение/выключение). */
 export class WgPeerUpdatedEvent {
-  constructor(public readonly peer: WgPeerDto) {}
+  constructor(
+    public readonly peer: WgPeerDto,
+    /** Прежний держатель, если держатель сменился. */
+    public readonly previousUserId: string | null = null,
+  ) {}
 }
 
 /** Пир удалён. */

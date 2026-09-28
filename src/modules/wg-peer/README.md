@@ -40,7 +40,21 @@ attachment), `GET {id}/qr` (PNG data-URL). Конфликты имени/клю�
 
 ## Сокет
 
-Комната `wg-peer_<id>` (policy `wg-peer`: view или свой пир), комната «мои
-пиры» `wg-peers-own_<userId>` (policy `wg-peers-own`: только своя, право
-`wg:peer:own`) — live-статистика пиров держателя; события
-`wg:peer:updated`/`wg:peer:deleted` (комната, overview, держателю).
+Комнаты:
+
+- `wg-peers` — список пиров (`permissionRoomPolicy`, `wg:peer:view`);
+- `wg-peer_<id>` — карточка пира (policy `wg-peer`: view или свой пир);
+- `wg-peers-own_<userId>` — «мои пиры» (policy `wg-peers-own`: только своя, право
+  `wg:peer:own`) — live-статистика пиров держателя (модуль wg-stats).
+
+`WgPeerListener` (в `wg-overview` не шлёт):
+
+| Событие                                    | Сокет                   | Куда                                                    |
+| ------------------------------------------ | ----------------------- | ------------------------------------------------------- |
+| `WgPeerCreatedEvent`, `WgPeerUpdatedEvent` | `wg:peer:updated` (DTO) | `wg-peers`, `wg-peer_<id>`, держателю (`toUser`)        |
+| `WgPeerUpdatedEvent` с `previousUserId`    | `wg:peer:deleted {id}`  | прежнему держателю + `SocketRoomService.revalidateUser` |
+| `WgPeerDeletedEvent`                       | `wg:peer:deleted {id}`  | `wg-peers`, `wg-peer_<id>`, держателю                   |
+
+`WgPeerUpdatedEvent(peer, previousUserId)`: `assign`/`revoke` передают прежнего
+держателя, если он сменился (иначе `null`); прежний держатель убирает пир из своих
+списков и теряет подписку на комнату пира (`room:revoked`).

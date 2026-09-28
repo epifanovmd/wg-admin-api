@@ -16,6 +16,8 @@ src/modules/role/
 ├── role.errors.ts          # RoleError — коды ROLE_*
 ├── role.permissions.ts     # RolePermissions (definePermissions("role"))
 ├── role.dto.ts             # IRoleDto
+├── role.listener.ts        # RoleListener: изменения ролей → комната roles
+├── role.socket-events.ts   # role:updated, role:deleted в контракте сокета
 ├── dto/                    # Тела запросов
 ├── events/                 # RoleCreatedEvent, RoleDeletedEvent, RolePermissionsChangedEvent
 └── validation/             # CreateRoleSchema, SetRolePermissionsSchema
@@ -96,6 +98,16 @@ src/modules/role/
 | `RolePermissionsChangedEvent` | набор прав роли заменён    | `roleId`, `roleName`, `permissions` |
 
 `RoleService.getRole(roleId)` — роль с правами или `ROLE_NOT_FOUND`.
+
+## Сокет
+
+Комната списка ролей `roles` (`ROLES_ROOM`, `permissionRoomPolicy`, право `role:view`).
+`RoleListener` (регистрируется в `UserModule` вместе с политикой):
+
+| Событие                                           | Сокет                     |
+| ------------------------------------------------- | ------------------------- |
+| `RoleCreatedEvent`, `RolePermissionsChangedEvent` | `role:updated` (IRoleDto) |
+| `RoleDeletedEvent`                                | `role:deleted { id }`     |
 
 ## Зависимости
 

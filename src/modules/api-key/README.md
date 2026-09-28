@@ -8,10 +8,12 @@ API-ключи сервисов (агенты нод WireGuard, интеграц
 
 ```
 src/modules/api-key/
-├── api-key.module.ts      # @Module: провайдеры, asSecurityScheme(ApiKeySecurityScheme)
+├── api-key.module.ts      # @Module: провайдеры, asSecurityScheme, listener и политика комнаты
 ├── api-key.entity.ts      # ApiKey (таблица api_keys)
 ├── api-key.repository.ts  # Поиск по префиксу, страница, touch lastUsedAt
-├── api-key.service.ts     # Выпуск, список, отзыв, проверка ключа
+├── api-key.service.ts     # Выпуск, список, ключ по id, отзыв, проверка ключа
+├── api-key.listener.ts    # ApiKeyListener: выпуск/отзыв → комната api-keys
+├── api-key.socket-events.ts # apikey:updated в контракте сокета
 ├── api-key.scheme.ts      # Схема apiKey: X-Api-Key / Authorization: ApiKey
 ├── api-key.scopes.ts      # scopeSatisfied: сопоставление scope с wildcard
 ├── api-key.controller.ts  # REST /api/v1/api-keys (jwt + apikey:*)
@@ -75,6 +77,12 @@ src/modules/api-key/
 при создании ноды, ротации ключа и provision; маршруты `/api/v1/wg-agent/*` —
 `@Security("apiKey", ["wg-agent"])`. События `ApiKeyCreatedEvent` /
 `ApiKeyRevokedEvent` (после записи) пишет в журнал модуль audit.
+
+## Сокет
+
+Комната списка ключей `api-keys` (`API_KEYS_ROOM`, `permissionRoomPolicy`, право
+`apikey:view`). `ApiKeyListener`: `ApiKeyCreatedEvent`, `ApiKeyRevokedEvent` →
+`apikey:updated` (`ApiKeyDto` из `ApiKeyService.get(id)`, без секрета).
 
 ## Конфиг
 

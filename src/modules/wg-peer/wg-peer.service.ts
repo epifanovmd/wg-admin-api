@@ -267,6 +267,7 @@ export class WgPeerService {
 
   async assign(id: string, body: IAssignWgPeerBody): Promise<WgPeerDto> {
     const peer = await this._findWithRelationsOrFail(id);
+    const previousUserId = peer.userId;
 
     peer.userId = body.userId;
 
@@ -279,16 +280,17 @@ export class WgPeerService {
       throw err;
     }
 
-    return this._emitUpdated(peer.id);
+    return this._emitUpdated(peer.id, previousUserId);
   }
 
   async revoke(id: string): Promise<WgPeerDto> {
     const peer = await this._findWithRelationsOrFail(id);
+    const previousUserId = peer.userId;
 
     peer.userId = null;
     await this._repo.save(peer);
 
-    return this._emitUpdated(peer.id);
+    return this._emitUpdated(peer.id, previousUserId);
   }
 
   /** Клиентский конфиг (owner или право view). */
@@ -433,10 +435,18 @@ export class WgPeerService {
     });
   }
 
-  private async _emitUpdated(id: string): Promise<WgPeerDto> {
+  /** `previousUserId` — держатель до изменения: при смене он узнаёт об этом. */
+  private async _emitUpdated(
+    id: string,
+    previousUserId: string | null = null,
+  ): Promise<WgPeerDto> {
     const dto = await this._dtoWithRelations(id);
+    const changedOwner =
+      previousUserId !== null && previousUserId !== dto.userId
+        ? previousUserId
+        : null;
 
-    this._eventBus.emit(new WgPeerUpdatedEvent(dto));
+    this._eventBus.emit(new WgPeerUpdatedEvent(dto, changedOwner));
 
     return dto;
   }

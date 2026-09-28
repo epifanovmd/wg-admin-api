@@ -57,7 +57,20 @@ describe("wireguard: обновления по сокетам", () => {
   });
 
   it("комнаты списков — только с правом", async () => {
-    for (const type of ["wg-forwards", "wg-socks", "wg-endpoints"]) {
+    const lists = [
+      "wg-forwards",
+      "wg-socks",
+      "wg-endpoints",
+      "wg-nodes",
+      "wg-interfaces",
+      "wg-peers",
+      "users",
+      "roles",
+      "api-keys",
+      "audit",
+    ];
+
+    for (const type of lists) {
       expect(await ws.join(type), type).to.deep.equal({ ok: true });
     }
     expect(await ws.join("wg-overview")).to.deep.equal({ ok: true });
@@ -65,11 +78,91 @@ describe("wireguard: обновления по сокетам", () => {
     const stranger = await connectSocket(user);
 
     try {
-      for (const type of ["wg-forwards", "wg-socks", "wg-endpoints"]) {
+      for (const type of lists) {
         expect(await stranger.join(type), type).to.deep.equal({ ok: false });
       }
     } finally {
       stranger.close();
+    }
+  });
+
+  it("отзыв права выводит сокет из комнаты: user:privileges-changed и room:revoked", async () => {
+    const viewer = await signUp("wg-rt-viewer");
+
+    expectStatus(
+      await call(admin, "PATCH", `/api/v1/user/setPrivileges/${viewer.id}`, {
+        roles: ["user"],
+        permissions: ["wg:endpoint:view"],
+      }),
+      200,
+    );
+
+    const refreshed = expectStatus(
+      await call(null, "POST", "/api/v1/auth/refresh", {
+        refreshToken: viewer.refresh,
+      }),
+      200,
+    ).data;
+    const socket = await connectSocket({
+      ...viewer,
+      access: (refreshed.tokens ?? refreshed).accessToken,
+    });
+
+    try {
+      expect(await socket.join("wg-endpoints")).to.deep.equal({ ok: true });
+
+      const changed = socket.next<any>("user:privileges-changed");
+      const revoked = socket.next<any>("room:revoked");
+
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/user/setPrivileges/${viewer.id}`, {
+          roles: ["user"],
+          permissions: [],
+        }),
+        200,
+      );
+
+      expect((await changed).permissions).to.not.include("wg:endpoint:view");
+      expect(await revoked).to.deep.equal({ type: "wg-endpoints", id: "all" });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("пир ушёл к другому держателю — прежнему wg:peer:deleted", async () => {
+    const iface = expectStatus(
+      await call(admin, "POST", "/api/v1/wg/interfaces", {
+        nodeId: target.id,
+        name: "wg7",
+        listenPort: 51897,
+        addressCidr: "10.197.0.1/24",
+      }),
+      201,
+    ).data;
+    const peer = expectStatus(
+      await call(admin, "POST", "/api/v1/wg/peers", {
+        interfaceId: iface.id,
+        name: "rt-peer",
+        userId: user.id,
+      }),
+      201,
+    ).data;
+    const holder = await connectSocket(user);
+
+    try {
+      const gone = holder.next<any>("wg:peer:deleted", d => d.id === peer.id);
+
+      expectStatus(
+        await call(admin, "POST", `/api/v1/wg/peers/${peer.id}/assign`, {
+          userId: admin.id,
+        }),
+        200,
+      );
+      await gone;
+    } finally {
+      holder.close();
+      await call(admin, "DELETE", `/api/v1/wg/peers/${peer.id}`);
+      await call(admin, "DELETE", `/api/v1/wg/interfaces/${iface.id}`);
     }
   });
 
@@ -258,9 +351,7 @@ describe("wireguard: обновления по сокетам", () => {
     await deleted;
   });
 
-  it("статус интерфейса из отчёта агента — в комнаты нод всех копий, DTO полный", async () => {
-    // Страница ноды слушает только свою комнату: события интерфейса уходили
-    // лишь в комнату интерфейса и обзор — статус на странице ноды не менялся.
+  it("статус интерфейса из отчёта агента (основная копия и реплика) — в комнату списка интерфейсов, DTO полный", async () => {
     const iface = expectStatus(
       await call(admin, "POST", "/api/v1/wg/interfaces", {
         nodeId: target.id,
@@ -282,10 +373,10 @@ describe("wireguard: обновления по сокетам", () => {
     const relayPage = await connectSocket(admin);
 
     try {
-      expect(await targetPage.join("wg-node", target.id)).to.deep.equal({
+      expect(await targetPage.join("wg-interfaces")).to.deep.equal({
         ok: true,
       });
-      expect(await relayPage.join("wg-node", relay.id)).to.deep.equal({
+      expect(await relayPage.join("wg-interfaces")).to.deep.equal({
         ok: true,
       });
 

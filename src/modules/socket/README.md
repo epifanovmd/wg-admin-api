@@ -18,6 +18,7 @@ src/modules/socket/
 ├── socket-validation.ts             # onValidated(): схема, лимит частоты, ack с кодом ошибки
 ├── socket-rooms.ts                  # asSocketRoomProvider(), asSocketRoomPolicy()
 ├── socket-room.service.ts           # SocketRoomService: подписки на комнаты и их пересмотр
+├── permission-room.policy.ts        # permissionRoomPolicy(): политика комнаты списка по праву
 ├── socket.types.ts                  # Типы TSocket, TServer, ISocketEvents, ISocketEmitEvents
 └── index.ts                         # Публичный API модуля
 ```
@@ -93,6 +94,16 @@ JWT-аутентификация при каждом подключении. И�
 сокет выходит и получает `room:revoked { type, id }`. Вызывают модули при смене прав
 пользователя и смене владельца сущности.
 
+### permissionRoomPolicy — комнаты списков
+
+`permissionRoomPolicy(type, permission)` — фабрика класса политики комнаты списка: одна
+комната на тип (имя комнаты = `type`, `id` подписки игнорируется), вход — по актуальному
+праву через `AccessService`. Регистрация в модуле списка:
+
+```ts
+asSocketRoomPolicy(permissionRoomPolicy(USERS_ROOM, UserPermissions.VIEW));
+```
+
 ### onValidated — входящие события с проверкой
 
 `onValidated(socket, event, schema, handler, { rateLimit? })` — единственный способ
@@ -155,8 +166,30 @@ declare module "../socket/socket.types" {
 
 ## Взаимодействие
 
-Listeners регистрируют auth, user, profile, session, audit, jobs, wg-node,
-wg-interface, wg-peer, wg-stats; политики комнат — jobs (`job`) и модули wg-*
-(см. их README). Room provider-ов нет.
+Listeners регистрируют auth, user (+ role), profile, session, api-key, audit, jobs,
+wg-node, wg-endpoint, wg-interface, wg-peer, wg-forward, wg-socks, wg-stats, wg-provision.
+Room provider-ов нет. Политики комнат:
+
+| Комната                 | Политика (модуль)                               | Вход                                |
+| ----------------------- | ----------------------------------------------- | ----------------------------------- |
+| `users`                 | `permissionRoomPolicy` (user)                   | `user:view`                         |
+| `roles`                 | `permissionRoomPolicy` (user, провайдеры role)  | `role:view`                         |
+| `api-keys`              | `permissionRoomPolicy` (api-key)                | `apikey:view`                       |
+| `audit`                 | `permissionRoomPolicy` (audit)                  | `audit:view`                        |
+| `wg-nodes`              | `permissionRoomPolicy` (wg-node)                | `wg:node:view`                      |
+| `wg-interfaces`         | `permissionRoomPolicy` (wg-interface)           | `wg:interface:view`                 |
+| `wg-peers`              | `permissionRoomPolicy` (wg-peer)                | `wg:peer:view`                      |
+| `wg-endpoints`          | своя политика (wg-endpoint)                     | `wg:endpoint:view`                  |
+| `wg-forwards`           | своя политика (wg-forward)                      | `wg:forward:view`                   |
+| `wg-socks`              | своя политика (wg-socks)                        | `wg:socks:view`                     |
+| `wg-overview`           | своя политика (wg-stats)                        | `wg:stats:view`                     |
+| `wg-node_<id>`          | `wg-node` (wg-node)                             | `wg:node:view`                      |
+| `wg-interface_<id>`     | `wg-interface` (wg-interface)                   | `wg:interface:view`                 |
+| `wg-peer_<id>`          | `wg-peer` (wg-peer)                             | `wg:peer:view` или свой пир         |
+| `wg-peers-own_<userId>` | `wg-peers-own` (wg-peer)                        | только своя, `wg:peer:own`          |
+| `job_<id>`              | `job` (jobs)                                    | суперпользователь, владелец, policy |
+| `user_<id>`             | без политики — входит каждый сокет пользователя | —                                   |
+
+События по комнатам — в README модулей.
 
 Модули регистрируют свои handlers и listeners через `SOCKET_HANDLER` и `SOCKET_EVENT_LISTENER` (`asSocketHandler`, `asSocketListener`), комнаты — через `asSocketRoomProvider` / `asSocketRoomPolicy`. SocketBootstrap собирает их через `@multiInject` и активирует при старте.

@@ -4,13 +4,19 @@ import { expect } from "chai";
 import sinon from "sinon";
 
 import { decodeCursor, encodeCursor, logger } from "../../core";
-import { createMockRepository, uuid } from "../../test/helpers";
+import {
+  createMockEventBus,
+  createMockRepository,
+  uuid,
+} from "../../test/helpers";
 import { AuditService } from "./audit.service";
 import { AUDIT_RETENTION_DAYS, AuditEventType } from "./audit.types";
+import { AuditRecordedEvent } from "./events";
 
 describe("AuditService", () => {
   let repo: ReturnType<typeof createMockRepository> & Record<string, any>;
   let service: AuditService;
+  let eventBus: ReturnType<typeof createMockEventBus>;
 
   const makeEvent = (i: number) => ({
     id: `00000000-0000-0000-0000-00000000000${i}`,
@@ -25,13 +31,32 @@ describe("AuditService", () => {
 
   beforeEach(() => {
     repo = createMockRepository() as any;
-    repo.insert = sinon.stub().resolves();
+    repo.insert = sinon.stub().resolves({
+      generatedMaps: [{ id: "a1", createdAt: new Date(Date.UTC(2026, 0, 1)) }],
+    });
     repo.findFeed = sinon.stub().resolves([]);
     repo.deleteOlderThan = sinon.stub().resolves(0);
-    service = new AuditService(repo as any);
+    eventBus = createMockEventBus();
+    service = new AuditService(repo as any, eventBus as any);
   });
 
   describe("record", () => {
+    it("записанное событие — AuditRecordedEvent с DTO записи", async () => {
+      await service.record({
+        type: AuditEventType.LOGIN_FAILED,
+        actorId: uuid(),
+      });
+
+      const event = eventBus.emit.firstCall.args[0];
+
+      expect(event).to.be.instanceOf(AuditRecordedEvent);
+      expect(event.event).to.include({
+        id: "a1",
+        type: "auth.login.failed",
+        actorId: uuid(),
+      });
+    });
+
     it("stores the entry with clipped strings", async () => {
       await service.record({
         type: AuditEventType.LOGIN_FAILED,

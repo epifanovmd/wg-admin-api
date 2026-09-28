@@ -4,6 +4,7 @@ import type { QueryDeepPartialEntity } from "typeorm/query-builder/QueryPartialE
 import {
   decodeCursor,
   encodeCursor,
+  EventBus,
   ICursorPageDto,
   Injectable,
   logger,
@@ -14,6 +15,7 @@ import { AuditError } from "./audit.errors";
 import { AuditRepository, IAuditCursor } from "./audit.repository";
 import { AUDIT_RETENTION_DAYS, IAuditEntry, IAuditFilter } from "./audit.types";
 import type { AuditEvent } from "./audit-event.entity";
+import { AuditRecordedEvent } from "./events";
 
 const MS_IN_DAY = 86_400_000;
 
@@ -41,19 +43,30 @@ const parseCursor = (cursor?: string): IAuditCursor | undefined => {
 export class AuditService {
   constructor(
     @inject(AuditRepository) private readonly _repo: AuditRepository,
+    @inject(EventBus) private readonly _eventBus: EventBus,
   ) {}
 
-  /** Записать событие; ошибка — только в лог. */
+  /** Записать событие (эмитит `AuditRecordedEvent`); ошибка — только в лог. */
   async record(entry: IAuditEntry): Promise<void> {
+    const row = {
+      type: entry.type,
+      actorId: entry.actorId ?? null,
+      subjectId: clip(entry.subjectId, 255),
+      ip: clip(entry.ip, 45),
+      userAgent: clip(entry.userAgent, 500),
+      meta: entry.meta ?? {},
+    };
+
     try {
-      await this._repo.insert({
-        type: entry.type,
-        actorId: entry.actorId ?? null,
-        subjectId: clip(entry.subjectId, 255),
-        ip: clip(entry.ip, 45),
-        userAgent: clip(entry.userAgent, 500),
-        meta: (entry.meta ?? {}) as QueryDeepPartialEntity<AuditEvent["meta"]>,
+      const result = await this._repo.insert({
+        ...row,
+        meta: row.meta as QueryDeepPartialEntity<AuditEvent["meta"]>,
       });
+      const saved = { ...row, ...result.generatedMaps[0] } as AuditEvent;
+
+      this._eventBus.emit(
+        new AuditRecordedEvent(AuditEventDto.fromEntity(saved)),
+      );
     } catch (err) {
       logger.error({ err, type: entry.type }, "[Audit] Write failed");
     }

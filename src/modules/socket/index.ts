@@ -1,3 +1,4 @@
+export * from "./permission-room.policy";
 export * from "./socket.bootstrap";
 export * from "./socket.helpers";
 export * from "./socket.module";

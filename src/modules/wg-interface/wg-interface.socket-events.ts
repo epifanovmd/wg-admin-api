@@ -6,7 +6,7 @@ import type { WgInterfaceDto } from "./dto";
 
 declare module "../socket/socket.types" {
   interface ISocketEmitEvents {
-    /** Интерфейс создан/изменён — в комнату интерфейса и overview. */
+    /** Интерфейс создан/изменён — в комнату списка интерфейсов и интерфейса. */
     "wg:interface:updated": (...args: [WgInterfaceDto]) => void;
     /** Интерфейс удалён. */
     "wg:interface:deleted": (...args: [{ id: string }]) => void;

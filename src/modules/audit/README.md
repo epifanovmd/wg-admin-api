@@ -8,11 +8,14 @@
 
 ```
 src/modules/audit/
-├── audit.module.ts
+├── audit.module.ts         # провайдеры, listeners, политика комнаты audit
 ├── audit-event.entity.ts   # AuditEvent
 ├── audit.repository.ts     # лента с курсором, удаление старых
-├── audit.service.ts        # record (без исключений), list, cleanup
+├── audit.service.ts        # record (без исключений, эмитит AuditRecordedEvent), list, cleanup
 ├── audit.listener.ts       # EventBus → журнал
+├── audit-feed.listener.ts  # AuditFeedListener: новая запись → сокет
+├── audit.socket-events.ts  # audit:created в контракте сокета
+├── events/                 # AuditRecordedEvent
 ├── audit.controller.ts     # 2 эндпоинта
 ├── audit-cleanup.job.ts    # AuditCleanupJob (cron)
 ├── audit.dto.ts            # AuditEventDto
@@ -69,6 +72,13 @@ src/modules/audit/
 очередь стоила бы такой же вставки в таблицу pg-boss плюс работу воркера. Ошибка БД
 ловится в `AuditService.record` и пишется в лог — сценарий, породивший событие, не
 ломается. Цена: при недоступной БД событие теряется (как и основная операция).
+
+## Сокет
+
+`AuditService.record` после вставки эмитит `AuditRecordedEvent(dto)`. `AuditFeedListener`
+шлёт `audit:created` (`AuditEventDto`) в комнату общего журнала `audit` (`AUDIT_ROOM`,
+`permissionRoomPolicy`, право `audit:view`) и автору записи (`toUser(actorId)`) — лента
+«Моя активность».
 
 ## Задачи
 

@@ -3,12 +3,7 @@ import { inject } from "inversify";
 import { EventBus, Injectable, logger } from "../../core";
 import { ISocketEventListener, SocketEmitterService } from "../socket";
 import { WgEndpointService, WgEndpointUpdatedEvent } from "../wg-endpoint";
-import {
-  WG_OVERVIEW_ROOM,
-  WgNodeHostChangedEvent,
-  wgNodeRoom,
-  WgNodeService,
-} from "../wg-node";
+import { WgNodeHostChangedEvent, WgNodeService } from "../wg-node";
 import {
   WgInterfaceCreatedEvent,
   WgInterfaceDeletedEvent,
@@ -18,8 +13,11 @@ import { WgInterfaceRepository } from "./wg-interface.repository";
 import { wgInterfaceRoom } from "./wg-interface-room.policy";
 import { WgRelaySyncService } from "./wg-relay-sync.service";
 
+/** Комната списка интерфейсов: право `wg:interface:view`. */
+export const WG_INTERFACES_ROOM = "wg-interfaces";
+
 /**
- * Интерфейсы: изменения — подписчикам комнат; смена точки подключения —
+ * Интерфейсы: изменения — в комнату списка интерфейсов и интерфейса; смена точки подключения —
  * пересинхронизация релей-линков и поднятие версий затронутых нод
  * (клиентские конфиги при этом менять не нужно — адрес стабилен).
  */
@@ -44,14 +42,8 @@ export class WgInterfaceListener implements ISocketEventListener {
     this._eventBus.on(WgInterfaceUpdatedEvent, ({ iface }) =>
       this._send(iface),
     );
-    this._eventBus.on(WgInterfaceDeletedEvent, ({ ifaceId, nodeIds }) => {
-      const rooms = [
-        WG_OVERVIEW_ROOM,
-        wgInterfaceRoom(ifaceId),
-        ...new Set(nodeIds.map(wgNodeRoom)),
-      ];
-
-      for (const room of rooms) {
+    this._eventBus.on(WgInterfaceDeletedEvent, ({ ifaceId }) => {
+      for (const room of [WG_INTERFACES_ROOM, wgInterfaceRoom(ifaceId)]) {
         this._emitter.toRoom(room, "wg:interface:deleted", { id: ifaceId });
       }
     });
@@ -83,21 +75,12 @@ export class WgInterfaceListener implements ISocketEventListener {
   }
 
   private _send(iface: WgInterfaceUpdatedEvent["iface"]): void {
+    this._emitter.toRoom(WG_INTERFACES_ROOM, "wg:interface:updated", iface);
     this._emitter.toRoom(
       wgInterfaceRoom(iface.id),
       "wg:interface:updated",
       iface,
     );
-    this._emitter.toRoom(WG_OVERVIEW_ROOM, "wg:interface:updated", iface);
-    // Страницы нод основной копии и реплик.
-    const nodeIds = new Set([
-      iface.nodeId,
-      ...iface.replicas.map(replica => replica.nodeId),
-    ]);
-
-    for (const nodeId of nodeIds) {
-      this._emitter.toRoom(wgNodeRoom(nodeId), "wg:interface:updated", iface);
-    }
   }
 
   /** Точка подключения изменилась: линки и версии конфигурации нод. */

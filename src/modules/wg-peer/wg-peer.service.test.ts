@@ -232,6 +232,44 @@ describe("WgPeerService", () => {
     }
   });
 
+  it("assign: событие изменения несёт прежнего держателя", async () => {
+    repo.findWithRelations
+      .onFirstCall()
+      .resolves(makePeer({ userId: owner.userId }))
+      .onSecondCall()
+      .resolves(makePeer({ userId: uuid3() }));
+
+    await service.assign(uuid(), { userId: uuid3() });
+
+    const event = eventBus.emit.lastCall.args[0];
+
+    expect(event.previousUserId).to.equal(owner.userId);
+  });
+
+  it("revoke: событие изменения несёт прежнего держателя", async () => {
+    repo.findWithRelations
+      .onFirstCall()
+      .resolves(makePeer({ userId: owner.userId }))
+      .onSecondCall()
+      .resolves(makePeer({ userId: null }));
+
+    await service.revoke(uuid());
+
+    expect(eventBus.emit.lastCall.args[0].previousUserId).to.equal(
+      owner.userId,
+    );
+  });
+
+  it("assign тому же держателю — прежнего нет", async () => {
+    repo.findWithRelations.callsFake(async () =>
+      makePeer({ userId: owner.userId }),
+    );
+
+    await service.assign(uuid(), { userId: owner.userId });
+
+    expect(eventBus.emit.lastCall.args[0].previousUserId).to.equal(null);
+  });
+
   it("disableExpired: выключает с причиной expired и метит ноды", async () => {
     const peer = makePeer({ expiresAt: new Date(Date.now() - 1000) });
 

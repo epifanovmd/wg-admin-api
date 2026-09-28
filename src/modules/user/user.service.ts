@@ -42,6 +42,7 @@ import { EmailChangeService } from "./email-change.service";
 import {
   EmailVerifiedEvent,
   PasswordChangedEvent,
+  UserChangedEvent,
   UserDeletedEvent,
   UsernameChangedEvent,
   UserPrivilegesChangedEvent,
@@ -180,6 +181,8 @@ export class UserService {
 
         return savedUser.id;
       });
+
+      this._eventBus.emit(new UserChangedEvent(userId));
 
       return this.getUser(userId);
     } catch (err) {
@@ -648,6 +651,8 @@ export class UserService {
         ? UserError.PHONE_TAKEN()
         : UserError.EMAIL_TAKEN();
     }
+
+    this._eventBus.emit(new UserChangedEvent(userId));
   }
 
   /** Политики пароля, зарегистрированные другими модулями (auth). */

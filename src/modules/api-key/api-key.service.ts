@@ -110,6 +110,15 @@ export class ApiKeyService {
     return toPage(keys.map(ApiKeyDto.fromEntity), total, page);
   }
 
+  /** Ключ по ID (без секрета). */
+  async get(id: string): Promise<ApiKeyDto> {
+    const apiKey = await this._keys.findById(id);
+
+    if (!apiKey) throw ApiKeyError.NOT_FOUND();
+
+    return ApiKeyDto.fromEntity(apiKey);
+  }
+
   /** Отозвать ключ; повторный отзыв ничего не меняет. */
   async revoke(id: string, revokedBy?: string): Promise<void> {
     const apiKey = await this._keys.findById(id);

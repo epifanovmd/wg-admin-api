@@ -24,7 +24,8 @@ src/modules/user/
 ├── user.errors.ts                      # UserError — коды USER_*
 ├── user.permissions.ts                 # UserPermissions (definePermissions("user"))
 ├── user.controller.ts                  # REST, /api/v1/user
-├── user.listener.ts                    # EventBus → socket; права роли → события пользователей
+├── user.listener.ts                    # EventBus → socket (адресно и комната users); права роли → события пользователей
+├── user.socket-events.ts               # user:* в контракте сокета
 ├── user-grant.resolver.ts              # grantOfUser, UserGrantResolver (IGrantResolver ядра)
 ├── user.module.ts
 ├── dto/                                # UserDto, списки/опции, тела запросов
@@ -215,11 +216,18 @@ HTTP-контекста (политики сокет-комнат, слушат�
 | `EmailChangedEvent`          | email сменён после подтверждения                                          | `userId`, `oldEmail`, `newEmail`        |
 | `EmailVerifiedEvent`         | email подтверждён (в т. ч. сменой email)                                  | `userId`                                |
 | `PasswordChangedEvent`       | смена (`"change"`, с `currentSessionId`) / сброс (`"reset"`, модуль auth) | `userId`, `method`, `currentSessionId?` |
+| `UserChangedEvent`           | `createUser`, изменение контактов (email/телефон)                         | `userId`                                |
 | `UserDeletedEvent`           | пользователь удалён                                                       | `userId`                                |
 | `UserPrivilegesChangedEvent` | `setPrivileges`; изменение прав роли — для каждого её пользователя        | `userId`, `roles`, `permissions`        |
 | `UsernameChangedEvent`       | username изменён                                                          | `userId`, `username`                    |
 
 ## UserListener
+
+Комната списка пользователей `users` (`USERS_ROOM`, `permissionRoomPolicy`, право
+`user:view`): `user:updated` — актуальный `UserDto` на `UserChangedEvent`,
+`UserPrivilegesChangedEvent`, `EmailChangedEvent`, `EmailVerifiedEvent`,
+`UsernameChangedEvent`, `ProfileUpdatedEvent` (profile); `user:deleted { id }` — на
+`UserDeletedEvent`. Адресные реакции (`toUser`):
 
 | Событие                       | Реакция                                                                                                          |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |

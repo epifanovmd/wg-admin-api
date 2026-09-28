@@ -1,10 +1,18 @@
 import { Module } from "../../core";
-import { asSocketListener, asSocketRoomPolicy } from "../socket";
+import {
+  asSocketListener,
+  asSocketRoomPolicy,
+  permissionRoomPolicy,
+} from "../socket";
 import { asWgEndpointUsage } from "../wg-endpoint";
 import { WgInterfaceController } from "./wg-interface.controller";
 import { WgInterface } from "./wg-interface.entity";
 import { WgInterfaceGuard } from "./wg-interface.guard";
-import { WgInterfaceListener } from "./wg-interface.listener";
+import {
+  WG_INTERFACES_ROOM,
+  WgInterfaceListener,
+} from "./wg-interface.listener";
+import { WgInterfacePermissions } from "./wg-interface.permissions";
 import { WgInterfaceRepository } from "./wg-interface.repository";
 import { WgInterfaceService } from "./wg-interface.service";
 import { WgInterfaceEndpointUsage } from "./wg-interface-endpoint-usage";
@@ -25,6 +33,12 @@ import { WgRelaySyncService } from "./wg-relay-sync.service";
     WgInterfaceService,
     WgInterfaceController,
     asSocketRoomPolicy(WgInterfaceRoomPolicy),
+    asSocketRoomPolicy(
+      permissionRoomPolicy(
+        WG_INTERFACES_ROOM,
+        WgInterfacePermissions.INTERFACE_VIEW,
+      ),
+    ),
     asSocketListener(WgInterfaceListener),
     asWgEndpointUsage(WgInterfaceEndpointUsage),
   ],

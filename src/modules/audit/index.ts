@@ -4,5 +4,8 @@ export * from "./audit.errors";
 export * from "./audit.module";
 export * from "./audit.permissions";
 export * from "./audit.service";
+export * from "./audit.socket-events";
 export * from "./audit.types";
 export * from "./audit-event.entity";
+export * from "./audit-feed.listener";
+export * from "./events";

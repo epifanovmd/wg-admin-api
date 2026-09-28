@@ -6,8 +6,8 @@ import { JobUpdatedEvent } from "./events";
 import { jobRoom } from "./job-room.policy";
 
 /**
- * `job:updated` — в комнату задачи и в комнату её scope
- * (`<scopeType>_<scopeId>`), а без scope — владельцу.
+ * `job:updated` — в комнату задачи, в комнату её scope
+ * (`<scopeType>_<scopeId>`) и владельцу (его список задач).
  */
 @Injectable()
 export class JobsSocketListener implements ISocketEventListener {
@@ -27,7 +27,8 @@ export class JobsSocketListener implements ISocketEventListener {
           "job:updated",
           job,
         );
-      } else if (job.ownerId) {
+      }
+      if (job.ownerId) {
         this._emitter.toUser(job.ownerId, "job:updated", job);
       }
     });

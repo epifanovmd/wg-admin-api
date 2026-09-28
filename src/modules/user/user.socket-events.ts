@@ -1,3 +1,5 @@
+import type { UserDto } from "./dto";
+
 /**
  * Сокет-события модуля: дополняют контракт `socket.types` (declare module
  * работает только с модулем-объявлением, не с index).
@@ -39,6 +41,10 @@ declare module "../socket/socket.types" {
     "user:privileges-changed": (
       ...args: [ISocketUserPrivilegesChangedPayload]
     ) => void;
+    /** Пользователь создан или изменён — в комнату списка пользователей */
+    "user:updated": (...args: [UserDto]) => void;
+    /** Пользователь удалён — в комнату списка пользователей */
+    "user:deleted": (...args: [{ id: string }]) => void;
     /** Username пользователя изменён */
     "user:username-changed": (
       ...args: [ISocketUserUsernameChangedPayload]

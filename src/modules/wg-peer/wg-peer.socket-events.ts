@@ -6,9 +6,9 @@ import type { WgPeerDto } from "./dto";
 
 declare module "../socket/socket.types" {
   interface ISocketEmitEvents {
-    /** Пир создан/изменён — в комнату пира, overview и держателю. */
+    /** Пир создан/изменён — в комнату списка пиров, пира и держателю. */
     "wg:peer:updated": (...args: [WgPeerDto]) => void;
-    /** Пир удалён. */
+    /** Пир удалён или ушёл от держателя (ему — адресно). */
     "wg:peer:deleted": (...args: [{ id: string }]) => void;
   }
 }
