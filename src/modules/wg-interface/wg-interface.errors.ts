@@ -65,6 +65,11 @@ export const WgInterfaceError = defineErrors("WG_IFACE", {
     status: HttpStatus.BAD_REQUEST,
     message: "Закрепить можно только основную ноду или ноду реплики",
   },
+  ACTIVE_REPLICA_DOWN: {
+    status: HttpStatus.CONFLICT,
+    message:
+      "Интерфейс на этой копии не поднят (нет агента или ошибка) — закрепить на ней трафик нельзя",
+  },
   MOVE_SAME_NODE: {
     status: HttpStatus.BAD_REQUEST,
     message: "Интерфейс уже на этой ноде",

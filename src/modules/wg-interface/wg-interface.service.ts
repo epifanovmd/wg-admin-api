@@ -29,6 +29,7 @@ import { WgInterface } from "./wg-interface.entity";
 import { WgInterfaceError } from "./wg-interface.errors";
 import { WgInterfaceGuard } from "./wg-interface.guard";
 import {
+  copyStatus,
   emitInterfaceUpdated,
   findInterfaceOrFail,
   interfaceCopyNodes,
@@ -198,6 +199,15 @@ export class WgInterfaceService {
         !interfaceCopyNodes(iface).includes(body.activeReplicaNodeId)
       ) {
         throw WgInterfaceError.ACTIVE_REPLICA_INVALID();
+      }
+      // Закреплённая копия — единственный кандидат релея: не поднята —
+      // клиенты остались бы без связи.
+      if (
+        body.activeReplicaNodeId !== null &&
+        body.activeReplicaNodeId !== iface.activeReplicaNodeId &&
+        copyStatus(iface, body.activeReplicaNodeId) !== EWgInterfaceStatus.Up
+      ) {
+        throw WgInterfaceError.ACTIVE_REPLICA_DOWN();
       }
       iface.activeReplicaNodeId = body.activeReplicaNodeId;
     }

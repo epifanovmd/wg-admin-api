@@ -1109,6 +1109,14 @@ describe("wireguard", () => {
 
       // Копия упала — из резерва выходит; поднялась снова — возвращается.
       await reportReplica("error");
+      // Закрепить трафик на неподнятой копии нельзя — клиенты остались бы без связи.
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/wg/interfaces/${iface.id}`, {
+          activeReplicaNodeId: nodeC.id,
+        }),
+        409,
+        "WG_IFACE_ACTIVE_REPLICA_DOWN",
+      );
       expect(paths(await agentState(relayKey))).to.deep.equal([
         [nodeA.id, "tunnel"],
         [nodeA.id, "direct"],
