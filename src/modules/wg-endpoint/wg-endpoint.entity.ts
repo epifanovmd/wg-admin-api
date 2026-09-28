@@ -61,7 +61,6 @@ export class WgEndpoint {
   @Column({
     type: "enum",
     enum: EWgEndpointRoute,
-    enumName: "wg_endpoints_route_enum",
     default: EWgEndpointRoute.Auto,
   })
   route!: EWgEndpointRoute;
