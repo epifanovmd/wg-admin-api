@@ -300,6 +300,11 @@ describe("wireguard: обновления по сокетам", () => {
     );
     await updated;
 
+    // Интерфейс подключили к точке — «куда ведёт» в списке точек.
+    const targets = ws.next<any>(
+      "wg:endpoint:updated",
+      e => e.id === endpoint.id && e.interfaces.length === 1,
+    );
     const iface = expectStatus(
       await call(admin, "POST", "/api/v1/wg/interfaces", {
         nodeId: target.id,
@@ -310,6 +315,31 @@ describe("wireguard: обновления по сокетам", () => {
       }),
       201,
     ).data;
+
+    expect((await targets).interfaces[0]).to.include({
+      interfaceId: iface.id,
+      interfaceName: "wg9",
+      nodeId: target.id,
+      port: 51899,
+    });
+
+    // Точку переименовали — DTO интерфейса с новой точкой.
+    const renamed = ws.next<any>(
+      "wg:interface:updated",
+      i => i.id === iface.id && i.endpoint?.name === "rt-ep-2",
+    );
+
+    expectStatus(
+      await call(admin, "PATCH", `/api/v1/wg/endpoints/${endpoint.id}`, {
+        name: "rt-ep-2",
+      }),
+      200,
+    );
+    expect((await renamed).endpoint).to.include({
+      mode: "relay",
+      relayNodeId: relay.id,
+      relayNodeName: "rt-relay",
+    });
 
     expect(await ws.join("wg-node", target.id)).to.deep.equal({ ok: true });
 
@@ -334,10 +364,16 @@ describe("wireguard: обновления по сокетам", () => {
       status: "ok",
     });
 
+    const detached = ws.next<any>(
+      "wg:endpoint:updated",
+      e => e.id === endpoint.id && e.interfaces.length === 0,
+    );
+
     expectStatus(
       await call(admin, "DELETE", `/api/v1/wg/interfaces/${iface.id}`),
       204,
     );
+    await detached;
 
     const deleted = ws.next<any>(
       "wg:endpoint:deleted",

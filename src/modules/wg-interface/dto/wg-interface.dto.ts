@@ -1,4 +1,5 @@
 import { BaseDto } from "../../../core";
+import type { EWgEndpointMode } from "../../wg-endpoint";
 import type { EWgNodeStatus } from "../../wg-node";
 import type { WgInterface } from "../wg-interface.entity";
 import type { EWgInterfaceStatus } from "../wg-interface.types";
@@ -26,6 +27,15 @@ export interface IWgInterfaceReplicaDto {
   statusMessage: string | null;
 }
 
+/** Точка подключения интерфейса: через что к нему приходят клиенты. */
+export interface IWgInterfaceEndpointDto {
+  name: string;
+  /** `relay` — трафик пересылает релей панели и переключает на копии. */
+  mode: EWgEndpointMode;
+  relayNodeId: string | null;
+  relayNodeName: string | null;
+}
+
 export class WgInterfaceDto extends BaseDto {
   id: string;
   nodeId: string;
@@ -41,6 +51,8 @@ export class WgInterfaceDto extends BaseDto {
   dns: string | null;
   mtu: number | null;
   endpointId: string | null;
+  /** Точка подключения (если загружена связь). */
+  endpoint: IWgInterfaceEndpointDto | null;
   endpointPort: number | null;
   /** Итоговый `host:port` для клиентских конфигов. */
   clientEndpoint: string | null;
@@ -74,6 +86,14 @@ export class WgInterfaceDto extends BaseDto {
     this.dns = entity.dns;
     this.mtu = entity.mtu;
     this.endpointId = entity.endpointId;
+    this.endpoint = entity.endpoint
+      ? {
+          name: entity.endpoint.name,
+          mode: entity.endpoint.mode,
+          relayNodeId: entity.endpoint.relayNodeId,
+          relayNodeName: entity.endpoint.relayNode?.name ?? null,
+        }
+      : null;
     this.endpointPort = entity.endpointPort;
     this.clientEndpoint = resolveClientEndpoint(entity);
     this.natEnabled = entity.natEnabled;

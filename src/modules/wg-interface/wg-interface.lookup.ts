@@ -22,10 +22,11 @@ export const emitInterfaceUpdated = async (
   repo: WgInterfaceRepository,
   eventBus: EventBus,
   id: string,
+  previousEndpointId: string | null = null,
 ): Promise<WgInterfaceDto> => {
   const dto = WgInterfaceDto.fromEntity(await findInterfaceOrFail(repo, id));
 
-  eventBus.emit(new WgInterfaceUpdatedEvent(dto));
+  eventBus.emit(new WgInterfaceUpdatedEvent(dto, previousEndpointId));
 
   return dto;
 };

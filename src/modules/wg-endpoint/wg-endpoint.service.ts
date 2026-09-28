@@ -1,4 +1,5 @@
 import { inject, multiInject, optional } from "inversify";
+import { In } from "typeorm";
 
 import type { IPaginatedDto, Pagination } from "../../core";
 import {
@@ -18,6 +19,7 @@ import {
   WgEndpointChangedEvent,
   WgEndpointCreatedEvent,
   WgEndpointDeletedEvent,
+  WgEndpointInterfacesChangedEvent,
   WgEndpointUpdatedEvent,
 } from "./events";
 import { relayTunnelCapacity } from "./relay-tunnel";
@@ -141,6 +143,24 @@ export class WgEndpointService {
     } catch (err) {
       if (isUniqueViolation(err)) throw WgEndpointError.NAME_TAKEN();
       throw err;
+    }
+  }
+
+  /**
+   * Интерфейсы точек изменились — актуальные DTO подписчикам списка точек
+   * («куда ведёт»). Удалённые и пустые id пропускаются.
+   */
+  async publishInterfacesChanged(
+    endpointIds: Array<string | null | undefined>,
+  ): Promise<void> {
+    const ids = [...new Set(endpointIds.filter((id): id is string => !!id))];
+
+    if (ids.length === 0) return;
+
+    const endpoints = await this._endpoints.find({ where: { id: In(ids) } });
+
+    for (const dto of await this._toDtos(endpoints)) {
+      this._eventBus.emit(new WgEndpointInterfacesChangedEvent(dto));
     }
   }
 

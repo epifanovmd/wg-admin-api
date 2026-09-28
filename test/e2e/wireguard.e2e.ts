@@ -1116,6 +1116,13 @@ describe("wireguard", () => {
       ).data;
 
       expect(current.servingNodeId).to.equal(nodeC.id);
+      // Через что приходят клиенты: точка, её режим и релей — для UI.
+      expect(current.endpoint).to.deep.equal({
+        name: endpoint.name,
+        mode: "relay",
+        relayNodeId: relayNode.id,
+        relayNodeName: relayNode.name,
+      });
       expect(current.replicas[0].status).to.equal("up");
 
       // Ошибки.

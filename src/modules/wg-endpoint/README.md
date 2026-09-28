@@ -54,4 +54,7 @@ forwardMode; модуль wg-interface пересинхронизирует ли
 сохранении (в том числе названия и описания), для UI.
 
 Сокет: комната `wg-endpoints` (право `wg:endpoint:view`) —
-`wg:endpoint:updated` (создание и любое изменение), `wg:endpoint:deleted`.
+`wg:endpoint:updated` (создание, любое изменение и изменение её интерфейсов —
+`WgEndpointInterfacesChangedEvent`, только для UI), `wg:endpoint:deleted`.
+Изменение точки (`WgEndpointChangedEvent`) заново рассылает DTO её интерфейсов
+(в них — `endpoint`: имя, режим, релей).

@@ -167,6 +167,7 @@ export class WgInterfaceService {
 
     const iface = await findInterfaceOrFail(this._repo, id);
     const previousRelayNodeId = iface.endpoint?.relayNodeId ?? null;
+    const previousEndpointId = iface.endpointId;
 
     if (body.name !== undefined) iface.name = body.name;
     if (body.listenPort !== undefined) iface.listenPort = body.listenPort;
@@ -239,7 +240,12 @@ export class WgInterfaceService {
     await this._relaySync.syncRelaySafe(previousRelayNodeId);
     await this._relaySync.syncRelaySafe(endpoint?.relayNodeId);
 
-    return this._emitUpdated(iface.id);
+    return emitInterfaceUpdated(
+      this._repo,
+      this._eventBus,
+      iface.id,
+      previousEndpointId !== iface.endpointId ? previousEndpointId : null,
+    );
   }
 
   /**
@@ -311,7 +317,11 @@ export class WgInterfaceService {
 
     await this._relaySync.syncRelaySafe(iface.endpoint?.relayNodeId);
     this._eventBus.emit(
-      new WgInterfaceDeletedEvent(iface.id, interfaceCopyNodes(iface)),
+      new WgInterfaceDeletedEvent(
+        iface.id,
+        interfaceCopyNodes(iface),
+        iface.endpointId,
+      ),
     );
   }
 

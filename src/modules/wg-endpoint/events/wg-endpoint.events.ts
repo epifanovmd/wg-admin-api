@@ -26,6 +26,14 @@ export class WgEndpointUpdatedEvent {
 }
 
 /** Точка подключения сохранена (любое поле) — для подписчиков UI. */
+/**
+ * Изменились интерфейсы точки (подключение, копии, порт, имя) — только для
+ * UI: «куда ведёт» в списке точек. Доменных реакций нет.
+ */
+export class WgEndpointInterfacesChangedEvent {
+  constructor(public readonly endpoint: WgEndpointDto) {}
+}
+
 export class WgEndpointChangedEvent {
   constructor(public readonly endpoint: WgEndpointDto) {}
 }

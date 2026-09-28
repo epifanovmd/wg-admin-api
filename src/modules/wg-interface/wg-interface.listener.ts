@@ -2,8 +2,13 @@ import { inject } from "inversify";
 
 import { EventBus, Injectable, logger } from "../../core";
 import { ISocketEventListener, SocketEmitterService } from "../socket";
-import { WgEndpointService, WgEndpointUpdatedEvent } from "../wg-endpoint";
+import {
+  WgEndpointChangedEvent,
+  WgEndpointService,
+  WgEndpointUpdatedEvent,
+} from "../wg-endpoint";
 import { WgNodeHostChangedEvent, WgNodeService } from "../wg-node";
+import { WgInterfaceDto } from "./dto";
 import {
   WgInterfaceCreatedEvent,
   WgInterfaceDeletedEvent,
@@ -36,17 +41,28 @@ export class WgInterfaceListener implements ISocketEventListener {
   ) {}
 
   register(): void {
-    this._eventBus.on(WgInterfaceCreatedEvent, ({ iface }) =>
-      this._send(iface),
+    this._eventBus.on(WgInterfaceCreatedEvent, ({ iface }) => {
+      this._send(iface);
+      void this._publishEndpoints([iface.endpointId]);
+    });
+    this._eventBus.on(
+      WgInterfaceUpdatedEvent,
+      ({ iface, previousEndpointId }) => {
+        this._send(iface);
+        void this._publishEndpoints([iface.endpointId, previousEndpointId]);
+      },
     );
-    this._eventBus.on(WgInterfaceUpdatedEvent, ({ iface }) =>
-      this._send(iface),
-    );
-    this._eventBus.on(WgInterfaceDeletedEvent, ({ ifaceId }) => {
+    this._eventBus.on(WgInterfaceDeletedEvent, ({ ifaceId, endpointId }) => {
       for (const room of [WG_INTERFACES_ROOM, wgInterfaceRoom(ifaceId)]) {
         this._emitter.toRoom(room, "wg:interface:deleted", { id: ifaceId });
       }
+      void this._publishEndpoints([endpointId]);
     });
+    // Точка изменилась (режим, релей, маршрут, имя) — у её интерфейсов
+    // меняется описание точки в DTO.
+    this._eventBus.on(WgEndpointChangedEvent, ({ endpoint }) =>
+      this._republishInterfaces(endpoint.id),
+    );
     this._eventBus.on(WgEndpointUpdatedEvent, event =>
       this._onEndpointChanged(event),
     );
@@ -70,6 +86,35 @@ export class WgInterfaceListener implements ISocketEventListener {
       logger.error(
         { err, nodeId },
         "[WG] relay configs not rebuilt after host change",
+      );
+    }
+  }
+
+  /** «Куда ведёт» точек — в комнату списка точек. */
+  private async _publishEndpoints(
+    endpointIds: Array<string | null>,
+  ): Promise<void> {
+    try {
+      await this._endpoints.publishInterfacesChanged(endpointIds);
+    } catch (err) {
+      logger.error({ err, endpointIds }, "[WG] endpoint targets not published");
+    }
+  }
+
+  /** DTO интерфейсов точки заново — в их комнаты. */
+  private async _republishInterfaces(endpointId: string): Promise<void> {
+    try {
+      for (const iface of await this._interfaces.findByEndpoint(endpointId)) {
+        this._send(
+          WgInterfaceDto.fromEntity(
+            (await this._interfaces.findWithRelations(iface.id)) ?? iface,
+          ),
+        );
+      }
+    } catch (err) {
+      logger.error(
+        { err, endpointId },
+        "[WG] interfaces not republished after endpoint change",
       );
     }
   }

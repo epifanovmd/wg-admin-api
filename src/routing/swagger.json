@@ -801,6 +801,34 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"IWgInterfaceEndpointDto": {
+				"description": "Точка подключения интерфейса: через что к нему приходят клиенты.",
+				"properties": {
+					"name": {
+						"type": "string"
+					},
+					"mode": {
+						"$ref": "#/components/schemas/EWgEndpointMode",
+						"description": "`relay` — трафик пересылает релей панели и переключает на копии."
+					},
+					"relayNodeId": {
+						"type": "string",
+						"nullable": true
+					},
+					"relayNodeName": {
+						"type": "string",
+						"nullable": true
+					}
+				},
+				"required": [
+					"name",
+					"mode",
+					"relayNodeId",
+					"relayNodeName"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"EWgInterfaceStatus": {
 				"description": "Фактическое состояние интерфейса, о котором сообщил агент.",
 				"enum": [
@@ -905,6 +933,15 @@
 						"type": "string",
 						"nullable": true
 					},
+					"endpoint": {
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/IWgInterfaceEndpointDto"
+							}
+						],
+						"nullable": true,
+						"description": "Точка подключения (если загружена связь)."
+					},
 					"endpointPort": {
 						"type": "number",
 						"format": "double",
@@ -975,6 +1012,7 @@
 					"dns",
 					"mtu",
 					"endpointId",
+					"endpoint",
 					"endpointPort",
 					"clientEndpoint",
 					"natEnabled",

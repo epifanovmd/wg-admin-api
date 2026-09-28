@@ -6,6 +6,7 @@ import {
   WgEndpointChangedEvent,
   WgEndpointCreatedEvent,
   WgEndpointDeletedEvent,
+  WgEndpointInterfacesChangedEvent,
 } from "./events";
 import { WG_ENDPOINTS_ROOM } from "./wg-endpoint-room.policy";
 
@@ -23,6 +24,9 @@ export class WgEndpointListener implements ISocketEventListener {
       this._emitter.toRoom(WG_ENDPOINTS_ROOM, "wg:endpoint:updated", endpoint),
     );
     this._eventBus.on(WgEndpointChangedEvent, ({ endpoint }) =>
+      this._emitter.toRoom(WG_ENDPOINTS_ROOM, "wg:endpoint:updated", endpoint),
+    );
+    this._eventBus.on(WgEndpointInterfacesChangedEvent, ({ endpoint }) =>
       this._emitter.toRoom(WG_ENDPOINTS_ROOM, "wg:endpoint:updated", endpoint),
     );
     this._eventBus.on(WgEndpointDeletedEvent, ({ endpointId }) =>

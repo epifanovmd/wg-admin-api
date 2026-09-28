@@ -24,6 +24,7 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
     const qb = this.createQueryBuilder("iface")
       .leftJoinAndSelect("iface.node", "node")
       .leftJoinAndSelect("iface.endpoint", "endpoint")
+      .leftJoinAndSelect("endpoint.relayNode", "relayNode")
       .leftJoinAndSelect("iface.replicas", "replica")
       .leftJoinAndSelect("replica.node", "replicaNode")
       .orderBy("iface.createdAt", "DESC")
@@ -50,7 +51,7 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
       where: { id },
       relations: {
         node: true,
-        endpoint: true,
+        endpoint: { relayNode: true },
         replicas: { node: true },
       },
       order: { replicas: { priority: "ASC" } },
