@@ -42,7 +42,9 @@ export class Role {
       name: this.name,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
-      permissions: this.permissions?.map(permission => permission.toDTO()),
+      permissions: (this.permissions ?? []).map(permission =>
+        permission.toDTO(),
+      ),
     };
   }
 }
