@@ -2,6 +2,7 @@ import { In, LessThan } from "typeorm";
 
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
+import { WgPeerAccess } from "./wg-peer.access";
 import { WgPeer } from "./wg-peer.entity";
 import { WG_PEER_ONLINE_WINDOW_SEC } from "./wg-peer.types";
 
@@ -9,6 +10,8 @@ export interface IWgPeerFilters {
   interfaceId?: string;
   nodeId?: string;
   userId?: string;
+  /** Только свои пиры пользователя: держатель или создатель. */
+  ownedBy?: string;
   enabled?: boolean;
   online?: boolean;
   query?: string;
@@ -69,12 +72,16 @@ export class WgPeerRepository extends BaseRepository<WgPeer> {
       .skip(offset)
       .take(limit);
 
-    const { interfaceId, nodeId, userId, enabled, online, query } = filters;
+    const { interfaceId, nodeId, userId, ownedBy, enabled, online, query } =
+      filters;
 
     if (interfaceId)
       qb.andWhere("peer.interfaceId = :interfaceId", { interfaceId });
     if (nodeId) qb.andWhere("iface.nodeId = :nodeId", { nodeId });
     if (userId) qb.andWhere("peer.userId = :userId", { userId });
+    if (ownedBy) {
+      qb.andWhere(WgPeerAccess.ownedCondition("peer"), { ownedBy });
+    }
     if (enabled !== undefined)
       qb.andWhere("peer.enabled = :enabled", { enabled });
     if (online !== undefined) {

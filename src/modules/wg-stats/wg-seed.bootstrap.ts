@@ -1,14 +1,14 @@
 import { inject } from "inversify";
 
-import { IBootstrap, Injectable, logger } from "../../core";
+import { IBootstrap, Injectable, logger, ownPermission } from "../../core";
 import { PermissionRepository } from "../permission";
 import { RoleRepository, Roles } from "../role";
 import { WgPeerPermissions } from "../wg-peer";
 import { WgStatsPermissions } from "./wg-stats.permissions";
 
 /**
- * Засев базовых прав пользователя VPN: роль `user` получает `wg:peer:own`
- * и `wg:stats:own` — видит и обслуживает только свои пиры. Идемпотентен.
+ * Засев базовых прав пользователя VPN: роль `user` видит свои пиры, их
+ * конфиги и статистику и включает-выключает их. Идемпотентен.
  */
 @Injectable()
 export class WgSeedBootstrap implements IBootstrap {
@@ -24,9 +24,11 @@ export class WgSeedBootstrap implements IBootstrap {
     try {
       const role = await this._roles.ensureByName(Roles.USER);
       const granted = await Promise.all(
-        [WgPeerPermissions.PEER_OWN, WgStatsPermissions.STATS_OWN].map(name =>
-          this._permissions.ensureByName(name),
-        ),
+        [
+          WgPeerPermissions.PEER_VIEW,
+          WgPeerPermissions.PEER_TOGGLE,
+          WgStatsPermissions.STATS_VIEW,
+        ].map(name => this._permissions.ensureByName(ownPermission(name))),
       );
 
       await this._roles.grantPermissionsIfMissing(

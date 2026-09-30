@@ -393,6 +393,7 @@ export class WgStatsIngestService {
         interfaceId: iface.id,
         nodeId: fromThisNode ? node.id : prev!.nodeId,
         userId: peer.userId,
+        createdById: peer.createdById,
         online: isPeerOnline(lastHandshakeAt, at),
         lastHandshakeAt: lastHandshakeAt?.toISOString() ?? null,
         endpoint: fromThisNode ? stat.endpoint : prev!.endpoint,

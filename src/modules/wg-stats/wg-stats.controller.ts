@@ -55,11 +55,11 @@ export class WgStatsController extends Controller {
   }
 
   /**
-   * Сводка дашборда: с правом `wg:stats:view` — глобальная, иначе — по
-   * своим пирам (право `wg:stats:own`).
+   * Сводка дашборда: с правом `wg:stats:view` — глобальная, с
+   * `wg:stats:view:own` — по своим пирам (держатель или создатель).
    * @summary Сводка
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("overview")
   wgStatsOverview(@Request() req: KoaRequest): Promise<IWgOverview> {
     return this._overview.overviewFor(getContextUser(req));
@@ -72,7 +72,7 @@ export class WgStatsController extends Controller {
    * возвращаются только собственные пиры.
    * @summary Серии статистики
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("series")
   wgStatsSeries(
     @Request() req: KoaRequest,
@@ -101,7 +101,7 @@ export class WgStatsController extends Controller {
    * Держатель видит свои пиры; `null` — агент ещё не присылал статистику.
    * @summary Текущий снимок пира
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("current/peer/{peerId}")
   wgStatsCurrentPeer(
     @Request() req: KoaRequest,
@@ -114,7 +114,7 @@ export class WgStatsController extends Controller {
    * Текущий live-снимок интерфейса.
    * @summary Текущий снимок интерфейса
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("current/interface/{interfaceId}")
   wgStatsCurrentInterface(
     @Request() req: KoaRequest,
@@ -127,7 +127,7 @@ export class WgStatsController extends Controller {
    * Текущий live-снимок ноды с системными метриками.
    * @summary Текущий снимок ноды
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("current/node/{nodeId}")
   wgStatsCurrentNode(
     @Request() req: KoaRequest,
@@ -141,7 +141,7 @@ export class WgStatsController extends Controller {
    * дальше — сокет). Держатель видит свои пиры.
    * @summary Короткий ряд скорости пира
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("window/peer/{peerId}")
   wgStatsPeerWindow(
     @Request() req: KoaRequest,
@@ -154,7 +154,7 @@ export class WgStatsController extends Controller {
    * Скорость интерфейса за последние минуты.
    * @summary Короткий ряд скорости интерфейса
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("window/interface/{interfaceId}")
   wgStatsInterfaceWindow(
     @Request() req: KoaRequest,
@@ -167,7 +167,7 @@ export class WgStatsController extends Controller {
    * Скорость ноды за последние минуты.
    * @summary Короткий ряд скорости ноды
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("window/node/{nodeId}")
   wgStatsNodeWindow(
     @Request() req: KoaRequest,
@@ -181,7 +181,7 @@ export class WgStatsController extends Controller {
    * раз в ~60 с).
    * @summary Матрица связности нод
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("mesh")
   wgStatsMesh(@Request() req: KoaRequest): Promise<IWgMeshMatrix> {
     return this._query.mesh(getContextUser(req));
@@ -191,7 +191,7 @@ export class WgStatsController extends Controller {
    * Здоровье IPIP-туннелей ноды: RTT и потери по каждому линку релея.
    * @summary Туннели ноды
    */
-  @Security("jwt")
+  @Security("jwt", ["permission:wg:stats:view:own"])
   @Get("links/node/{nodeId}")
   wgStatsNodeLinks(
     @Request() req: KoaRequest,

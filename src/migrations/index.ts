@@ -16,6 +16,8 @@ import { WgSocksKeysRequired1790534923076 } from "./1790534923076-WgSocksKeysReq
 import { JobRunRemoveExternalFields1790538047331 } from "./1790538047331-JobRunRemoveExternalFields";
 import { SplitManagePermissions1790600000000 } from "./1790600000000-SplitManagePermissions";
 import { EndpointRoute1790631837419 } from "./1790631837419-EndpointRoute";
+import { PeerCreatedBy1790759944024 } from "./1790759944024-PeerCreatedBy";
+import { ScopedPeerPermissions1790759944025 } from "./1790759944025-ScopedPeerPermissions";
 
 /**
  * Миграции в порядке применения. Новая миграция: `yarn migration:generate
@@ -41,4 +43,6 @@ export const migrations: Function[] = [
   JobRunRemoveExternalFields1790538047331,
   SplitManagePermissions1790600000000,
   EndpointRoute1790631837419,
+  PeerCreatedBy1790759944024,
+  ScopedPeerPermissions1790759944025,
 ];

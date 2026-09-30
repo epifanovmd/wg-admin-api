@@ -2,7 +2,7 @@ import { inject } from "inversify";
 
 import { Injectable } from "../../core";
 import type { AuthContext } from "../../types/koa";
-import { WgPeerRepository } from "../wg-peer";
+import { WgPeerAccess, WgPeerRepository } from "../wg-peer";
 import { WgLinkHealthService } from "./wg-link-health.service";
 import { WgMeshService } from "./wg-mesh.service";
 import type { ISeriesFilters, ISeriesRow } from "./wg-stat.repositories";
@@ -105,6 +105,7 @@ export class WgStatsQueryService {
       interfaceId: scoped.interfaceId,
       peerId: scoped.peerId,
       userId: scoped.userId,
+      ownedBy: scoped.ownedBy,
     };
     const rows = useHours
       ? await this._hours.querySeries(
@@ -125,7 +126,7 @@ export class WgStatsQueryService {
     return this._toSeries(rows, stepSec);
   }
 
-  /** Live-снимок пира: право view или свой пир с правом own. */
+  /** Live-снимок пира: право на всю статистику или свой пир. */
   async currentPeer(
     actor: AuthContext,
     peerId: string,
@@ -175,8 +176,8 @@ export class WgStatsQueryService {
 
     if (
       !peer ||
-      peer.userId !== actor.userId ||
-      !this._overview.canViewOwn(actor)
+      !this._overview.canViewOwn(actor) ||
+      !WgPeerAccess.isOwn(actor.userId, peer)
     ) {
       throw WgStatsError.FORBIDDEN();
     }
@@ -249,7 +250,7 @@ export class WgStatsQueryService {
     }));
   }
 
-  /** Без права view — только свои пиры и группировки total/peer. */
+  /** С областью «свои» — только свои пиры и группировки total/peer. */
   private _scope(actor: AuthContext, query: IWgSeriesQuery): IWgSeriesQuery {
     if (this._overview.canViewGlobal(actor)) return query;
     if (!this._overview.canViewOwn(actor)) throw WgStatsError.FORBIDDEN();
@@ -265,7 +266,7 @@ export class WgStatsQueryService {
       stepSec: query.stepSec,
       groupBy,
       peerId: query.peerId,
-      userId: actor.userId,
+      ownedBy: actor.userId,
     };
   }
 

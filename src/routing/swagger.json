@@ -192,6 +192,10 @@
 					},
 					"label": {
 						"type": "string"
+					},
+					"own": {
+						"$ref": "#/components/schemas/TPermission",
+						"description": "Право «только на свои» (владелец или создатель) для этого действия;\nнет — действие без области."
 					}
 				},
 				"required": [
@@ -1374,7 +1378,13 @@
 					},
 					"userId": {
 						"type": "string",
-						"nullable": true
+						"nullable": true,
+						"description": "Держатель пира."
+					},
+					"createdById": {
+						"type": "string",
+						"nullable": true,
+						"description": "Создатель пира."
 					},
 					"name": {
 						"type": "string"
@@ -1469,6 +1479,7 @@
 					"nodeId",
 					"nodeName",
 					"userId",
+					"createdById",
 					"name",
 					"description",
 					"publicKey",
@@ -1854,6 +1865,11 @@
 					},
 					"userId": {
 						"type": "string",
+						"nullable": true,
+						"description": "Держатель и создатель пира: кому статистика идёт как «своя»."
+					},
+					"createdById": {
+						"type": "string",
 						"nullable": true
 					},
 					"online": {
@@ -1892,6 +1908,7 @@
 					"interfaceId",
 					"nodeId",
 					"userId",
+					"createdById",
 					"online",
 					"lastHandshakeAt",
 					"endpoint",
@@ -7050,14 +7067,16 @@
 						}
 					}
 				},
-				"description": "Пиры с фильтрами. Без права `wg:peer:view` возвращаются только свои\nпиры (право `wg:peer:own`).",
+				"description": "Пиры с фильтрами. С правом `wg:peer:view:own` — только свои пиры\n(держатель или создатель).",
 				"summary": "Список пиров",
 				"tags": [
 					"WgPeer"
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:peer:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -7165,7 +7184,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:peer:view:own"
+						]
 					}
 				],
 				"parameters": []
@@ -7196,14 +7217,16 @@
 						}
 					}
 				},
-				"description": "Пир по id; чужой без права `wg:peer:view` — 404.",
+				"description": "Пир по id; чужой без права на все пиры — 404.",
 				"summary": "Пир",
 				"tags": [
 					"WgPeer"
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:peer:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -7249,7 +7272,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:update"
+							"permission:wg:peer:update:own"
 						]
 					}
 				],
@@ -7299,7 +7322,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:delete"
+							"permission:wg:peer:delete:own"
 						]
 					}
 				],
@@ -7340,14 +7363,16 @@
 						}
 					}
 				},
-				"description": "Включить пира. Держатель может включать свои пиры.",
+				"description": "Включить пира.",
 				"summary": "Включение пира",
 				"tags": [
 					"WgPeer"
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:peer:toggle:own"
+						]
 					}
 				],
 				"parameters": [
@@ -7387,14 +7412,16 @@
 						}
 					}
 				},
-				"description": "Выключить пира. Держатель может выключать свои пиры.",
+				"description": "Выключить пира.",
 				"summary": "Выключение пира",
 				"tags": [
 					"WgPeer"
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:peer:toggle:own"
+						]
 					}
 				],
 				"parameters": [
@@ -7442,7 +7469,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:psk"
+							"permission:wg:peer:psk:own"
 						]
 					}
 				],
@@ -7491,7 +7518,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:psk"
+							"permission:wg:peer:psk:own"
 						]
 					}
 				],
@@ -7540,7 +7567,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:assign"
+							"permission:wg:peer:assign:own"
 						]
 					}
 				],
@@ -7599,7 +7626,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:peer:assign"
+							"permission:wg:peer:assign:own"
 						]
 					}
 				],
@@ -7640,14 +7667,16 @@
 						}
 					}
 				},
-				"description": "Клиентский конфиг `.conf` (attachment). Держатель получает конфиги\nсвоих пиров.",
+				"description": "Клиентский конфиг `.conf` (attachment).",
 				"summary": "Конфиг пира",
 				"tags": [
 					"WgPeer"
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:peer:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -7694,7 +7723,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:peer:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -7734,14 +7765,16 @@
 						}
 					}
 				},
-				"description": "Сводка дашборда: с правом `wg:stats:view` — глобальная, иначе — по\nсвоим пирам (право `wg:stats:own`).",
+				"description": "Сводка дашборда: с правом `wg:stats:view` — глобальная, с\n`wg:stats:view:own` — по своим пирам (держатель или создатель).",
 				"summary": "Сводка",
 				"tags": [
 					"WgStats"
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": []
@@ -7782,7 +7815,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -7893,7 +7928,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -7945,7 +7982,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -7997,7 +8036,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -8047,7 +8088,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -8097,7 +8140,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -8147,7 +8192,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": [
@@ -8194,7 +8241,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": []
@@ -8235,7 +8284,9 @@
 				],
 				"security": [
 					{
-						"jwt": []
+						"jwt": [
+							"permission:wg:stats:view:own"
+						]
 					}
 				],
 				"parameters": [

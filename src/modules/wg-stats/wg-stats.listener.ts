@@ -29,6 +29,25 @@ const groupBy = <T>(items: T[], key: (item: T) => string | null) => {
   return groups;
 };
 
+/** Кому пир «свой»: держатель и создатель, без повторов. */
+const ownersOf = (live: IWgPeerLive): string[] =>
+  [...new Set([live.userId, live.createdById])].filter(
+    (id): id is string => id !== null,
+  );
+
+/** Пиры по каждому, кому они свои. */
+const groupByOwners = (lives: IWgPeerLive[]) => {
+  const groups = new Map<string, IWgPeerLive[]>();
+
+  for (const live of lives) {
+    for (const userId of ownersOf(live)) {
+      groups.set(userId, [...(groups.get(userId) ?? []), live]);
+    }
+  }
+
+  return groups;
+};
+
 /** Live-статистика — подписчикам комнат. */
 @Injectable()
 export class WgStatsListener implements ISocketEventListener {
@@ -69,7 +88,7 @@ export class WgStatsListener implements ISocketEventListener {
   /**
    * Статистика пиров за тик — одним событием `wg:peers:stats` на получателя:
    * комнате обзора — все пиры, комнате интерфейса — его пиры, комнате «мои
-   * пиры» — пиры держателя, комнате пира — только он. Участники комнаты
+   * пиры» — свои пиры (держатель и создатель), комнате пира — только он. Участники комнаты
    * обзора уже получили весь тик и из остальных рассылок исключаются;
    * держатель со списком своих пиров не получает пира ещё раз из его комнаты.
    */
@@ -85,7 +104,7 @@ export class WgStatsListener implements ISocketEventListener {
         { peers },
       );
     }
-    for (const [userId, peers] of groupBy(lives, l => l.userId)) {
+    for (const [userId, peers] of groupByOwners(lives)) {
       this._emitter.toRoomExcept(
         wgOwnPeersRoom(userId),
         except,
@@ -96,7 +115,7 @@ export class WgStatsListener implements ISocketEventListener {
     for (const live of lives) {
       this._emitter.toRoomExcept(
         wgPeerRoom(live.peerId),
-        live.userId ? [except, wgOwnPeersRoom(live.userId)] : except,
+        [except, ...ownersOf(live).map(wgOwnPeersRoom)],
         "wg:peers:stats",
         { peers: [live] },
       );

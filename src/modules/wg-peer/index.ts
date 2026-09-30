@@ -4,6 +4,7 @@ export * from "./peer-expiry.job";
 export * from "./validation";
 export * from "./wg-client-config";
 export * from "./wg-ip-allocator";
+export * from "./wg-peer.access";
 export * from "./wg-peer.controller";
 export * from "./wg-peer.entity";
 export * from "./wg-peer.errors";

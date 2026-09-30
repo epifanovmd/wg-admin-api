@@ -1,3 +1,4 @@
+export * from "./owned-entity-emitter";
 export * from "./permission-room.policy";
 export * from "./socket.bootstrap";
 export * from "./socket.helpers";

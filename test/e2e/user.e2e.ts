@@ -401,7 +401,11 @@ describe("user и profile", () => {
           .find((r: any) => r.name === "user")
           ?.permissions.map((p: any) => p.name)
           .sort(),
-      ).to.deep.equal(["wg:peer:own", "wg:stats:own"]);
+      ).to.deep.equal([
+        "wg:peer:toggle:own",
+        "wg:peer:view:own",
+        "wg:stats:view:own",
+      ]);
 
       const name = `moderator_${Date.now().toString(36)}`;
       const role = expectStatus(

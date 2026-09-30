@@ -2,7 +2,9 @@
 
 Статистика WG-домена: приём отчётов агентов, live-снимки и события, история
 с агрегатами, сводка дашборда, системные метрики нод. Засев прав роли `user`
-(`WgSeedBootstrap`: `wg:peer:own`, `wg:stats:own`).
+(`WgSeedBootstrap`: `wg:peer:view:own`, `wg:peer:toggle:own`, `wg:stats:view:own`).
+`wg:stats:view` — с областью: вся статистика или только по своим пирам
+(держатель или создатель).
 
 ## Поток данных
 
@@ -25,9 +27,9 @@
   каждый тик, без них — deadband 256 Б/с и максимум раз в 30 с тишины.
   Пиры — одним `WgPeersLiveStatsEvent` за тик и одним событием
   `wg:peers:stats {peers}` на комнату: overview — все пиры тика, комната
-  интерфейса — его пиры, «мои пиры» (`wg-peers-own_<userId>`) — пиры
-  держателя, комната пира — только он. Участники overview исключены из
-  остальных рассылок, держатель со списком своих — из комнаты пира
+  интерфейса — его пиры, «мои пиры» (`wg-peers-own_<userId>`) — пиры,
+  где он держатель или создатель, комната пира — только он. Участники overview
+  исключены из остальных рассылок, свои со списком своих — из комнаты пира
   (`toRoomExcept`); в личную комнату пользователя статистика не шлётся.
   Остальные — `wg:interface:stats`, `wg:node:stats`, `wg:stats:overview`.
 - **Зрители**: `WgViewerDemandService` — есть ли подключённые сокеты в любом
@@ -44,13 +46,13 @@
 ## Эндпоинты (`/api/v1/wg/stats`, тег WgStats)
 
 - `GET overview` — глобальная сводка (`wg:stats:view`) или по своим пирам
-  (`wg:stats:own`).
+  (`wg:stats:view:own`).
 - `GET series` — серии трафика/скорости: фильтры node/interface/peer/user,
   `groupBy=total|node|interface|peer`, шаг авто (мин. 60 с; > 48 ч — часы,
   ≤ 1000 точек). Скорость точки = трафик/шаг, плюс пиковые значения.
 - `GET current` — live-снимок для первой отрисовки.
 - `GET window/{peer|interface|node}/{id}` — ряд скорости последних минут
-  (пир — `wg:stats:view` или держатель с `wg:stats:own`).
+  (пир — `wg:stats:view` или свой пир с `wg:stats:view:own`).
 - `GET node-metrics` — CPU/память/диск/аптайм ноды (`wg:node:view`).
 
 ## Комната overview

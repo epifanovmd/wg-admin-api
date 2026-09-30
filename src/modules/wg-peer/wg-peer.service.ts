@@ -5,7 +5,6 @@ import { DataSource } from "typeorm";
 import type { IPaginatedDto, Pagination } from "../../core";
 import {
   EventBus,
-  hasPermission,
   Injectable,
   isUniqueViolation,
   PG_ERROR,
@@ -13,7 +12,6 @@ import {
   pgErrorCode,
   toPage,
 } from "../../core";
-import { isSuperUser } from "../../core/auth/user-context";
 import type { AuthContext } from "../../types/koa";
 import { resolveClientEndpoint, WgInterfaceService } from "../wg-interface";
 import {
@@ -36,6 +34,7 @@ import {
 } from "./events";
 import { buildWgClientConfig, wgConfigFileName } from "./wg-client-config";
 import { allocatePeerIpv4, derivePeerIpv6 } from "./wg-ip-allocator";
+import { WgPeerAccess } from "./wg-peer.access";
 import { WgPeer } from "./wg-peer.entity";
 import { WgPeerError } from "./wg-peer.errors";
 import { WgPeerPermissions } from "./wg-peer.permissions";
@@ -72,7 +71,11 @@ export interface IWgPeerConfig {
 
 const CREATE_ATTEMPTS = 3;
 
-/** Пиры: CRUD с own-scope, конфиги/QR, PSK, назначение, срок действия. */
+/**
+ * Пиры: CRUD с областью прав «все / свои» (держатель или создатель),
+ * конфиги/QR, PSK, назначение, срок действия. Чужой пир без права на все
+ * не раскрывается (404); видимый, но без права на действие — 403.
+ */
 @Injectable()
 export class WgPeerService {
   constructor(
@@ -89,6 +92,16 @@ export class WgPeerService {
     actor: AuthContext,
     body: ICreateWgPeerBody,
   ): Promise<WgPeerDto> {
+    const userId = body.userId ?? null;
+
+    if (
+      userId !== null &&
+      userId !== actor.userId &&
+      !WgPeerAccess.scope(actor, WgPeerPermissions.PEER_ASSIGN)
+    ) {
+      throw WgPeerError.FORBIDDEN();
+    }
+
     const iface = await this._interfaces.findEntity(body.interfaceId);
     const imported = Boolean(body.publicKey);
     const keys = imported ? null : generateWgKeyPair();
@@ -105,7 +118,8 @@ export class WgPeerService {
         const created = await this._dataSource.transaction(async manager => {
           const saved = await this._repo.getRepository(manager).save({
             interfaceId: iface.id,
-            userId: body.userId ?? null,
+            userId,
+            createdById: actor.userId,
             name: body.name,
             description: body.description ?? null,
             publicKey,
@@ -168,16 +182,18 @@ export class WgPeerService {
     filters: IWgPeerFilters,
     pagination: Pagination,
   ): Promise<IPaginatedDto<WgPeerDto>> {
-    const scoped = this._scopeFilters(actor, filters);
-    const [items, total] = await this._repo.findPage(scoped, pagination);
+    const [items, total] = await this._repo.findPage(
+      { ...filters, ...this._viewFilter(actor) },
+      pagination,
+    );
 
     return toPage(items.map(WgPeerDto.fromEntity), total, pagination);
   }
 
   async options(actor: AuthContext): Promise<WgPeerOptionDto[]> {
-    const scoped = this._scopeFilters(actor, {});
+    const { ownedBy } = this._viewFilter(actor);
     const items = await this._repo.find({
-      where: scoped.userId ? { userId: scoped.userId } : {},
+      where: ownedBy ? WgPeerAccess.ownedWhere(ownedBy) : {},
       order: { name: "ASC" },
     });
 
@@ -185,11 +201,17 @@ export class WgPeerService {
   }
 
   async get(actor: AuthContext, id: string): Promise<WgPeerDto> {
-    return WgPeerDto.fromEntity(await this._findScoped(actor, id));
+    return WgPeerDto.fromEntity(
+      await this._findFor(actor, id, WgPeerPermissions.PEER_VIEW),
+    );
   }
 
-  async update(id: string, body: IUpdateWgPeerBody): Promise<WgPeerDto> {
-    const peer = await this._findWithRelationsOrFail(id);
+  async update(
+    actor: AuthContext,
+    id: string,
+    body: IUpdateWgPeerBody,
+  ): Promise<WgPeerDto> {
+    const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_UPDATE);
 
     if (body.name !== undefined) peer.name = body.name;
     if (body.description !== undefined) peer.description = body.description;
@@ -213,28 +235,25 @@ export class WgPeerService {
     return this._emitUpdated(peer.id);
   }
 
-  async delete(id: string): Promise<void> {
-    const peer = await this._findWithRelationsOrFail(id);
+  async delete(actor: AuthContext, id: string): Promise<void> {
+    const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_DELETE);
 
     await this._dataSource.transaction(async manager => {
       await this._repo.getRepository(manager).delete({ id: peer.id });
       await this._interfaces.markInterfaceDirty(peer.interfaceId, manager);
     });
 
-    this._eventBus.emit(new WgPeerDeletedEvent(peer.id, peer.userId));
+    this._eventBus.emit(
+      new WgPeerDeletedEvent(peer.id, peer.userId, peer.createdById),
+    );
   }
 
-  /** Включение/выключение: право toggle или свой пир с правом own. */
   async setEnabled(
     actor: AuthContext,
     id: string,
     enabled: boolean,
   ): Promise<WgPeerDto> {
-    const peer = await this._findWithRelationsOrFail(id);
-
-    if (!this._canToggle(actor) && !this._isOwnPeer(actor, peer)) {
-      throw WgPeerError.NOT_FOUND();
-    }
+    const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_TOGGLE);
 
     if (peer.enabled !== enabled) {
       peer.enabled = enabled;
@@ -245,8 +264,8 @@ export class WgPeerService {
     return this._emitUpdated(peer.id);
   }
 
-  async rotatePresharedKey(id: string): Promise<WgPeerDto> {
-    const peer = await this._findWithRelationsOrFail(id);
+  async rotatePresharedKey(actor: AuthContext, id: string): Promise<WgPeerDto> {
+    const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_PSK);
 
     peer.presharedKeyEnc = this._secrets.seal(generateWgPresharedKey());
     await this._saveAndMarkDirty(peer);
@@ -254,8 +273,8 @@ export class WgPeerService {
     return this._emitUpdated(peer.id);
   }
 
-  async removePresharedKey(id: string): Promise<WgPeerDto> {
-    const peer = await this._findWithRelationsOrFail(id);
+  async removePresharedKey(actor: AuthContext, id: string): Promise<WgPeerDto> {
+    const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_PSK);
 
     if (!peer.presharedKeyEnc) throw WgPeerError.NO_PSK();
 
@@ -265,8 +284,12 @@ export class WgPeerService {
     return this._emitUpdated(peer.id);
   }
 
-  async assign(id: string, body: IAssignWgPeerBody): Promise<WgPeerDto> {
-    const peer = await this._findWithRelationsOrFail(id);
+  async assign(
+    actor: AuthContext,
+    id: string,
+    body: IAssignWgPeerBody,
+  ): Promise<WgPeerDto> {
+    const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_ASSIGN);
     const previousUserId = peer.userId;
 
     peer.userId = body.userId;
@@ -283,8 +306,8 @@ export class WgPeerService {
     return this._emitUpdated(peer.id, previousUserId);
   }
 
-  async revoke(id: string): Promise<WgPeerDto> {
-    const peer = await this._findWithRelationsOrFail(id);
+  async revoke(actor: AuthContext, id: string): Promise<WgPeerDto> {
+    const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_ASSIGN);
     const previousUserId = peer.userId;
 
     peer.userId = null;
@@ -293,9 +316,9 @@ export class WgPeerService {
     return this._emitUpdated(peer.id, previousUserId);
   }
 
-  /** Клиентский конфиг (owner или право view). */
+  /** Клиентский конфиг: право просмотра пира. */
   async buildConfig(actor: AuthContext, id: string): Promise<IWgPeerConfig> {
-    const peer = await this._findScoped(actor, id);
+    const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_VIEW);
 
     if (!peer.privateKeyEnc) throw WgPeerError.NO_PRIVATE_KEY();
 
@@ -382,46 +405,28 @@ export class WgPeerService {
     return this._findWithRelationsOrFail(id);
   }
 
-  private _canViewAll(actor: AuthContext): boolean {
-    return (
-      isSuperUser(actor) ||
-      hasPermission(actor.permissions, WgPeerPermissions.PEER_VIEW)
-    );
+  /** Ограничение списков областью просмотра. */
+  private _viewFilter(actor: AuthContext): { ownedBy?: string } {
+    const filter = WgPeerAccess.filter(actor, WgPeerPermissions.PEER_VIEW);
+
+    if (!filter) throw WgPeerError.FORBIDDEN();
+
+    return filter;
   }
 
-  private _canToggle(actor: AuthContext): boolean {
-    return (
-      isSuperUser(actor) ||
-      hasPermission(actor.permissions, WgPeerPermissions.PEER_TOGGLE)
-    );
-  }
-
-  private _isOwnPeer(actor: AuthContext, peer: WgPeer): boolean {
-    return (
-      hasPermission(actor.permissions, WgPeerPermissions.PEER_OWN) &&
-      peer.userId === actor.userId
-    );
-  }
-
-  /** Без права view список ограничивается своими пирами (право own). */
-  private _scopeFilters(
+  /** Пир для действия: невидимый — 404, видимый без права на действие — 403. */
+  private async _findFor(
     actor: AuthContext,
-    filters: IWgPeerFilters,
-  ): IWgPeerFilters {
-    if (this._canViewAll(actor)) return filters;
-    if (hasPermission(actor.permissions, WgPeerPermissions.PEER_OWN)) {
-      return { ...filters, userId: actor.userId };
-    }
-
-    throw WgPeerError.FORBIDDEN();
-  }
-
-  private async _findScoped(actor: AuthContext, id: string): Promise<WgPeer> {
+    id: string,
+    permission: string,
+  ): Promise<WgPeer> {
     const peer = await this._findWithRelationsOrFail(id);
 
-    // Чужой пир не раскрывается: 404, а не 403.
-    if (!this._canViewAll(actor) && !this._isOwnPeer(actor, peer)) {
+    if (!WgPeerAccess.can(actor, WgPeerPermissions.PEER_VIEW, peer)) {
       throw WgPeerError.NOT_FOUND();
+    }
+    if (!WgPeerAccess.can(actor, permission, peer)) {
+      throw WgPeerError.FORBIDDEN();
     }
 
     return peer;

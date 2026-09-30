@@ -11,6 +11,8 @@ export interface ISeriesFilters {
   interfaceId?: string;
   peerId?: string;
   userId?: string;
+  /** Только пиры, где пользователь сейчас держатель или создатель. */
+  ownedBy?: string;
 }
 
 /** Строка агрегированной серии (сырые значения из SQL). */
@@ -53,6 +55,12 @@ const buildSeriesQuery = (
   if (filters.userId) {
     conditions.push("stat.user_id = :userId");
     params.userId = filters.userId;
+  }
+  if (filters.ownedBy) {
+    conditions.push(
+      "stat.peer_id IN (SELECT id FROM wg_peers WHERE user_id = :ownedBy OR created_by_id = :ownedBy)",
+    );
+    params.ownedBy = filters.ownedBy;
   }
 
   return {

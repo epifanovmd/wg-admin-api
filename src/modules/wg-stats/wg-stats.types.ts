@@ -27,7 +27,9 @@ export interface IWgPeerLive {
   peerId: string;
   interfaceId: string;
   nodeId: string;
+  /** Держатель и создатель пира: кому статистика идёт как «своя». */
   userId: string | null;
+  createdById: string | null;
   online: boolean;
   lastHandshakeAt: string | null;
   endpoint: string | null;

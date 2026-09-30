@@ -1,11 +1,10 @@
 import { inject } from "inversify";
 
-import { hasPermission, Injectable } from "../../core";
-import { isSuperUser } from "../../core/auth/user-context";
+import { Injectable, resolveScope } from "../../core";
 import type { AuthContext } from "../../types/koa";
 import { WgInterfaceRepository } from "../wg-interface";
 import { EWgNodeStatus, WgNodeRepository } from "../wg-node";
-import { WgPeerRepository } from "../wg-peer";
+import { WgPeerAccess, WgPeerRepository } from "../wg-peer";
 import { WgLiveStore } from "./wg-live-store.service";
 import { WgStatsError } from "./wg-stats.errors";
 import { WgStatsPermissions } from "./wg-stats.permissions";
@@ -27,7 +26,7 @@ interface ICachedCounts {
 const COUNTS_TTL_MS = 30_000;
 const LIVE_FRESH_MS = 30_000;
 
-/** Сводка дашборда: глобальная (право view) и по своим пирам (право own). */
+/** Сводка дашборда: глобальная (право на всё) и по своим пирам (`:own`). */
 @Injectable()
 export class WgStatsOverviewService {
   private _counts: ICachedCounts | null = null;
@@ -41,14 +40,11 @@ export class WgStatsOverviewService {
   ) {}
 
   canViewGlobal(actor: AuthContext): boolean {
-    return (
-      isSuperUser(actor) ||
-      hasPermission(actor.permissions, WgStatsPermissions.STATS_VIEW)
-    );
+    return this._scope(actor) === "all";
   }
 
   canViewOwn(actor: AuthContext): boolean {
-    return hasPermission(actor.permissions, WgStatsPermissions.STATS_OWN);
+    return this._scope(actor) === "own";
   }
 
   async overviewFor(actor: AuthContext): Promise<IWgOverview> {
@@ -118,9 +114,19 @@ export class WgStatsOverviewService {
     return this._live.listRecent<IWgSpeedPoint>(`win:${kind}:${id}`);
   }
 
-  /** Сводка по своим пирам держателя. */
+  private _scope(actor: AuthContext) {
+    return resolveScope(
+      actor.roles,
+      actor.permissions,
+      WgStatsPermissions.STATS_VIEW,
+    );
+  }
+
+  /** Сводка по своим пирам: держатель или создатель. */
   private async _ownOverview(userId: string): Promise<IWgOverview> {
-    const peers = await this._peers.find({ where: { userId } });
+    const peers = await this._peers.find({
+      where: WgPeerAccess.ownedWhere(userId),
+    });
     const now = Date.now();
     let online = 0;
     let rxTotal = 0;

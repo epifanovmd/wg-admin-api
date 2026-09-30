@@ -9,7 +9,10 @@ export class WgPeerDto extends BaseDto {
   interfaceName: string | null;
   nodeId: string | null;
   nodeName: string | null;
+  /** Держатель пира. */
   userId: string | null;
+  /** Создатель пира. */
+  createdById: string | null;
   name: string;
   description: string | null;
   publicKey: string;
@@ -43,6 +46,7 @@ export class WgPeerDto extends BaseDto {
     this.nodeId = entity.iface?.nodeId ?? null;
     this.nodeName = entity.iface?.node?.name ?? null;
     this.userId = entity.userId;
+    this.createdById = entity.createdById;
     this.name = entity.name;
     this.description = entity.description;
     this.publicKey = entity.publicKey;

@@ -19,5 +19,6 @@ export class WgPeerDeletedEvent {
   constructor(
     public readonly peerId: string,
     public readonly userId: string | null,
+    public readonly createdById: string | null = null,
   ) {}
 }

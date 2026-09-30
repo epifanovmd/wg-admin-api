@@ -20,7 +20,13 @@ const viewer = {
 const owner = {
   userId: uuid2(),
   roles: ["user"],
-  permissions: ["wg:peer:own"],
+  permissions: ["wg:peer:view:own", "wg:peer:toggle:own"],
+};
+/** Видит все пиры, меняет и удаляет только свои. */
+const editor = {
+  userId: uuid2(),
+  roles: ["user"],
+  permissions: ["wg:peer:view", "wg:peer:update:own", "wg:peer:delete:own"],
 };
 const stranger = { userId: uuid3(), roles: ["user"], permissions: [] };
 const admin = { userId: uuid(), roles: ["admin"], permissions: ["*"] };
@@ -67,6 +73,7 @@ describe("WgPeerService", () => {
     interfaceId: iface.id,
     iface,
     userId: null,
+    createdById: null,
     name: "peer-1",
     description: null,
     publicKey: "PUB",
@@ -158,13 +165,44 @@ describe("WgPeerService", () => {
     expect(saved.presharedKeyEnc).to.equal(null);
   });
 
-  it("list: без view список ограничивается своими", async () => {
-    await service.list(owner as any, {}, { offset: 0, limit: 20 });
+  it("create: создатель — автор запроса", async () => {
+    txRepo.save.callsFake(async (data: any) => ({ ...makePeer(), ...data }));
+    repo.findWithRelations.resolves(makePeer());
 
-    expect(repo.findPage.firstCall.args[0].userId).to.equal(owner.userId);
+    await service.create(editor as any, {
+      interfaceId: iface.id,
+      name: "peer-1",
+    });
+
+    expect(txRepo.save.firstCall.args[0].createdById).to.equal(editor.userId);
   });
 
-  it("list: без own и view — 403", async () => {
+  it("create с чужим держателем без права назначения — 403", async () => {
+    try {
+      await service.create(editor as any, {
+        interfaceId: iface.id,
+        name: "peer-1",
+        userId: uuid3(),
+      });
+      expect.fail("должно было упасть");
+    } catch (err: any) {
+      expect(err.code).to.equal("WG_PEER_FORBIDDEN");
+    }
+  });
+
+  it("list: с областью own список ограничивается своими", async () => {
+    await service.list(owner as any, {}, { offset: 0, limit: 20 });
+
+    expect(repo.findPage.firstCall.args[0].ownedBy).to.equal(owner.userId);
+  });
+
+  it("list: с правом на все — без ограничения", async () => {
+    await service.list(editor as any, {}, { offset: 0, limit: 20 });
+
+    expect(repo.findPage.firstCall.args[0].ownedBy).to.equal(undefined);
+  });
+
+  it("list: без права просмотра — 403", async () => {
     try {
       await service.list(stranger as any, {}, { offset: 0, limit: 20 });
       expect.fail("должно было упасть");
@@ -221,6 +259,38 @@ describe("WgPeerService", () => {
     expect(peer.disabledReason).to.equal("manual");
   });
 
+  it("update: видит все, но чужой пир менять нельзя — 403", async () => {
+    repo.findWithRelations.resolves(makePeer({ userId: uuid3() }));
+
+    try {
+      await service.update(editor as any, uuid(), { name: "x" });
+      expect.fail("должно было упасть");
+    } catch (err: any) {
+      expect(err.code).to.equal("WG_PEER_FORBIDDEN");
+    }
+  });
+
+  it("update: созданный собой пир с чужим держателем — можно", async () => {
+    const peer = makePeer({ userId: uuid3(), createdById: editor.userId });
+
+    repo.findWithRelations.resolves(peer);
+
+    await service.update(editor as any, peer.id, { name: "renamed" });
+
+    expect(peer.name).to.equal("renamed");
+  });
+
+  it("delete: без права удаления своих — 403", async () => {
+    repo.findWithRelations.resolves(makePeer({ userId: owner.userId }));
+
+    try {
+      await service.delete(owner as any, uuid());
+      expect.fail("должно было упасть");
+    } catch (err: any) {
+      expect(err.code).to.equal("WG_PEER_FORBIDDEN");
+    }
+  });
+
   it("setEnabled: чужой пир — 404", async () => {
     repo.findWithRelations.resolves(makePeer({ userId: uuid3() }));
 
@@ -239,7 +309,7 @@ describe("WgPeerService", () => {
       .onSecondCall()
       .resolves(makePeer({ userId: uuid3() }));
 
-    await service.assign(uuid(), { userId: uuid3() });
+    await service.assign(admin as any, uuid(), { userId: uuid3() });
 
     const event = eventBus.emit.lastCall.args[0];
 
@@ -253,7 +323,7 @@ describe("WgPeerService", () => {
       .onSecondCall()
       .resolves(makePeer({ userId: null }));
 
-    await service.revoke(uuid());
+    await service.revoke(admin as any, uuid());
 
     expect(eventBus.emit.lastCall.args[0].previousUserId).to.equal(
       owner.userId,
@@ -265,7 +335,7 @@ describe("WgPeerService", () => {
       makePeer({ userId: owner.userId }),
     );
 
-    await service.assign(uuid(), { userId: owner.userId });
+    await service.assign(admin as any, uuid(), { userId: owner.userId });
 
     expect(eventBus.emit.lastCall.args[0].previousUserId).to.equal(null);
   });

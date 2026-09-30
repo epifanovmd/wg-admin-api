@@ -6,6 +6,7 @@ import {
   eventually,
   expectStatus,
   items,
+  signIn,
   signInAdmin,
   signUp,
 } from "./client";
@@ -570,6 +571,80 @@ describe("wireguard", () => {
       );
 
       expect(revoked.data.userId).to.equal(null);
+    });
+
+    it("область «свои»: создатель видит пир без держателя; видит все — меняет только свои", async () => {
+      const editor = await signUp("wg-editor");
+
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/user/setPrivileges/${editor.id}`, {
+          roles: ["user"],
+          permissions: [
+            "wg:peer:create",
+            "wg:peer:view",
+            "wg:peer:update:own",
+            "wg:peer:delete:own",
+          ],
+        }),
+        200,
+      );
+
+      const fresh = await signIn(editor.email, editor.password);
+      const created = expectStatus(
+        await call(fresh, "POST", "/api/v1/wg/peers", {
+          interfaceId: iface.id,
+          name: "editor-peer",
+        }),
+        201,
+      );
+
+      expect(created.data.userId).to.equal(null);
+      expect(created.data.createdById).to.equal(editor.id);
+
+      // Чужого держателя без права назначения не поставить.
+      expectStatus(
+        await call(fresh, "POST", "/api/v1/wg/peers", {
+          interfaceId: iface.id,
+          name: "editor-peer-2",
+          userId: user.id,
+        }),
+        403,
+        "WG_PEER_FORBIDDEN",
+      );
+
+      const all = expectStatus(
+        await call(fresh, "GET", `/api/v1/wg/peers?interfaceId=${iface.id}`),
+        200,
+      );
+
+      expect(items(all.data).map((p: any) => p.id)).to.include.members([
+        created.data.id,
+        peer2.id,
+      ]);
+
+      expectStatus(
+        await call(fresh, "PATCH", `/api/v1/wg/peers/${created.data.id}`, {
+          description: "своё",
+        }),
+        200,
+      );
+      expectStatus(
+        await call(fresh, "PATCH", `/api/v1/wg/peers/${peer2.id}`, {
+          description: "чужое",
+        }),
+        403,
+        "WG_PEER_FORBIDDEN",
+      );
+
+      // Роль user видит только свои пиры: созданный редактором ей не виден.
+      expectStatus(
+        await call(user, "GET", `/api/v1/wg/peers/${created.data.id}`),
+        404,
+      );
+      expectStatus(
+        await call(fresh, "DELETE", `/api/v1/wg/peers/${created.data.id}`),
+        204,
+      );
     });
   });
 

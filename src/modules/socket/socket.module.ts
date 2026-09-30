@@ -1,4 +1,5 @@
 import { Module } from "../../core";
+import { OwnedEntityEmitter } from "./owned-entity-emitter";
 import { SocketBootstrap } from "./socket.bootstrap";
 import { SocketAuthMiddleware } from "./socket-auth.middleware";
 import { SocketClientRegistry } from "./socket-client-registry";
@@ -17,6 +18,7 @@ import { SocketServerService } from "./socket-server.service";
     SocketClientRegistry,
     SocketEmitterService,
     SocketRoomService,
+    OwnedEntityEmitter,
   ],
   bootstrappers: [SocketBootstrap],
 })

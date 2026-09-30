@@ -28,6 +28,7 @@ import { EWgPeerDisabledReason, WG_PEER_NAME_MAX } from "./wg-peer.types";
   unique: true,
 })
 @Index("IDX_WG_PEERS_USER", ["userId"])
+@Index("IDX_WG_PEERS_CREATED_BY", ["createdById"])
 export class WgPeer {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -47,6 +48,14 @@ export class WgPeer {
   @ManyToOne(() => User, { onDelete: "SET NULL" })
   @JoinColumn({ name: "user_id" })
   user?: User | null;
+
+  /** Кто создал пира; пользователь удалён — создателя нет. */
+  @Column({ name: "created_by_id", type: "uuid", nullable: true })
+  createdById!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "created_by_id" })
+  createdBy?: User | null;
 
   @Column({ type: "varchar", length: WG_PEER_NAME_MAX })
   name!: string;

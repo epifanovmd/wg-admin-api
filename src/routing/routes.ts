@@ -131,6 +131,7 @@ const models: TsoaRoute.Models = {
         "properties": {
             "name": {"ref":"TPermission","required":true},
             "label": {"dataType":"string","required":true},
+            "own": {"ref":"TPermission"},
         },
         "additionalProperties": false,
     },
@@ -562,6 +563,7 @@ const models: TsoaRoute.Models = {
             "nodeId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "nodeName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "userId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "publicKey": {"dataType":"string","required":true},
@@ -708,6 +710,7 @@ const models: TsoaRoute.Models = {
             "interfaceId": {"dataType":"string","required":true},
             "nodeId": {"dataType":"string","required":true},
             "userId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "online": {"dataType":"boolean","required":true},
             "lastHandshakeAt": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "endpoint": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
@@ -3173,7 +3176,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
         router.get('/api/v1/wg/peers',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.listWgPeers)),
 
@@ -3209,7 +3212,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
         };
         router.get('/api/v1/wg/peers/options',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.wgPeerOptions)),
 
@@ -3246,7 +3249,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/peers/:id',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.getWgPeer)),
 
@@ -3279,11 +3282,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgPeerController_updateWgPeer: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"IUpdateWgPeerBody"},
         };
         router.patch('/api/v1/wg/peers/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:peer:update"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:update:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.updateWgPeer)),
 
@@ -3316,10 +3320,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgPeerController_deleteWgPeer: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.delete('/api/v1/wg/peers/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:peer:delete"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:delete:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.deleteWgPeer)),
 
@@ -3356,7 +3361,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.post('/api/v1/wg/peers/:id/enable',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:toggle:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.enableWgPeer)),
 
@@ -3393,7 +3398,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.post('/api/v1/wg/peers/:id/disable',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:toggle:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.disableWgPeer)),
 
@@ -3426,10 +3431,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgPeerController_rotateWgPeerPsk: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.post('/api/v1/wg/peers/:id/psk/rotate',
-            authenticateMiddleware([{"jwt":["permission:wg:peer:psk"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:psk:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.rotateWgPeerPsk)),
 
@@ -3462,10 +3468,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgPeerController_removeWgPeerPsk: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.delete('/api/v1/wg/peers/:id/psk',
-            authenticateMiddleware([{"jwt":["permission:wg:peer:psk"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:psk:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.removeWgPeerPsk)),
 
@@ -3498,11 +3505,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgPeerController_assignWgPeer: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"IAssignWgPeerBody"},
         };
         router.post('/api/v1/wg/peers/:id/assign',
-            authenticateMiddleware([{"jwt":["permission:wg:peer:assign"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:assign:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.assignWgPeer)),
 
@@ -3535,10 +3543,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgPeerController_revokeWgPeer: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.post('/api/v1/wg/peers/:id/revoke',
-            authenticateMiddleware([{"jwt":["permission:wg:peer:assign"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:assign:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.revokeWgPeer)),
 
@@ -3575,7 +3584,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/peers/:id/config',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.wgPeerConfig)),
 
@@ -3612,7 +3621,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/peers/:id/qr',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:peer:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgPeerController)),
             ...(fetchMiddlewares<Middleware>(WgPeerController.prototype.wgPeerQr)),
 
@@ -3648,7 +3657,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
         };
         router.get('/api/v1/wg/stats/overview',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsOverview)),
 
@@ -3692,7 +3701,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 userId: {"in":"query","name":"userId","ref":"UUID"},
         };
         router.get('/api/v1/wg/stats/series',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsSeries)),
 
@@ -3729,7 +3738,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 peerId: {"in":"path","name":"peerId","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/stats/current/peer/:peerId',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsCurrentPeer)),
 
@@ -3766,7 +3775,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 interfaceId: {"in":"path","name":"interfaceId","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/stats/current/interface/:interfaceId',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsCurrentInterface)),
 
@@ -3803,7 +3812,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 nodeId: {"in":"path","name":"nodeId","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/stats/current/node/:nodeId',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsCurrentNode)),
 
@@ -3840,7 +3849,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 peerId: {"in":"path","name":"peerId","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/stats/window/peer/:peerId',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsPeerWindow)),
 
@@ -3877,7 +3886,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 interfaceId: {"in":"path","name":"interfaceId","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/stats/window/interface/:interfaceId',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsInterfaceWindow)),
 
@@ -3914,7 +3923,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 nodeId: {"in":"path","name":"nodeId","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/stats/window/node/:nodeId',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsNodeWindow)),
 
@@ -3950,7 +3959,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
         };
         router.get('/api/v1/wg/stats/mesh',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsMesh)),
 
@@ -3987,7 +3996,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 nodeId: {"in":"path","name":"nodeId","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/stats/links/node/:nodeId',
-            authenticateMiddleware([{"jwt":[]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:stats:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgStatsController)),
             ...(fetchMiddlewares<Middleware>(WgStatsController.prototype.wgStatsNodeLinks)),
 

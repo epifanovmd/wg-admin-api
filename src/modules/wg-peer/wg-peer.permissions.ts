@@ -1,8 +1,9 @@
 import { definePermissions } from "../permission";
 
 /**
- * Права пиров. `wg:peer:own` — базовое право пользователя VPN: видеть свои
- * пиры, скачивать их конфиги/QR и включать-выключать их; выдаётся роли
+ * Права пиров. Действия над пиром — с областью: право на все пиры или
+ * `…:own` — только на свои (держатель или создатель). Базовые права
+ * пользователя VPN (`wg:peer:view:own`, `wg:peer:toggle:own`) выдаются роли
  * `user` при засеве (`WgSeedBootstrap` в модуле wg-stats).
  */
 export const WgPeerPermissions = definePermissions(
@@ -11,23 +12,22 @@ export const WgPeerPermissions = definePermissions(
   {
     PEER_VIEW: {
       name: "wg:peer:view",
-      label: "Просмотр всех пиров и конфигов",
-    },
-    PEER_OWN: {
-      name: "wg:peer:own",
-      label: "Свои пиры: конфиг, QR, включение",
+      label: "Просмотр, конфиг и QR",
+      scoped: true,
     },
     PEER_CREATE: { name: "wg:peer:create", label: "Создание" },
-    PEER_UPDATE: { name: "wg:peer:update", label: "Изменение" },
-    PEER_DELETE: { name: "wg:peer:delete", label: "Удаление" },
+    PEER_UPDATE: { name: "wg:peer:update", label: "Изменение", scoped: true },
+    PEER_DELETE: { name: "wg:peer:delete", label: "Удаление", scoped: true },
     PEER_TOGGLE: {
       name: "wg:peer:toggle",
-      label: "Включение и выключение любых пиров",
+      label: "Включение и выключение",
+      scoped: true,
     },
-    PEER_PSK: { name: "wg:peer:psk", label: "Preshared-ключи" },
+    PEER_PSK: { name: "wg:peer:psk", label: "Preshared-ключи", scoped: true },
     PEER_ASSIGN: {
       name: "wg:peer:assign",
-      label: "Назначение и снятие владельца",
+      label: "Назначение и снятие держателя",
+      scoped: true,
     },
   },
 );
