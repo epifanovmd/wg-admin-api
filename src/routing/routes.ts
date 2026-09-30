@@ -185,7 +185,9 @@ const models: TsoaRoute.Models = {
         "properties": {
             "id": {"dataType":"string","required":true},
             "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "ownerName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdByName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "publicHost": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
@@ -317,7 +319,9 @@ const models: TsoaRoute.Models = {
         "properties": {
             "id": {"dataType":"string","required":true},
             "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "ownerName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdByName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "host": {"dataType":"string","required":true},
@@ -425,7 +429,9 @@ const models: TsoaRoute.Models = {
         "properties": {
             "id": {"dataType":"string","required":true},
             "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "ownerName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdByName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "nodeId": {"dataType":"string","required":true},
             "nodeName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "nodeStatus": {"dataType":"union","subSchemas":[{"ref":"EWgNodeStatus"},{"dataType":"enum","enums":[null]}],"required":true},
@@ -596,7 +602,9 @@ const models: TsoaRoute.Models = {
             "nodeId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "nodeName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "userId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "userName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdByName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "publicKey": {"dataType":"string","required":true},
@@ -995,7 +1003,9 @@ const models: TsoaRoute.Models = {
         "properties": {
             "id": {"dataType":"string","required":true},
             "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "ownerName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdByName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "nodeId": {"dataType":"string","required":true},
@@ -1144,7 +1154,9 @@ const models: TsoaRoute.Models = {
         "properties": {
             "id": {"dataType":"string","required":true},
             "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "ownerName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdByName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "relayNodeId": {"dataType":"string","required":true},
@@ -2263,6 +2275,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 query: {"in":"query","name":"query","dataType":"string"},
                 status: {"in":"query","name":"status","ref":"EWgNodeStatus"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
                 offset: {"in":"query","name":"offset","dataType":"double"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
@@ -2301,6 +2314,7 @@ export function RegisterRoutes(router: KoaRouter) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgNodeController_wgNodeOptions: Record<string, TsoaRoute.ParameterSchema> = {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
         };
         router.get('/api/v1/wg/nodes/options',
             authenticateMiddleware([{"jwt":["permission:wg:node:view:own"]}]),
@@ -2637,6 +2651,7 @@ export function RegisterRoutes(router: KoaRouter) {
         const argsWgEndpointController_listWgEndpoints: Record<string, TsoaRoute.ParameterSchema> = {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 query: {"in":"query","name":"query","dataType":"string"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
                 offset: {"in":"query","name":"offset","dataType":"double"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
@@ -2675,6 +2690,7 @@ export function RegisterRoutes(router: KoaRouter) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgEndpointController_wgEndpointOptions: Record<string, TsoaRoute.ParameterSchema> = {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
         };
         router.get('/api/v1/wg/endpoints/options',
             authenticateMiddleware([{"jwt":["permission:wg:endpoint:view:own"]}]),
@@ -2941,6 +2957,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 viaRelay: {"in":"query","name":"viaRelay","dataType":"boolean"},
                 enabled: {"in":"query","name":"enabled","dataType":"boolean"},
                 query: {"in":"query","name":"query","dataType":"string"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
                 offset: {"in":"query","name":"offset","dataType":"double"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
@@ -2980,6 +2997,7 @@ export function RegisterRoutes(router: KoaRouter) {
         const argsWgInterfaceController_wgInterfaceOptions: Record<string, TsoaRoute.ParameterSchema> = {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 nodeId: {"in":"query","name":"nodeId","ref":"UUID"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
         };
         router.get('/api/v1/wg/interfaces/options',
             authenticateMiddleware([{"jwt":["permission:wg:interface:view:own"]}]),
@@ -3471,6 +3489,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 enabled: {"in":"query","name":"enabled","dataType":"boolean"},
                 online: {"in":"query","name":"online","dataType":"boolean"},
                 query: {"in":"query","name":"query","dataType":"string"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
                 offset: {"in":"query","name":"offset","dataType":"double"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
@@ -3509,6 +3528,7 @@ export function RegisterRoutes(router: KoaRouter) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgPeerController_wgPeerOptions: Record<string, TsoaRoute.ParameterSchema> = {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
         };
         router.get('/api/v1/wg/peers/options',
             authenticateMiddleware([{"jwt":["permission:wg:peer:view:own"]}]),
@@ -4552,6 +4572,7 @@ export function RegisterRoutes(router: KoaRouter) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_listWgSocks: Record<string, TsoaRoute.ParameterSchema> = {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
         };
         router.get('/api/v1/wg/socks',
             authenticateMiddleware([{"jwt":["permission:wg:socks:view:own"]}]),
@@ -5156,6 +5177,7 @@ export function RegisterRoutes(router: KoaRouter) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgForwardController_listWgForwards: Record<string, TsoaRoute.ParameterSchema> = {
                 req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                mine: {"in":"query","name":"mine","dataType":"boolean"},
                 offset: {"in":"query","name":"offset","dataType":"double"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };

@@ -27,6 +27,7 @@ src/modules/user/
 ├── user.listener.ts                    # EventBus → socket (адресно и комната users); права роли → события пользователей
 ├── user.socket-events.ts               # user:* в контракте сокета
 ├── user-grant.resolver.ts              # grantOfUser, UserGrantResolver (IGrantResolver ядра)
+├── user-name.ts                        # userDisplayName (имя профиля или email), joinUserName — join для имён в чужих списках
 ├── user.module.ts
 ├── dto/                                # UserDto, списки/опции, тела запросов
 ├── events/                             # Доменные события
@@ -105,7 +106,9 @@ directPermissions, createdAt, updatedAt }` (`profile` — `ProfileDto`, если
 Списки — единый контракт `IPaginatedDto { items, total, offset, limit }`: `limit` по
 умолчанию 20, максимум 100; без параметров — первая страница, не вся таблица.
 `{id}` — `UUID` (неверный формат → 400 `VALIDATION_ERROR`). `options` ищет по email, имени и
-фамилии профиля (`ILIKE`, `%`/`_` экранируются `escapeLike`).
+фамилии профиля (`ILIKE`, `%`/`_` экранируются `escapeLike`); `name` —
+`userDisplayName` (имя и фамилия профиля, иначе email) — та же функция даёт имена
+владельцев и создателей в DTO других модулей.
 
 ---
 
@@ -274,5 +277,6 @@ HTTP-контекста (политики сокет-комнат, слушат�
   пагинация списков, username.
 - `email-change.service.test.ts` — запрос (хеш кода, письма в транзакции, cooldown,
   занятость, гонки) и подтверждение (истечение, попытки, занятость, гонки).
+- `user-name.test.ts` — отображаемое имя: имя профиля, иначе email, иначе `null`.
 - `user.listener.test.ts`, `admin.bootstrap.test.ts`, `dto/user.dto.test.ts`,
   `validation/user.validation.test.ts`.

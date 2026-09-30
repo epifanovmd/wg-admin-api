@@ -74,18 +74,21 @@ export class WgForwardController extends Controller {
   /**
    * Пробросы с активным маршрутом по отчётам агентов. С правом
    * `wg:forward:view:own` — только свои (владелец или создатель).
+   * @param mine Только свои пробросы (владелец или создатель) при любой области прав
    * @summary Список пробросов
    */
   @Security("jwt", ["permission:wg:forward:view:own"])
   @Get()
   listWgForwards(
     @Request() req: KoaRequest,
+    @Query() mine?: boolean,
     @Query() offset?: number,
     @Query() limit?: number,
   ): Promise<IPaginatedDto<WgForwardDto>> {
     return this._service.list(
       getContextUser(req),
       normalizePagination(offset, limit),
+      mine,
     );
   }
 

@@ -69,6 +69,7 @@ export class WgPeerController extends Controller {
   /**
    * Пиры с фильтрами. С правом `wg:peer:view:own` — только свои пиры
    * (держатель или создатель).
+   * @param mine Только свои пиры (держатель или создатель) при любой области прав
    * @summary Список пиров
    */
   @Security("jwt", ["permission:wg:peer:view:own"])
@@ -81,24 +82,29 @@ export class WgPeerController extends Controller {
     @Query() enabled?: boolean,
     @Query() online?: boolean,
     @Query() query?: string,
+    @Query() mine?: boolean,
     @Query() offset?: number,
     @Query() limit?: number,
   ): Promise<IPaginatedDto<WgPeerDto>> {
     return this._service.list(
       getContextUser(req),
-      { interfaceId, nodeId, userId, enabled, online, query },
+      { interfaceId, nodeId, userId, enabled, online, query, mine },
       normalizePagination(offset, limit),
     );
   }
 
   /**
    * Краткий список пиров для выпадающих списков (в рамках прав).
+   * @param mine Только свои пиры (держатель или создатель) при любой области прав
    * @summary Пиры (options)
    */
   @Security("jwt", ["permission:wg:peer:view:own"])
   @Get("options")
-  wgPeerOptions(@Request() req: KoaRequest): Promise<WgPeerOptionDto[]> {
-    return this._service.options(getContextUser(req));
+  wgPeerOptions(
+    @Request() req: KoaRequest,
+    @Query() mine?: boolean,
+  ): Promise<WgPeerOptionDto[]> {
+    return this._service.options(getContextUser(req), mine);
   }
 
   /**

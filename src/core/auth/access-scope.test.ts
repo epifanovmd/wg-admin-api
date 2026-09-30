@@ -67,6 +67,17 @@ describe("OwnedAccess", () => {
     expect(access.filter(actor([]), "x:view")).to.equal(null);
   });
 
+  it("listFilter: «Мои» — только свои при любой области", () => {
+    expect(access.listFilter(actor(["x:view"]), "x:view")).to.deep.equal({});
+    expect(access.listFilter(actor(["x:view"]), "x:view", true)).to.deep.equal({
+      ownedBy: "u1",
+    });
+    expect(
+      access.listFilter(actor(["x:view:own"]), "x:view", false),
+    ).to.deep.equal({ ownedBy: "u1" });
+    expect(access.listFilter(actor([]), "x:view", true)).to.equal(null);
+  });
+
   it("условия «своих» для выборок", () => {
     expect(access.ownedCondition("item")).to.equal(
       "(item.ownerId = :ownedBy OR item.createdById = :ownedBy)",

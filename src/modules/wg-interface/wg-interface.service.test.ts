@@ -570,6 +570,28 @@ describe("WgInterfaceService", () => {
       expect(findPage.secondCall.args[0].ownedBy).to.equal(undefined);
     });
 
+    it("list и options: «Мои» — только свои и при праве на все", async () => {
+      const findPage = sinon.stub().resolves([[], 0]);
+
+      Object.assign(repo, { findPage });
+      await service.list(
+        manager as any,
+        { mine: true, nodeId: uuid2() },
+        { offset: 0, limit: 20 },
+      );
+      expect(findPage.firstCall.args[0]).to.deep.equal({
+        nodeId: uuid2(),
+        ownedBy: manager.userId,
+      });
+
+      repo.find.resolves([]);
+      await service.options(manager as any, undefined, true);
+      expect(repo.find.firstCall.args[0].where).to.deep.equal([
+        { ownerId: manager.userId },
+        { createdById: manager.userId },
+      ]);
+    });
+
     it("options: свои с фильтром ноды", async () => {
       repo.find.resolves([]);
       await service.options(tenant as any, uuid2());

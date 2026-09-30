@@ -83,4 +83,20 @@ export class OwnedAccess<T extends object> {
 
     return scope === "own" ? { ownedBy: actor.userId } : null;
   }
+
+  /**
+   * Ограничение списка с фильтром «Мои»: при `mine` — только свои при любой
+   * области права, иначе — как `filter`. `null` — права нет.
+   */
+  listFilter(
+    actor: AuthContext,
+    permission: string,
+    mine?: boolean,
+  ): { ownedBy?: string } | null {
+    const filter = this.filter(actor, permission);
+
+    if (!filter) return null;
+
+    return mine ? { ownedBy: actor.userId } : filter;
+  }
 }

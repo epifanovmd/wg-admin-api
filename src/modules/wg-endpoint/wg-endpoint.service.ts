@@ -1,5 +1,4 @@
 import { inject, multiInject, optional } from "inversify";
-import { In } from "typeorm";
 
 import type { IPaginatedDto, Pagination } from "../../core";
 import {
@@ -96,7 +95,7 @@ export class WgEndpointService {
         forwardMode: body.forwardMode ?? EWgForwardMode.Dnat,
         route: body.route ?? EWgEndpointRoute.Auto,
       });
-      const dto = WgEndpointDto.fromEntity(endpoint);
+      const dto = WgEndpointDto.fromEntity(await this._findOrFail(endpoint.id));
 
       this._eventBus.emit(new WgEndpointCreatedEvent(dto));
 
@@ -110,21 +109,25 @@ export class WgEndpointService {
     }
   }
 
+  /** Точки в рамках прав; `mine` — только свои при любой области. */
   async list(
     actor: AuthContext,
-    query: string | undefined,
+    { query, mine }: { query?: string; mine?: boolean },
     pagination: Pagination,
   ): Promise<IPaginatedDto<WgEndpointDto>> {
     const [items, total] = await this._endpoints.findPage(
-      { query, ...this.viewFilter(actor) },
+      { query, ...this.viewFilter(actor, mine) },
       pagination,
     );
 
     return toPage(await this._toDtos(items), total, pagination);
   }
 
-  async options(actor: AuthContext): Promise<WgEndpointOptionDto[]> {
-    const { ownedBy } = this.viewFilter(actor);
+  async options(
+    actor: AuthContext,
+    mine?: boolean,
+  ): Promise<WgEndpointOptionDto[]> {
+    const { ownedBy } = this.viewFilter(actor, mine);
     const items = await this._endpoints.find({
       where: ownedBy ? WgEndpointAccess.ownedWhere(ownedBy) : {},
       order: { name: "ASC" },
@@ -215,7 +218,7 @@ export class WgEndpointService {
 
     if (ids.length === 0) return;
 
-    const endpoints = await this._endpoints.find({ where: { id: In(ids) } });
+    const endpoints = await this._endpoints.findManyWithOwners(ids);
 
     for (const dto of await this._toDtos(endpoints)) {
       this._eventBus.emit(new WgEndpointInterfacesChangedEvent(dto));
@@ -327,11 +330,15 @@ export class WgEndpointService {
     return endpoint;
   }
 
-  /** Ограничение списков точек областью просмотра; права нет — 403. */
-  viewFilter(actor: AuthContext): { ownedBy?: string } {
-    const filter = WgEndpointAccess.filter(
+  /**
+   * Ограничение списков точек областью просмотра; `mine` — только свои при
+   * любой области; права нет — 403.
+   */
+  viewFilter(actor: AuthContext, mine?: boolean): { ownedBy?: string } {
+    const filter = WgEndpointAccess.listFilter(
       actor,
       WgEndpointPermissions.ENDPOINT_VIEW,
+      mine,
     );
 
     if (!filter) throw WgEndpointError.FORBIDDEN();
@@ -467,7 +474,7 @@ export class WgEndpointService {
   }
 
   private async _findOrFail(id: string): Promise<WgEndpoint> {
-    const endpoint = await this._endpoints.findOne({ where: { id } });
+    const endpoint = await this._endpoints.findWithOwners(id);
 
     if (!endpoint) throw WgEndpointError.NOT_FOUND();
 

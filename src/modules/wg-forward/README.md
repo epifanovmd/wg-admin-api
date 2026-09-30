@@ -56,6 +56,13 @@ live-хранилище (TTL 60 с) — `activeRoute` в DTO.
 
 ## Эндпоинты (`/api/v1/wg/forwards`, тег WgForward)
 
+Фильтр «Мои»: `GET /` принимает `mine=true` — только свои пробросы (владелец
+или создатель) при любой области права (`OwnedAccess.listFilter`). DTO несёт
+`ownerName` и `createdByName` — отображаемые имена владельца и создателя
+(`userDisplayName` модуля user — то же, что `name` в `GET /api/v1/user/options`);
+пользователи присоединяются join-ом (`joinUserName`) в `findPage` и `findWithNodes`, поэтому те же
+поля — и в событии `wg:forward:updated`.
+
 CRUD и `POST {id}/assign` `{ userId }` / `POST {id}/revoke` — владелец; права
 `wg:forward:view[:own]` (чтение), `wg:forward:create`,
 `wg:forward:update[:own]` (изменение, включение и маршрут),

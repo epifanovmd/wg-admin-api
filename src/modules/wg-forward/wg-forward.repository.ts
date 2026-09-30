@@ -1,5 +1,6 @@
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
+import { joinUserName } from "../user/user-name";
 import { WgForwardAccess } from "./wg-forward.access";
 import { WgForward } from "./wg-forward.entity";
 import { EWgForwardProtocol } from "./wg-forward.types";
@@ -11,20 +12,22 @@ export class WgForwardRepository extends BaseRepository<WgForward> {
     { offset, limit }: Pagination,
     ownedBy?: string,
   ): Promise<[WgForward[], number]> {
-    return this.findAndCount({
-      where: ownedBy ? WgForwardAccess.ownedWhere(ownedBy) : {},
-      relations: { relayNode: true, targetNode: true },
-      order: { createdAt: "DESC", id: "DESC" },
-      skip: offset,
-      take: limit,
-    });
+    const qb = this._withRelations()
+      .orderBy("forward.createdAt", "DESC")
+      .addOrderBy("forward.id", "DESC")
+      .skip(offset)
+      .take(limit);
+
+    if (ownedBy) {
+      qb.andWhere(WgForwardAccess.ownedCondition("forward"), { ownedBy });
+    }
+
+    return qb.getManyAndCount();
   }
 
+  /** Проброс с нодами и именами владельца и создателя. */
   findWithNodes(id: string): Promise<WgForward | null> {
-    return this.findOne({
-      where: { id },
-      relations: { relayNode: true, targetNode: true },
-    });
+    return this._withRelations().where("forward.id = :id", { id }).getOne();
   }
 
   /** Включённые пробросы релея — для его desired state. */
@@ -69,5 +72,16 @@ export class WgForwardRepository extends BaseRepository<WgForward> {
       protocol: row.protocol,
       port: row.listenPort,
     }));
+  }
+
+  private _withRelations() {
+    const qb = this.createQueryBuilder("forward")
+      .leftJoinAndSelect("forward.relayNode", "relayNode")
+      .leftJoinAndSelect("forward.targetNode", "targetNode");
+
+    joinUserName(qb, "forward.owner", "owner");
+    joinUserName(qb, "forward.createdBy", "createdBy");
+
+    return qb;
   }
 }

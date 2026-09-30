@@ -318,10 +318,20 @@
 						"nullable": true,
 						"description": "Назначенный владелец ноды."
 					},
+					"ownerName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя владельца."
+					},
 					"createdById": {
 						"type": "string",
 						"nullable": true,
 						"description": "Создатель ноды."
+					},
+					"createdByName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя создателя."
 					},
 					"name": {
 						"type": "string"
@@ -400,7 +410,9 @@
 				"required": [
 					"id",
 					"ownerId",
+					"ownerName",
 					"createdById",
+					"createdByName",
 					"name",
 					"description",
 					"publicHost",
@@ -660,10 +672,20 @@
 						"nullable": true,
 						"description": "Назначенный владелец точки."
 					},
+					"ownerName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя владельца."
+					},
 					"createdById": {
 						"type": "string",
 						"nullable": true,
 						"description": "Создатель точки."
+					},
+					"createdByName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя создателя."
 					},
 					"name": {
 						"type": "string"
@@ -708,7 +730,9 @@
 				"required": [
 					"id",
 					"ownerId",
+					"ownerName",
 					"createdById",
+					"createdByName",
 					"name",
 					"description",
 					"host",
@@ -954,10 +978,20 @@
 						"nullable": true,
 						"description": "Назначенный владелец интерфейса."
 					},
+					"ownerName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя владельца."
+					},
 					"createdById": {
 						"type": "string",
 						"nullable": true,
 						"description": "Создатель интерфейса."
+					},
+					"createdByName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя создателя."
 					},
 					"nodeId": {
 						"type": "string"
@@ -1075,7 +1109,9 @@
 				"required": [
 					"id",
 					"ownerId",
+					"ownerName",
 					"createdById",
+					"createdByName",
 					"nodeId",
 					"nodeName",
 					"nodeStatus",
@@ -1470,10 +1506,20 @@
 						"nullable": true,
 						"description": "Держатель пира."
 					},
+					"userName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя держателя."
+					},
 					"createdById": {
 						"type": "string",
 						"nullable": true,
 						"description": "Создатель пира."
+					},
+					"createdByName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя создателя."
 					},
 					"name": {
 						"type": "string"
@@ -1568,7 +1614,9 @@
 					"nodeId",
 					"nodeName",
 					"userId",
+					"userName",
 					"createdById",
+					"createdByName",
 					"name",
 					"description",
 					"publicKey",
@@ -2663,10 +2711,20 @@
 						"nullable": true,
 						"description": "Назначенный владелец прокси."
 					},
+					"ownerName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя владельца."
+					},
 					"createdById": {
 						"type": "string",
 						"nullable": true,
 						"description": "Создатель прокси."
+					},
+					"createdByName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя создателя."
 					},
 					"name": {
 						"type": "string"
@@ -2738,7 +2796,9 @@
 				"required": [
 					"id",
 					"ownerId",
+					"ownerName",
 					"createdById",
+					"createdByName",
 					"name",
 					"description",
 					"nodeId",
@@ -3020,10 +3080,20 @@
 						"nullable": true,
 						"description": "Назначенный владелец проброса."
 					},
+					"ownerName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя владельца."
+					},
 					"createdById": {
 						"type": "string",
 						"nullable": true,
 						"description": "Создатель проброса."
+					},
+					"createdByName": {
+						"type": "string",
+						"nullable": true,
+						"description": "Отображаемое имя создателя."
 					},
 					"name": {
 						"type": "string"
@@ -3092,7 +3162,9 @@
 				"required": [
 					"id",
 					"ownerId",
+					"ownerName",
 					"createdById",
+					"createdByName",
 					"name",
 					"description",
 					"relayNodeId",
@@ -5855,6 +5927,15 @@
 						}
 					},
 					{
+						"description": "Только свои ноды (владелец или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					},
+					{
 						"in": "query",
 						"name": "offset",
 						"required": false,
@@ -5915,7 +5996,17 @@
 						]
 					}
 				],
-				"parameters": []
+				"parameters": [
+					{
+						"description": "Только свои ноды (владелец или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					}
+				]
 			}
 		},
 		"/api/v1/wg/nodes/{id}": {
@@ -6374,6 +6465,15 @@
 						}
 					},
 					{
+						"description": "Только свои точки (владелец или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					},
+					{
 						"in": "query",
 						"name": "offset",
 						"required": false,
@@ -6434,7 +6534,17 @@
 						]
 					}
 				],
-				"parameters": []
+				"parameters": [
+					{
+						"description": "Только свои точки (владелец или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					}
+				]
 			}
 		},
 		"/api/v1/wg/endpoints/{id}": {
@@ -6826,6 +6936,15 @@
 						}
 					},
 					{
+						"description": "Только свои интерфейсы (владелец или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					},
+					{
 						"in": "query",
 						"name": "offset",
 						"required": false,
@@ -6893,6 +7012,15 @@
 						"required": false,
 						"schema": {
 							"$ref": "#/components/schemas/UUID"
+						}
+					},
+					{
+						"description": "Только свои интерфейсы (владелец или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
 						}
 					}
 				]
@@ -7602,6 +7730,15 @@
 						}
 					},
 					{
+						"description": "Только свои пиры (держатель или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					},
+					{
 						"in": "query",
 						"name": "offset",
 						"required": false,
@@ -7662,7 +7799,17 @@
 						]
 					}
 				],
-				"parameters": []
+				"parameters": [
+					{
+						"description": "Только свои пиры (держатель или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					}
+				]
 			}
 		},
 		"/api/v1/wg/peers/{id}": {
@@ -9139,7 +9286,17 @@
 						]
 					}
 				],
-				"parameters": []
+				"parameters": [
+					{
+						"description": "Только свои прокси (владелец или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					}
+				]
 			}
 		},
 		"/api/v1/wg/socks/{id}": {
@@ -10010,6 +10167,15 @@
 					}
 				],
 				"parameters": [
+					{
+						"description": "Только свои пробросы (владелец или создатель) при любой области прав",
+						"in": "query",
+						"name": "mine",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					},
 					{
 						"in": "query",
 						"name": "offset",

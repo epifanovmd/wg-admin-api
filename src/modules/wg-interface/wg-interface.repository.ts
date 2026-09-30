@@ -2,6 +2,7 @@ import { In } from "typeorm";
 
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
+import { joinUserName } from "../user/user-name";
 import { EWgEndpointMode, WgEndpoint } from "../wg-endpoint";
 import { WgInterfaceAccess } from "./wg-interface.access";
 import { WgInterface } from "./wg-interface.entity";
@@ -35,12 +36,7 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
     }: IWgInterfaceFilters,
     { offset, limit }: Pagination,
   ): Promise<[WgInterface[], number]> {
-    const qb = this.createQueryBuilder("iface")
-      .leftJoinAndSelect("iface.node", "node")
-      .leftJoinAndSelect("iface.endpoint", "endpoint")
-      .leftJoinAndSelect("endpoint.relayNode", "relayNode")
-      .leftJoinAndSelect("iface.replicas", "replica")
-      .leftJoinAndSelect("replica.node", "replicaNode")
+    const qb = this._withRelations()
       .orderBy("iface.createdAt", "DESC")
       .addOrderBy("iface.id", "DESC")
       .skip(offset)
@@ -73,15 +69,10 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
   }
 
   findWithRelations(id: string): Promise<WgInterface | null> {
-    return this.findOne({
-      where: { id },
-      relations: {
-        node: true,
-        endpoint: { relayNode: true },
-        replicas: { node: true },
-      },
-      order: { replicas: { priority: "ASC" } },
-    });
+    return this._withRelations()
+      .where("iface.id = :id", { id })
+      .orderBy("replica.priority", "ASC")
+      .getOne();
   }
 
   findByNode(nodeId: string): Promise<WgInterface[]> {
@@ -237,6 +228,21 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
       .find({ where: { interfaceId }, select: { nodeId: true } });
 
     return iface ? [iface.nodeId, ...replicas.map(r => r.nodeId)] : [];
+  }
+
+  /** Интерфейс с нодой, точкой, копиями и именами владельца и создателя. */
+  private _withRelations() {
+    const qb = this.createQueryBuilder("iface")
+      .leftJoinAndSelect("iface.node", "node")
+      .leftJoinAndSelect("iface.endpoint", "endpoint")
+      .leftJoinAndSelect("endpoint.relayNode", "relayNode")
+      .leftJoinAndSelect("iface.replicas", "replica")
+      .leftJoinAndSelect("replica.node", "replicaNode");
+
+    joinUserName(qb, "iface.owner", "owner");
+    joinUserName(qb, "iface.createdBy", "createdBy");
+
+    return qb;
   }
 
   private _onNodeWhere(nodeId: string, excludeInterfaceId?: string) {

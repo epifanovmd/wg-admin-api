@@ -80,12 +80,16 @@ export class WgSocksController extends Controller {
   /**
    * Прокси с пользователями, клиентами и live-показателями. С правом
    * `wg:socks:view:own` — только свои (владелец или создатель).
+   * @param mine Только свои прокси (владелец или создатель) при любой области прав
    * @summary Список прокси
    */
   @Security("jwt", ["permission:wg:socks:view:own"])
   @Get()
-  listWgSocks(@Request() req: KoaRequest): Promise<WgSocksServiceDto[]> {
-    return this._service.list(getContextUser(req));
+  listWgSocks(
+    @Request() req: KoaRequest,
+    @Query() mine?: boolean,
+  ): Promise<WgSocksServiceDto[]> {
+    return this._service.list(getContextUser(req), mine);
   }
 
   /**

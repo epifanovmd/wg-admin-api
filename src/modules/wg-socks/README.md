@@ -58,6 +58,13 @@ live-хранилище (TTL 60 с), поле `live` DTO.
 
 ## Эндпоинты (`/api/v1/wg/socks`, тег WgSocks)
 
+Фильтр «Мои»: `GET /` принимает `mine=true` — только свои прокси (владелец
+или создатель) при любой области права (`OwnedAccess.listFilter`). DTO несёт
+`ownerName` и `createdByName` — отображаемые имена владельца и создателя
+(`userDisplayName` модуля user — то же, что `name` в `GET /api/v1/user/options`);
+пользователи присоединяются join-ом (`joinUserName`) в `findWithRelations` и `findAllWithRelations`, поэтому те же
+поля — и в событии `wg:socks:updated`.
+
 Чтение — `wg:socks:view[:own]`. Все права, кроме создания, — с областью `[:own]`.
 
 - CRUD сервиса — `wg:socks:create`, `wg:socks:update` (изменение и включение),

@@ -1,4 +1,5 @@
 import { BaseDto } from "../../../core";
+import { userDisplayName } from "../../user/user-name";
 import type { EWgEndpointMode } from "../../wg-endpoint";
 import type { EWgNodeStatus } from "../../wg-node";
 import type { WgInterface } from "../wg-interface.entity";
@@ -40,8 +41,12 @@ export class WgInterfaceDto extends BaseDto {
   id: string;
   /** Назначенный владелец интерфейса. */
   ownerId: string | null;
+  /** Отображаемое имя владельца. */
+  ownerName: string | null;
   /** Создатель интерфейса. */
   createdById: string | null;
+  /** Отображаемое имя создателя. */
+  createdByName: string | null;
   nodeId: string;
   /** Название ноды (если загружена связь). */
   nodeName: string | null;
@@ -80,7 +85,9 @@ export class WgInterfaceDto extends BaseDto {
 
     this.id = entity.id;
     this.ownerId = entity.ownerId;
+    this.ownerName = userDisplayName(entity.owner);
     this.createdById = entity.createdById;
+    this.createdByName = userDisplayName(entity.createdBy);
     this.nodeId = entity.nodeId;
     this.nodeName = entity.node?.name ?? null;
     this.nodeStatus = entity.node?.status ?? null;

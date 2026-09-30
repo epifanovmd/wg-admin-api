@@ -32,6 +32,15 @@ lastHandshakeAt/lastEndpoint/rxBytesTotal/txBytesTotal обновляет ста
 
 ## Эндпоинты (`/api/v1/wg/peers`, тег WgPeer)
 
+Фильтр «Мои»: `GET /` и `GET /options` принимают `mine=true` — только свои пиры
+(держатель или создатель) при любой области права (`OwnedAccess.listFilter`).
+DTO пира несёт `userName` и `createdByName` — отображаемые имена держателя и
+создателя (`userDisplayName` модуля user — то же, что `name` в
+`GET /api/v1/user/options`); пользователи присоединяются join-ом
+(`joinUserName`) в `findPage` и `findWithRelations`, поэтому те же поля — и в
+`wg:peer:updated`. Держатель меняется `update` колонки, не `save` сущности:
+загруженная связь `user` перекрыла бы новый `userId`.
+
 CRUD + options + `{id}/enable|disable`, `{id}/psk/rotate`,
 `DELETE {id}/psk`, `{id}/assign|revoke`, `GET {id}/config` (text/plain,
 attachment), `GET {id}/qr` (PNG data-URL). Конфликты имени/ключа/адреса — 409,

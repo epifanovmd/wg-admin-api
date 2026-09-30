@@ -130,6 +130,14 @@ describe("WgSocksAppService: область «все / свои»", () => {
     );
   });
 
+  it("list: «Мои» — только свои и при праве на все", async () => {
+    await service.list(admin, true);
+
+    expect(services.findAllWithRelations.firstCall.args[0]).to.equal(
+      admin.userId,
+    );
+  });
+
   it("чужой — 404; свой без права на действие — 403; свой — пользователи", async () => {
     services.findWithRelations.resolves(makeSocks({ ownerId: uuid2() }));
     await expectCode(() => service.get(tenant, "s1"), "WG_SOCKS_NOT_FOUND");

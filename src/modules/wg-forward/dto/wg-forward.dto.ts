@@ -1,4 +1,5 @@
 import { BaseDto } from "../../../core";
+import { userDisplayName } from "../../user/user-name";
 import type { WgForward } from "../wg-forward.entity";
 import type {
   EWgForwardActiveRoute,
@@ -11,8 +12,12 @@ export class WgForwardDto extends BaseDto {
   id: string;
   /** Назначенный владелец проброса. */
   ownerId: string | null;
+  /** Отображаемое имя владельца. */
+  ownerName: string | null;
   /** Создатель проброса. */
   createdById: string | null;
+  /** Отображаемое имя создателя. */
+  createdByName: string | null;
   name: string;
   description: string | null;
   relayNodeId: string;
@@ -39,7 +44,9 @@ export class WgForwardDto extends BaseDto {
 
     this.id = entity.id;
     this.ownerId = entity.ownerId;
+    this.ownerName = userDisplayName(entity.owner);
     this.createdById = entity.createdById;
+    this.createdByName = userDisplayName(entity.createdBy);
     this.name = entity.name;
     this.description = entity.description;
     this.relayNodeId = entity.relayNodeId;

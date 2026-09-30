@@ -2,6 +2,7 @@ import { In, LessThan } from "typeorm";
 
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
+import { joinUserName } from "../user/user-name";
 import { WgPeerAccess } from "./wg-peer.access";
 import { WgPeer } from "./wg-peer.entity";
 import { WG_PEER_ONLINE_WINDOW_SEC } from "./wg-peer.types";
@@ -63,10 +64,7 @@ export class WgPeerRepository extends BaseRepository<WgPeer> {
     filters: IWgPeerFilters,
     { offset, limit }: Pagination,
   ): Promise<[WgPeer[], number]> {
-    const qb = this.createQueryBuilder("peer")
-      .leftJoinAndSelect("peer.iface", "iface")
-      .leftJoinAndSelect("iface.node", "node")
-      .leftJoinAndSelect("iface.endpoint", "endpoint")
+    const qb = this._withRelations()
       .orderBy("peer.createdAt", "DESC")
       .addOrderBy("peer.id", "DESC")
       .skip(offset)
@@ -95,10 +93,7 @@ export class WgPeerRepository extends BaseRepository<WgPeer> {
   }
 
   findWithRelations(id: string): Promise<WgPeer | null> {
-    return this.findOne({
-      where: { id },
-      relations: { iface: { node: true, endpoint: true } },
-    });
+    return this._withRelations().where("peer.id = :id", { id }).getOne();
   }
 
   /** Занятые IPv4-адреса интерфейса. */
@@ -138,5 +133,18 @@ export class WgPeerRepository extends BaseRepository<WgPeer> {
     return this.find({
       where: { interfaceId, publicKey: In(publicKeys) },
     });
+  }
+
+  /** Пир с интерфейсом, нодой, точкой и именами держателя и создателя. */
+  private _withRelations() {
+    const qb = this.createQueryBuilder("peer")
+      .leftJoinAndSelect("peer.iface", "iface")
+      .leftJoinAndSelect("iface.node", "node")
+      .leftJoinAndSelect("iface.endpoint", "endpoint");
+
+    joinUserName(qb, "peer.user", "holder");
+    joinUserName(qb, "peer.createdBy", "createdBy");
+
+    return qb;
   }
 }

@@ -1,4 +1,5 @@
 import { BaseDto } from "../../../core";
+import { userDisplayName } from "../../user/user-name";
 import type { WgPeer } from "../wg-peer.entity";
 import type { EWgPeerDisabledReason } from "../wg-peer.types";
 import { isPeerOnline } from "../wg-peer.types";
@@ -11,8 +12,12 @@ export class WgPeerDto extends BaseDto {
   nodeName: string | null;
   /** Держатель пира. */
   userId: string | null;
+  /** Отображаемое имя держателя. */
+  userName: string | null;
   /** Создатель пира. */
   createdById: string | null;
+  /** Отображаемое имя создателя. */
+  createdByName: string | null;
   name: string;
   description: string | null;
   publicKey: string;
@@ -46,7 +51,9 @@ export class WgPeerDto extends BaseDto {
     this.nodeId = entity.iface?.nodeId ?? null;
     this.nodeName = entity.iface?.node?.name ?? null;
     this.userId = entity.userId;
+    this.userName = userDisplayName(entity.user);
     this.createdById = entity.createdById;
+    this.createdByName = userDisplayName(entity.createdBy);
     this.name = entity.name;
     this.description = entity.description;
     this.publicKey = entity.publicKey;

@@ -1,4 +1,5 @@
 import { BaseDto } from "../../../core";
+import { userDisplayName } from "../../user/user-name";
 import type {
   WgSocksClient,
   WgSocksService,
@@ -57,8 +58,12 @@ export class WgSocksServiceDto extends BaseDto {
   id: string;
   /** Назначенный владелец прокси. */
   ownerId: string | null;
+  /** Отображаемое имя владельца. */
+  ownerName: string | null;
   /** Создатель прокси. */
   createdById: string | null;
+  /** Отображаемое имя создателя. */
+  createdByName: string | null;
   name: string;
   description: string | null;
   nodeId: string;
@@ -80,7 +85,9 @@ export class WgSocksServiceDto extends BaseDto {
     super(entity);
     this.id = entity.id;
     this.ownerId = entity.ownerId;
+    this.ownerName = userDisplayName(entity.owner);
     this.createdById = entity.createdById;
+    this.createdByName = userDisplayName(entity.createdBy);
     this.name = entity.name;
     this.description = entity.description;
     this.nodeId = entity.nodeId;

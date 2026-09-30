@@ -151,7 +151,9 @@ describe("wireguard", () => {
       ).data.node;
 
       expect(created.createdById).to.equal(tenant.id);
+      expect(created.createdByName).to.equal(tenant.email);
       expect(created.ownerId).to.equal(null);
+      expect(created.ownerName).to.equal(null);
 
       // Чужого владельца без права назначения не поставить.
       expectStatus(
@@ -187,6 +189,30 @@ describe("wireguard", () => {
       );
 
       expect(assigned.data.ownerId).to.equal(tenant.id);
+      expect(assigned.data.ownerName).to.equal(tenant.email);
+
+      // «Мои» у видящего все — только ноды, где он владелец или создатель.
+      const adminMine = expectStatus(
+        await call(admin, "GET", "/api/v1/wg/nodes?mine=true&limit=100"),
+        200,
+      );
+      const adminMineIds = items(adminMine.data).map((n: any) => n.id);
+
+      expect(adminMineIds).to.not.include(created.id);
+      expect(adminMineIds).to.include(nodeA.id);
+
+      const tenantMine = expectStatus(
+        await call(actor, "GET", "/api/v1/wg/nodes?mine=true"),
+        200,
+      );
+
+      expect(items(tenantMine.data).map((n: any) => n.id)).to.have.members([
+        created.id,
+        nodeA.id,
+      ]);
+      expect(
+        items(tenantMine.data).find((n: any) => n.id === nodeA.id)?.ownerName,
+      ).to.equal(tenant.email);
 
       const options = expectStatus(
         await call(actor, "GET", "/api/v1/wg/nodes/options"),
@@ -337,6 +363,29 @@ describe("wireguard", () => {
       );
 
       expect(assigned.data.ownerId).to.equal(tenant.id);
+      expect(assigned.data.ownerName).to.equal(tenant.email);
+
+      // «Мои» у видящего все — только точки, где он владелец или создатель.
+      const adminMine = expectStatus(
+        await call(admin, "GET", "/api/v1/wg/endpoints?mine=true&limit=100"),
+        200,
+      );
+      const adminMineIds = items(adminMine.data).map((e: any) => e.id);
+
+      expect(adminMineIds).to.include(endpoint.id);
+      expect(adminMineIds).to.not.include(own.id);
+      expect(
+        items(adminMine.data).find((e: any) => e.id === endpoint.id),
+      ).to.include({ ownerName: tenant.email });
+
+      const adminMineOptions = expectStatus(
+        await call(admin, "GET", "/api/v1/wg/endpoints/options?mine=true"),
+        200,
+      );
+
+      expect(adminMineOptions.data.map((e: any) => e.id)).to.not.include(
+        own.id,
+      );
       expectStatus(
         await call(actor, "GET", `/api/v1/wg/endpoints/${endpoint.id}`),
         200,
@@ -670,6 +719,30 @@ describe("wireguard", () => {
       );
 
       expect(assigned.data.ownerId).to.equal(tenant.id);
+      expect(assigned.data.ownerName).to.equal(tenant.email);
+
+      // «Мои» у видящего все — только интерфейсы, где он владелец или создатель.
+      const adminMine = expectStatus(
+        await call(admin, "GET", "/api/v1/wg/interfaces?mine=true&limit=100"),
+        200,
+      );
+      const adminMineIds = items(adminMine.data).map((i: any) => i.id);
+
+      expect(adminMineIds).to.include(iface.id);
+      expect(adminMineIds).to.not.include(own.id);
+
+      const tenantMine = expectStatus(
+        await call(actor, "GET", "/api/v1/wg/interfaces?mine=true"),
+        200,
+      );
+
+      expect(items(tenantMine.data).map((i: any) => i.id)).to.have.members([
+        own.id,
+        iface.id,
+      ]);
+      expect(
+        items(tenantMine.data).find((i: any) => i.id === own.id),
+      ).to.include({ createdByName: tenant.email, ownerName: null });
       expectStatus(
         await call(actor, "GET", `/api/v1/wg/interfaces/${iface.id}`),
         200,
@@ -857,6 +930,17 @@ describe("wireguard", () => {
       );
 
       expect(assigned.data.userId).to.equal(user.id);
+      // Без имени в профиле — email.
+      expect(assigned.data.userName).to.equal(user.email);
+
+      const listed = expectStatus(
+        await call(admin, "GET", `/api/v1/wg/peers?userId=${user.id}`),
+        200,
+      );
+
+      expect(
+        items(listed.data).find((p: any) => p.id === peer2.id)?.userName,
+      ).to.equal(user.email);
 
       const revoked = expectStatus(
         await call(admin, "POST", `/api/v1/wg/peers/${peer2.id}/revoke`),
@@ -864,10 +948,14 @@ describe("wireguard", () => {
       );
 
       expect(revoked.data.userId).to.equal(null);
+      expect(revoked.data.userName).to.equal(null);
     });
 
     it("область «свои»: создатель видит пир без держателя; видит все — меняет только свои", async () => {
-      const editor = await signUp("wg-editor");
+      const editor = await signUp("wg-editor", {
+        firstName: "Эдуард",
+        lastName: "Редакторов",
+      });
 
       expectStatus(
         await call(admin, "PATCH", `/api/v1/user/setPrivileges/${editor.id}`, {
@@ -893,7 +981,9 @@ describe("wireguard", () => {
       );
 
       expect(created.data.userId).to.equal(null);
+      expect(created.data.userName).to.equal(null);
       expect(created.data.createdById).to.equal(editor.id);
+      expect(created.data.createdByName).to.equal("Эдуард Редакторов");
 
       // Чужого держателя без права назначения не поставить.
       expectStatus(
@@ -914,6 +1004,26 @@ describe("wireguard", () => {
       expect(items(all.data).map((p: any) => p.id)).to.include.members([
         created.data.id,
         peer2.id,
+      ]);
+
+      // «Мои» — только свои и при праве видеть все.
+      const mine = expectStatus(
+        await call(fresh, "GET", `/api/v1/wg/peers?mine=true`),
+        200,
+      );
+
+      expect(items(mine.data).map((p: any) => p.id)).to.deep.equal([
+        created.data.id,
+      ]);
+      expect(items(mine.data)[0].createdByName).to.equal("Эдуард Редакторов");
+
+      const mineOptions = expectStatus(
+        await call(fresh, "GET", "/api/v1/wg/peers/options?mine=true"),
+        200,
+      );
+
+      expect(mineOptions.data.map((p: any) => p.id)).to.deep.equal([
+        created.data.id,
       ]);
 
       expectStatus(

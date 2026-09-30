@@ -60,6 +60,13 @@ multi-inject `WG_ENDPOINT_USAGE` (`asWgEndpointUsage`, реализует wg-int
 
 ## Эндпоинты (`/api/v1/wg/endpoints`, тег WgEndpoint)
 
+Фильтр «Мои»: `GET /` и `GET /options` принимают `mine=true` — только свои точки (владелец
+или создатель) при любой области права (`OwnedAccess.listFilter`). DTO несёт
+`ownerName` и `createdByName` — отображаемые имена владельца и создателя
+(`userDisplayName` модуля user — то же, что `name` в `GET /api/v1/user/options`);
+пользователи присоединяются join-ом (`joinUserName`) в `findPage`, `findWithOwners` и `findManyWithOwners`, поэтому те же
+поля — и в событии `wg:endpoint:updated`.
+
 `WgEndpointDto.interfaces` — интерфейсы, подключённые через точку (нода,
 порт клиентов, ноды копий): куда она ведёт. Данные — от модуля интерфейсов
 через `IWgEndpointUsage.interfacesByEndpoint` (один запрос на список точек).

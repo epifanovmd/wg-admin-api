@@ -168,13 +168,16 @@ export class WgForwardService {
     );
   }
 
+  /** Пробросы в рамках прав; `mine` — только свои при любой области. */
   async list(
     actor: AuthContext,
     pagination: Pagination,
+    mine?: boolean,
   ): Promise<IPaginatedDto<WgForwardDto>> {
-    const filter = WgForwardAccess.filter(
+    const filter = WgForwardAccess.listFilter(
       actor,
       WgForwardPermissions.FORWARD_VIEW,
+      mine,
     );
 
     if (!filter) throw WgForwardError.FORBIDDEN();

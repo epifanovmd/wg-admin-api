@@ -58,6 +58,13 @@ describe("WgNodeService", () => {
 
   beforeEach(() => {
     repo = createMockRepository();
+    // Загрузка с именами владельцев — через стабы findOne / find.
+    Object.assign(repo, {
+      findWithOwners: sinon
+        .stub()
+        .callsFake((id: string) => repo.findOne({ where: { id } })),
+      findManyWithOwners: sinon.stub().callsFake(() => repo.find()),
+    });
     eventBus = createMockEventBus();
     apiKeys = {
       create: sinon.stub().resolves({
@@ -73,6 +80,7 @@ describe("WgNodeService", () => {
     const node = makeNode();
 
     repo.createAndSave.resolves(node);
+    repo.findOne.resolves(node);
     repo.update.resolves({});
 
     const created = await service.create(admin, {
@@ -234,6 +242,7 @@ describe("WgNodeService", () => {
     const node = makeNode({ status: EWgNodeStatus.Offline }) as any;
 
     repo.update.resolves({});
+    repo.findOne.resolves(node);
 
     await service.touchAgent(node);
 
@@ -244,6 +253,7 @@ describe("WgNodeService", () => {
   describe("область «все / свои»", () => {
     it("create: создатель — автор запроса, владелец — только с правом назначения", async () => {
       repo.createAndSave.callsFake(async (data: any) => makeNode(data));
+      repo.findOne.callsFake(() => repo.createAndSave.lastCall.returnValue);
       repo.update.resolves({});
 
       await service.create(tenant, { name: "own" });
@@ -281,6 +291,43 @@ describe("WgNodeService", () => {
         { ownerId: tenant.userId },
         { createdById: tenant.userId },
       ]);
+    });
+
+    it("list и options: «Мои» — только свои и при праве на все", async () => {
+      const findPage = sinon.stub().resolves([[], 0]);
+
+      Object.assign(repo, { findPage });
+      await service.list(editor, { mine: true }, { offset: 0, limit: 20 });
+      expect(findPage.firstCall.args[0].ownedBy).to.equal(editor.userId);
+
+      await service.list(editor, { mine: false }, { offset: 0, limit: 20 });
+      expect(findPage.secondCall.args[0].ownedBy).to.equal(undefined);
+
+      repo.find.resolves([]);
+      await service.options(editor, true);
+      expect(repo.find.firstCall.args[0].where).to.deep.equal([
+        { ownerId: editor.userId },
+        { createdById: editor.userId },
+      ]);
+    });
+
+    it("get: имена владельца и создателя в DTO", async () => {
+      repo.findOne.resolves(
+        makeNode({
+          ownerId: uuid(),
+          owner: {
+            email: "o@x.io",
+            profile: { firstName: "Анна", lastName: null },
+          },
+          createdById: uuid2(),
+          createdBy: null,
+        }),
+      );
+
+      const dto = await service.get(admin, uuid());
+
+      expect(dto.ownerName).to.equal("Анна");
+      expect(dto.createdByName).to.equal(null);
     });
 
     it("list: без права просмотра — 403", async () => {

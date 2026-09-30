@@ -46,6 +46,13 @@ permission)` и `viewFilter(actor)`; методы без актора (`findEnti
 
 ## Эндпоинты (`/api/v1/wg/nodes`, тег WgNode)
 
+Фильтр «Мои»: `GET /` и `GET /options` принимают `mine=true` — только свои ноды (владелец
+или создатель) при любой области права (`OwnedAccess.listFilter`). DTO несёт
+`ownerName` и `createdByName` — отображаемые имена владельца и создателя
+(`userDisplayName` модуля user — то же, что `name` в `GET /api/v1/user/options`);
+пользователи присоединяются join-ом (`joinUserName`) в `findPage`, `findWithOwners` и `findManyWithOwners`, поэтому те же
+поля — и в событии `wg:node:updated`.
+
 | Метод  | Путь                     | Право                                                   |
 | ------ | ------------------------ | ------------------------------------------------------- |
 | POST   | `/`                      | `wg:node:create` (ответ содержит `agentKey` — один раз) |

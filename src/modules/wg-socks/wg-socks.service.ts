@@ -140,8 +140,13 @@ export class WgSocksAppService {
     });
   }
 
-  async list(actor: AuthContext): Promise<WgSocksServiceDto[]> {
-    const filter = WgSocksAccess.filter(actor, WgSocksPermissions.SOCKS_VIEW);
+  /** Прокси в рамках прав; `mine` — только свои при любой области. */
+  async list(actor: AuthContext, mine?: boolean): Promise<WgSocksServiceDto[]> {
+    const filter = WgSocksAccess.listFilter(
+      actor,
+      WgSocksPermissions.SOCKS_VIEW,
+      mine,
+    );
 
     if (!filter) throw WgSocksError.FORBIDDEN();
 
@@ -187,7 +192,14 @@ export class WgSocksAppService {
     if (body.description !== undefined) service.description = body.description;
     if (body.enabled !== undefined) service.enabled = body.enabled;
 
-    const { users: _u, clients: _c, node: _n, ...plain } = service;
+    const {
+      users: _u,
+      clients: _c,
+      node: _n,
+      owner: _o,
+      createdBy: _cb,
+      ...plain
+    } = service;
 
     await this._inTxDirty(service.nodeId, manager =>
       manager.getRepository(this._services.target).save(plain),

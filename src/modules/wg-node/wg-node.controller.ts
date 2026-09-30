@@ -78,6 +78,7 @@ export class WgNodeController extends Controller {
   /**
    * Ноды с фильтрами, новые первыми. С правом `wg:node:view:own` — только
    * свои (владелец или создатель).
+   * @param mine Только свои ноды (владелец или создатель) при любой области прав
    * @summary Список нод
    */
   @Security("jwt", ["permission:wg:node:view:own"])
@@ -86,24 +87,29 @@ export class WgNodeController extends Controller {
     @Request() req: KoaRequest,
     @Query() query?: string,
     @Query() status?: EWgNodeStatus,
+    @Query() mine?: boolean,
     @Query() offset?: number,
     @Query() limit?: number,
   ): Promise<IPaginatedDto<WgNodeDto>> {
     return this._nodes.list(
       getContextUser(req),
-      { query, status },
+      { query, status, mine },
       normalizePagination(offset, limit),
     );
   }
 
   /**
    * Краткий список нод для выпадающих списков (в рамках прав).
+   * @param mine Только свои ноды (владелец или создатель) при любой области прав
    * @summary Ноды (options)
    */
   @Security("jwt", ["permission:wg:node:view:own"])
   @Get("options")
-  wgNodeOptions(@Request() req: KoaRequest): Promise<WgNodeOptionDto[]> {
-    return this._nodes.options(getContextUser(req));
+  wgNodeOptions(
+    @Request() req: KoaRequest,
+    @Query() mine?: boolean,
+  ): Promise<WgNodeOptionDto[]> {
+    return this._nodes.options(getContextUser(req), mine);
   }
 
   /**

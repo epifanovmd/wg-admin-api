@@ -76,6 +76,13 @@ describe("WgEndpointService", () => {
 
   beforeEach(() => {
     endpoints = createMockRepository();
+    // Загрузка с именами владельцев — через стабы findOne / find.
+    Object.assign(endpoints, {
+      findWithOwners: sinon
+        .stub()
+        .callsFake((id: string) => endpoints.findOne({ where: { id } })),
+      findManyWithOwners: sinon.stub().callsFake(() => endpoints.find()),
+    });
     links = {
       ...createMockRepository(),
       findPair: sinon.stub(),
@@ -257,6 +264,9 @@ describe("WgEndpointService", () => {
       endpoints.createAndSave.callsFake(async (data: any) =>
         makeEndpoint(data),
       );
+      endpoints.findOne.callsFake(
+        () => endpoints.createAndSave.lastCall.returnValue,
+      );
 
       await service.create(tenant, {
         name: "own",
@@ -307,13 +317,34 @@ describe("WgEndpointService", () => {
       const findPage = sinon.stub().resolves([[], 0]);
 
       Object.assign(endpoints, { findPage });
-      await service.list(tenant, undefined, { offset: 0, limit: 20 });
+      await service.list(tenant, {}, { offset: 0, limit: 20 });
       expect(findPage.firstCall.args[0].ownedBy).to.equal(tenant.userId);
 
       await service.options(tenant);
       expect(endpoints.find.firstCall.args[0].where).to.deep.equal([
         { ownerId: tenant.userId },
         { createdById: tenant.userId },
+      ]);
+    });
+
+    it("list и options: «Мои» — только свои и при праве на все", async () => {
+      const findPage = sinon.stub().resolves([[], 0]);
+
+      Object.assign(endpoints, { findPage });
+      await service.list(
+        admin,
+        { query: "q", mine: true },
+        { offset: 0, limit: 20 },
+      );
+      expect(findPage.firstCall.args[0]).to.deep.equal({
+        query: "q",
+        ownedBy: admin.userId,
+      });
+
+      await service.options(admin, true);
+      expect(endpoints.find.firstCall.args[0].where).to.deep.equal([
+        { ownerId: admin.userId },
+        { createdById: admin.userId },
       ]);
     });
 

@@ -195,6 +195,13 @@ describe("WgForwardService: порты хоста релея", () => {
       expect(repo.findPage.secondCall.args[1]).to.equal(undefined);
     });
 
+    it("list: «Мои» — только свои и при праве на все", async () => {
+      repo.findPage = sinon.stub().resolves([[], 0]);
+
+      await service.list(admin, { offset: 0, limit: 20 }, true);
+      expect(repo.findPage.firstCall.args[1]).to.equal(admin.userId);
+    });
+
     it("чужой — 404; свой без права удаления — 403; прежняя цель не перепроверяется", async () => {
       repo.findWithNodes.resolves({ id: "f1", ...body(), ownerId: uuid2() });
       await expectCode(

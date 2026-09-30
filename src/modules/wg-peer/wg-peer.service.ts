@@ -185,21 +185,25 @@ export class WgPeerService {
     }
   }
 
+  /** Пиры в рамках прав; `mine` — только свои при любой области. */
   async list(
     actor: AuthContext,
-    filters: IWgPeerFilters,
+    { mine, ...filters }: IWgPeerFilters & { mine?: boolean },
     pagination: Pagination,
   ): Promise<IPaginatedDto<WgPeerDto>> {
     const [items, total] = await this._repo.findPage(
-      { ...filters, ...this._viewFilter(actor) },
+      { ...filters, ...this._viewFilter(actor, mine) },
       pagination,
     );
 
     return toPage(items.map(WgPeerDto.fromEntity), total, pagination);
   }
 
-  async options(actor: AuthContext): Promise<WgPeerOptionDto[]> {
-    const { ownedBy } = this._viewFilter(actor);
+  async options(
+    actor: AuthContext,
+    mine?: boolean,
+  ): Promise<WgPeerOptionDto[]> {
+    const { ownedBy } = this._viewFilter(actor, mine);
     const items = await this._repo.find({
       where: ownedBy ? WgPeerAccess.ownedWhere(ownedBy) : {},
       order: { name: "ASC" },
@@ -300,10 +304,9 @@ export class WgPeerService {
     const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_ASSIGN);
     const previousUserId = peer.userId;
 
-    peer.userId = body.userId;
-
     try {
-      await this._repo.save(peer);
+      // update, не save: загруженная связь держателя перекрыла бы userId.
+      await this._repo.update({ id: peer.id }, { userId: body.userId });
     } catch (err) {
       if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
         throw WgPeerError.USER_NOT_FOUND();
@@ -318,8 +321,7 @@ export class WgPeerService {
     const peer = await this._findFor(actor, id, WgPeerPermissions.PEER_ASSIGN);
     const previousUserId = peer.userId;
 
-    peer.userId = null;
-    await this._repo.save(peer);
+    await this._repo.update({ id: peer.id }, { userId: null });
 
     return this._emitUpdated(peer.id, previousUserId);
   }
@@ -413,9 +415,16 @@ export class WgPeerService {
     return this._findWithRelationsOrFail(id);
   }
 
-  /** Ограничение списков областью просмотра. */
-  private _viewFilter(actor: AuthContext): { ownedBy?: string } {
-    const filter = WgPeerAccess.filter(actor, WgPeerPermissions.PEER_VIEW);
+  /** Ограничение списков областью просмотра; `mine` — только свои. */
+  private _viewFilter(
+    actor: AuthContext,
+    mine?: boolean,
+  ): { ownedBy?: string } {
+    const filter = WgPeerAccess.listFilter(
+      actor,
+      WgPeerPermissions.PEER_VIEW,
+      mine,
+    );
 
     if (!filter) throw WgPeerError.FORBIDDEN();
 

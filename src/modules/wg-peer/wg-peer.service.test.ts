@@ -224,6 +224,38 @@ describe("WgPeerService", () => {
     expect(repo.findPage.firstCall.args[0].ownedBy).to.equal(undefined);
   });
 
+  it("list и options: «Мои» — только свои и при праве на все", async () => {
+    await service.list(editor as any, { mine: true }, { offset: 0, limit: 20 });
+    expect(repo.findPage.firstCall.args[0]).to.not.have.property("mine");
+    expect(repo.findPage.firstCall.args[0].ownedBy).to.equal(editor.userId);
+
+    repo.find.resolves([]);
+    await service.options(editor as any, true);
+    expect(repo.find.firstCall.args[0].where).to.deep.equal([
+      { userId: editor.userId },
+      { createdById: editor.userId },
+    ]);
+  });
+
+  it("get: имена держателя и создателя в DTO", async () => {
+    repo.findWithRelations.resolves(
+      makePeer({
+        userId: owner.userId,
+        user: {
+          email: "holder@x.io",
+          profile: { firstName: "Иван", lastName: "Петров" },
+        },
+        createdById: uuid3(),
+        createdBy: { email: "creator@x.io", profile: null },
+      }),
+    );
+
+    const dto = await service.get(owner as any, uuid());
+
+    expect(dto.userName).to.equal("Иван Петров");
+    expect(dto.createdByName).to.equal("creator@x.io");
+  });
+
   it("list: без права просмотра — 403", async () => {
     try {
       await service.list(stranger as any, {}, { offset: 0, limit: 20 });
@@ -332,6 +364,10 @@ describe("WgPeerService", () => {
       .resolves(makePeer({ userId: uuid3() }));
 
     await service.assign(admin as any, uuid(), { userId: uuid3() });
+
+    // Колонкой, а не save сущности с загруженной связью прежнего держателя.
+    expect(repo.update.firstCall.args[1]).to.deep.equal({ userId: uuid3() });
+    expect(repo.save.called).to.equal(false);
 
     const event = eventBus.emit.lastCall.args[0];
 

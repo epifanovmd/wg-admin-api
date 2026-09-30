@@ -4,6 +4,7 @@ import { QueryDeepPartialEntity } from "typeorm/query-builder/QueryPartialEntity
 import { BaseRepository, InjectableRepository } from "../../core";
 import { IUserOptionDto } from "./dto";
 import { User } from "./user.entity";
+import { userDisplayName } from "./user-name";
 
 /** Экранирует `%`, `_` и обратный слэш — пользовательский ввод ищется буквально. */
 export const escapeLike = (value: string): string =>
@@ -144,13 +145,6 @@ export class UserRepository extends BaseRepository<User> {
       order: { email: "ASC" },
     });
 
-    return users.map(u => ({
-      id: u.id,
-      name:
-        [u.profile?.firstName, u.profile?.lastName]
-          .filter(Boolean)
-          .join(" ")
-          .trim() || u.email,
-    }));
+    return users.map(u => ({ id: u.id, name: userDisplayName(u) }));
   }
 }

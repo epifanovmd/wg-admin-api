@@ -1,5 +1,5 @@
 import { inject } from "inversify";
-import { type EntityManager, In } from "typeorm";
+import type { EntityManager } from "typeorm";
 
 import { config } from "../../config";
 import type { IPaginatedDto, Pagination } from "../../core";
@@ -110,7 +110,7 @@ export class WgNodeService {
 
     try {
       const agentKey = await this._issueAgentKey(actor.userId, node);
-      const dto = WgNodeDto.fromEntity(node);
+      const dto = WgNodeDto.fromEntity(await this._findOrFail(node.id));
 
       this._eventBus.emit(new WgNodeCreatedEvent(dto));
 
@@ -144,21 +144,25 @@ export class WgNodeService {
     return { agentKey, installCommand: installCommand(agentKey) };
   }
 
+  /** Ноды в рамках прав; `mine` — только свои при любой области. */
   async list(
     actor: AuthContext,
-    filters: IWgNodeFilters,
+    { mine, ...filters }: IWgNodeFilters & { mine?: boolean },
     pagination: Pagination,
   ): Promise<IPaginatedDto<WgNodeDto>> {
     const [items, total] = await this._repo.findPage(
-      { ...filters, ...this.viewFilter(actor) },
+      { ...filters, ...this.viewFilter(actor, mine) },
       pagination,
     );
 
     return toPage(items.map(WgNodeDto.fromEntity), total, pagination);
   }
 
-  async options(actor: AuthContext): Promise<WgNodeOptionDto[]> {
-    const { ownedBy } = this.viewFilter(actor);
+  async options(
+    actor: AuthContext,
+    mine?: boolean,
+  ): Promise<WgNodeOptionDto[]> {
+    const { ownedBy } = this.viewFilter(actor, mine);
     const items = await this._repo.find({
       where: ownedBy ? WgNodeAccess.ownedWhere(ownedBy) : {},
       order: { name: "ASC" },
@@ -278,9 +282,16 @@ export class WgNodeService {
     return node;
   }
 
-  /** Ограничение списков нод областью просмотра; права нет — 403. */
-  viewFilter(actor: AuthContext): { ownedBy?: string } {
-    const filter = WgNodeAccess.filter(actor, WgNodePermissions.NODE_VIEW);
+  /**
+   * Ограничение списков нод областью просмотра; `mine` — только свои при
+   * любой области; права нет — 403.
+   */
+  viewFilter(actor: AuthContext, mine?: boolean): { ownedBy?: string } {
+    const filter = WgNodeAccess.listFilter(
+      actor,
+      WgNodePermissions.NODE_VIEW,
+      mine,
+    );
 
     if (!filter) throw WgNodeError.FORBIDDEN();
 
@@ -318,7 +329,9 @@ export class WgNodeService {
 
     if (becameOnline) {
       this._eventBus.emit(
-        new WgNodeStatusChangedEvent(WgNodeDto.fromEntity(node)),
+        new WgNodeStatusChangedEvent(
+          WgNodeDto.fromEntity(await this._findOrFail(node.id)),
+        ),
       );
     }
   }
@@ -380,7 +393,7 @@ export class WgNodeService {
     if (ids.length === 0) return ids;
 
     // Событие — полной нодой из БД (UPDATE … RETURNING отдаёт сырые колонки).
-    for (const node of await this._repo.find({ where: { id: In(ids) } })) {
+    for (const node of await this._repo.findManyWithOwners(ids)) {
       this._eventBus.emit(
         new WgNodeStatusChangedEvent(WgNodeDto.fromEntity(node)),
       );
@@ -469,7 +482,7 @@ export class WgNodeService {
   }
 
   private async _findOrFail(id: string): Promise<WgNode> {
-    const node = await this._repo.findOne({ where: { id } });
+    const node = await this._repo.findWithOwners(id);
 
     if (!node) throw WgNodeError.NOT_FOUND();
 

@@ -178,13 +178,14 @@ export class WgInterfaceService {
     return dto;
   }
 
+  /** Интерфейсы в рамках прав; `mine` — только свои при любой области. */
   async list(
     actor: AuthContext,
-    filters: IWgInterfaceFilters,
+    { mine, ...filters }: IWgInterfaceFilters & { mine?: boolean },
     pagination: Pagination,
   ): Promise<IPaginatedDto<WgInterfaceDto>> {
     const [items, total] = await this._repo.findPage(
-      { ...filters, ...this.viewFilter(actor) },
+      { ...filters, ...this.viewFilter(actor, mine) },
       pagination,
     );
 
@@ -194,8 +195,9 @@ export class WgInterfaceService {
   async options(
     actor: AuthContext,
     nodeId?: string,
+    mine?: boolean,
   ): Promise<WgInterfaceOptionDto[]> {
-    const { ownedBy } = this.viewFilter(actor);
+    const { ownedBy } = this.viewFilter(actor, mine);
     const byNode = nodeId ? { nodeId } : {};
     const items = await this._repo.find({
       where: ownedBy
@@ -512,11 +514,15 @@ export class WgInterfaceService {
     return findInterfaceFor(this._repo, actor, id, permission);
   }
 
-  /** Ограничение списков интерфейсов областью просмотра; права нет — 403. */
-  viewFilter(actor: AuthContext): { ownedBy?: string } {
-    const filter = WgInterfaceAccess.filter(
+  /**
+   * Ограничение списков интерфейсов областью просмотра; `mine` — только свои
+   * при любой области; права нет — 403.
+   */
+  viewFilter(actor: AuthContext, mine?: boolean): { ownedBy?: string } {
+    const filter = WgInterfaceAccess.listFilter(
       actor,
       WgInterfacePermissions.INTERFACE_VIEW,
+      mine,
     );
 
     if (!filter) throw WgInterfaceError.FORBIDDEN();
@@ -573,7 +579,13 @@ export class WgInterfaceService {
 
   /** Сохранение без связей: реплики и нода меняются отдельно. */
   private _withoutRelations(iface: WgInterface): WgInterface {
-    const { replicas: _replicas, node: _node, ...rest } = iface;
+    const {
+      replicas: _replicas,
+      node: _node,
+      owner: _owner,
+      createdBy: _createdBy,
+      ...rest
+    } = iface;
 
     return rest as WgInterface;
   }

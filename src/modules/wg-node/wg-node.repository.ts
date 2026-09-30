@@ -2,6 +2,7 @@ import type { EntityManager } from "typeorm";
 
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
+import { joinUserName } from "../user/user-name";
 import { WgNodeAccess } from "./wg-node.access";
 import { WgNode } from "./wg-node.entity";
 import { EWgNodeStatus } from "./wg-node.types";
@@ -19,7 +20,7 @@ export class WgNodeRepository extends BaseRepository<WgNode> {
     { query, status, ownedBy }: IWgNodeFilters,
     { offset, limit }: Pagination,
   ): Promise<[WgNode[], number]> {
-    const qb = this.createQueryBuilder("node")
+    const qb = this._withOwners()
       .orderBy("node.createdAt", "DESC")
       .addOrderBy("node.id", "DESC")
       .skip(offset)
@@ -34,6 +35,18 @@ export class WgNodeRepository extends BaseRepository<WgNode> {
     }
 
     return qb.getManyAndCount();
+  }
+
+  /** Нода с именами владельца и создателя. */
+  findWithOwners(id: string): Promise<WgNode | null> {
+    return this._withOwners().where("node.id = :id", { id }).getOne();
+  }
+
+  /** Ноды с именами владельца и создателя. */
+  findManyWithOwners(ids: string[]): Promise<WgNode[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+
+    return this._withOwners().where("node.id IN (:...ids)", { ids }).getMany();
   }
 
   /**
@@ -73,5 +86,14 @@ export class WgNodeRepository extends BaseRepository<WgNode> {
     const result = await query.returning(["id"]).execute();
 
     return ((result.raw as { id: string }[]) ?? []).map(row => row.id);
+  }
+
+  private _withOwners() {
+    const qb = this.createQueryBuilder("node");
+
+    joinUserName(qb, "node.owner", "owner");
+    joinUserName(qb, "node.createdBy", "createdBy");
+
+    return qb;
   }
 }

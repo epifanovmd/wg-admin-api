@@ -83,6 +83,7 @@ export class WgInterfaceController extends Controller {
    * `viaRelay` — только
    * интерфейсы за точками через релей: что и куда пересылают релеи. С правом
    * `wg:interface:view:own` — только свои (владелец или создатель).
+   * @param mine Только свои интерфейсы (владелец или создатель) при любой области прав
    * @summary Список интерфейсов
    */
   @Security("jwt", ["permission:wg:interface:view:own"])
@@ -95,18 +96,20 @@ export class WgInterfaceController extends Controller {
     @Query() viaRelay?: boolean,
     @Query() enabled?: boolean,
     @Query() query?: string,
+    @Query() mine?: boolean,
     @Query() offset?: number,
     @Query() limit?: number,
   ): Promise<IPaginatedDto<WgInterfaceDto>> {
     return this._service.list(
       getContextUser(req),
-      { nodeId, hostNodeId, endpointId, viaRelay, enabled, query },
+      { nodeId, hostNodeId, endpointId, viaRelay, enabled, query, mine },
       normalizePagination(offset, limit),
     );
   }
 
   /**
    * Краткий список интерфейсов для выпадающих списков (в рамках прав).
+   * @param mine Только свои интерфейсы (владелец или создатель) при любой области прав
    * @summary Интерфейсы (options)
    */
   @Security("jwt", ["permission:wg:interface:view:own"])
@@ -114,8 +117,9 @@ export class WgInterfaceController extends Controller {
   wgInterfaceOptions(
     @Request() req: KoaRequest,
     @Query() nodeId?: UUID,
+    @Query() mine?: boolean,
   ): Promise<WgInterfaceOptionDto[]> {
-    return this._service.options(getContextUser(req), nodeId);
+    return this._service.options(getContextUser(req), nodeId, mine);
   }
 
   /**

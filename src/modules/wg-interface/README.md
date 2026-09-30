@@ -47,6 +47,13 @@ customPostUp/Down (право `wg:interface:hooks`), enabled, status/statusMessa
 
 ## Эндпоинты (`/api/v1/wg/interfaces`, тег WgInterface)
 
+Фильтр «Мои»: `GET /` и `GET /options` принимают `mine=true` — только свои интерфейсы (владелец
+или создатель) при любой области права (`OwnedAccess.listFilter`). DTO несёт
+`ownerName` и `createdByName` — отображаемые имена владельца и создателя
+(`userDisplayName` модуля user — то же, что `name` в `GET /api/v1/user/options`);
+пользователи присоединяются join-ом (`joinUserName`) в `findPage` и `findWithRelations`, поэтому те же
+поля — и в событии `wg:interface:updated`.
+
 Список (`GET /`) — с копиями; фильтры `nodeId` (основная нода),
 `hostNodeId` (где интерфейс работает: основная или копия), `endpointId`, `viaRelay`
 (только интерфейсы за точками через релей — что и куда пересылают релеи),

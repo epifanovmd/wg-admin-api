@@ -71,6 +71,7 @@ export class WgEndpointController extends Controller {
   /**
    * Точки подключения, новые первыми. С правом `wg:endpoint:view:own` —
    * только свои (владелец или создатель).
+   * @param mine Только свои точки (владелец или создатель) при любой области прав
    * @summary Список точек подключения
    */
   @Security("jwt", ["permission:wg:endpoint:view:own"])
@@ -78,26 +79,29 @@ export class WgEndpointController extends Controller {
   listWgEndpoints(
     @Request() req: KoaRequest,
     @Query() query?: string,
+    @Query() mine?: boolean,
     @Query() offset?: number,
     @Query() limit?: number,
   ): Promise<IPaginatedDto<WgEndpointDto>> {
     return this._service.list(
       getContextUser(req),
-      query,
+      { query, mine },
       normalizePagination(offset, limit),
     );
   }
 
   /**
    * Краткий список для выпадающих списков (в рамках прав).
+   * @param mine Только свои точки (владелец или создатель) при любой области прав
    * @summary Точки подключения (options)
    */
   @Security("jwt", ["permission:wg:endpoint:view:own"])
   @Get("options")
   wgEndpointOptions(
     @Request() req: KoaRequest,
+    @Query() mine?: boolean,
   ): Promise<WgEndpointOptionDto[]> {
-    return this._service.options(getContextUser(req));
+    return this._service.options(getContextUser(req), mine);
   }
 
   /**

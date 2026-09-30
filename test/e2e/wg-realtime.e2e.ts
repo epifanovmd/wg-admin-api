@@ -151,14 +151,24 @@ describe("wireguard: обновления по сокетам", () => {
 
     try {
       const gone = holder.next<any>("wg:peer:deleted", d => d.id === peer.id);
-
-      expectStatus(
+      const updated = ws.next<any>(
+        "wg:peer:updated",
+        p => p.id === peer.id && p.userId === admin.id,
+      );
+      const assigned = expectStatus(
         await call(admin, "POST", `/api/v1/wg/peers/${peer.id}/assign`, {
           userId: admin.id,
         }),
         200,
-      );
+      ).data;
+
       await gone;
+      // Имена в событии — те же, что в ответе REST.
+      expect(assigned.userName).to.be.a("string");
+      expect(await updated).to.include({
+        userName: assigned.userName,
+        createdByName: assigned.createdByName,
+      });
     } finally {
       holder.close();
       await call(admin, "DELETE", `/api/v1/wg/peers/${peer.id}`);
@@ -184,7 +194,12 @@ describe("wireguard: обновления по сокетам", () => {
       201,
     ).data;
 
-    expect((await created).id).to.equal(forward.id);
+    expect(await created).to.include({
+      id: forward.id,
+      createdByName: forward.createdByName,
+      ownerName: null,
+    });
+    expect(forward.createdByName).to.be.a("string");
 
     const routed = ws.next<any>(
       "wg:forward:updated",
@@ -232,7 +247,12 @@ describe("wireguard: обновления по сокетам", () => {
       201,
     ).data;
 
-    expect((await created).id).to.equal(service.id);
+    expect(await created).to.include({
+      id: service.id,
+      createdByName: service.createdByName,
+      ownerName: null,
+    });
+    expect(service.createdByName).to.be.a("string");
 
     const withUser = ws.next<any>(
       "wg:socks:updated",
