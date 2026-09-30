@@ -38,6 +38,10 @@ export interface IWgInterfaceEndpointDto {
 
 export class WgInterfaceDto extends BaseDto {
   id: string;
+  /** Назначенный владелец интерфейса. */
+  ownerId: string | null;
+  /** Создатель интерфейса. */
+  createdById: string | null;
   nodeId: string;
   /** Название ноды (если загружена связь). */
   nodeName: string | null;
@@ -75,6 +79,8 @@ export class WgInterfaceDto extends BaseDto {
     super(entity);
 
     this.id = entity.id;
+    this.ownerId = entity.ownerId;
+    this.createdById = entity.createdById;
     this.nodeId = entity.nodeId;
     this.nodeName = entity.node?.name ?? null;
     this.nodeStatus = entity.node?.status ?? null;

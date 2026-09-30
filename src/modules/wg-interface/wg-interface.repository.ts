@@ -3,6 +3,7 @@ import { In } from "typeorm";
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
 import { EWgEndpointMode, WgEndpoint } from "../wg-endpoint";
+import { WgInterfaceAccess } from "./wg-interface.access";
 import { WgInterface } from "./wg-interface.entity";
 import { WgInterfaceReplica } from "./wg-interface-replica.entity";
 
@@ -16,6 +17,8 @@ export interface IWgInterfaceFilters {
   viaRelay?: boolean;
   enabled?: boolean;
   query?: string;
+  /** Только свои интерфейсы пользователя: владелец или создатель. */
+  ownedBy?: string;
 }
 
 @InjectableRepository(WgInterface)
@@ -28,6 +31,7 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
       viaRelay,
       enabled,
       query,
+      ownedBy,
     }: IWgInterfaceFilters,
     { offset, limit }: Pagination,
   ): Promise<[WgInterface[], number]> {
@@ -61,6 +65,9 @@ export class WgInterfaceRepository extends BaseRepository<WgInterface> {
     if (enabled !== undefined)
       qb.andWhere("iface.enabled = :enabled", { enabled });
     if (query) qb.andWhere("iface.name ILIKE :query", { query: `%${query}%` });
+    if (ownedBy) {
+      qb.andWhere(WgInterfaceAccess.ownedCondition("iface"), { ownedBy });
+    }
 
     return qb.getManyAndCount();
   }

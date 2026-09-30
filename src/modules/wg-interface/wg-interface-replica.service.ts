@@ -2,14 +2,13 @@ import { inject } from "inversify";
 import { DataSource, Not } from "typeorm";
 
 import { EventBus, Injectable } from "../../core";
-import { WgNodeService } from "../wg-node";
+import type { AuthContext } from "../../types/koa";
+import { WgNodePermissions, WgNodeService } from "../wg-node";
 import { WgInterfaceDto } from "./dto";
 import { WgInterfaceError } from "./wg-interface.errors";
 import { WgInterfaceGuard } from "./wg-interface.guard";
-import {
-  emitInterfaceUpdated,
-  findInterfaceOrFail,
-} from "./wg-interface.lookup";
+import { emitInterfaceUpdated, findInterfaceFor } from "./wg-interface.lookup";
+import { WgInterfacePermissions } from "./wg-interface.permissions";
 import { WgInterfaceRepository } from "./wg-interface.repository";
 import { EWgInterfaceStatus } from "./wg-interface.types";
 import { WgInterfaceReplicaRepository } from "./wg-interface-replica.repository";
@@ -35,17 +34,27 @@ export class WgInterfaceReplicaService {
 
   /**
    * Скопировать интерфейс на ноду: тот же ключ, адреса и пиры. Релей точки
-   * получает туннель до новой реплики и добавляет её в резерв.
+   * получает туннель до новой реплики и добавляет её в резерв. Нода копии
+   * должна быть видна актору.
    */
-  async addReplica(id: string, nodeId: string): Promise<WgInterfaceDto> {
-    const iface = await findInterfaceOrFail(this._repo, id);
+  async addReplica(
+    actor: AuthContext,
+    id: string,
+    nodeId: string,
+  ): Promise<WgInterfaceDto> {
+    const iface = await findInterfaceFor(
+      this._repo,
+      actor,
+      id,
+      WgInterfacePermissions.INTERFACE_REPLICAS,
+    );
 
     if (nodeId === iface.nodeId) throw WgInterfaceError.REPLICA_IS_PRIMARY();
     if (iface.replicas?.some(replica => replica.nodeId === nodeId)) {
       throw WgInterfaceError.REPLICA_EXISTS();
     }
 
-    await this._nodes.findEntity(nodeId);
+    await this._nodes.findFor(actor, nodeId, WgNodePermissions.NODE_VIEW);
     await this._guard.assertNodeFree(nodeId, iface);
     if (iface.endpoint) this._guard.assertRelayNotSelf(iface.endpoint, nodeId);
     await this._guard.assertRelayPortsFree({
@@ -72,8 +81,17 @@ export class WgInterfaceReplicaService {
   }
 
   /** Убрать реплику: агент ноды снимет интерфейс, релей — её из резерва. */
-  async removeReplica(id: string, nodeId: string): Promise<void> {
-    const iface = await findInterfaceOrFail(this._repo, id);
+  async removeReplica(
+    actor: AuthContext,
+    id: string,
+    nodeId: string,
+  ): Promise<void> {
+    const iface = await findInterfaceFor(
+      this._repo,
+      actor,
+      id,
+      WgInterfacePermissions.INTERFACE_REPLICAS,
+    );
 
     if (!iface.replicas?.some(replica => replica.nodeId === nodeId)) {
       throw WgInterfaceError.REPLICA_NOT_FOUND();

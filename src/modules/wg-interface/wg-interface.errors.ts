@@ -6,6 +6,14 @@ export const WgInterfaceError = defineErrors("WG_IFACE", {
     status: HttpStatus.NOT_FOUND,
     message: "Интерфейс не найден",
   },
+  FORBIDDEN: {
+    status: HttpStatus.FORBIDDEN,
+    message: "Недостаточно прав для работы с интерфейсом",
+  },
+  USER_NOT_FOUND: {
+    status: HttpStatus.NOT_FOUND,
+    message: "Пользователь не найден",
+  },
   NAME_TAKEN: {
     status: HttpStatus.CONFLICT,
     message: "Интерфейс с таким именем уже есть на ноде",

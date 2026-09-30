@@ -10,10 +10,12 @@ export interface ICreateWgInterfaceBody {
   endpointId?: string | null;
   endpointPort?: number | null;
   natEnabled?: boolean;
-  /** Только для суперпользователя. */
+  /** Только с правом `wg:interface:hooks`. */
   customPostUp?: string | null;
   customPostDown?: string | null;
   enabled?: boolean;
+  /** Назначенный владелец; другой пользователь — только с правом назначения. */
+  ownerId?: string | null;
 }
 
 export interface IUpdateWgInterfaceBody {
@@ -43,4 +45,9 @@ export interface IMoveWgInterfaceBody {
 /** Копия интерфейса (реплика) на другой ноде. */
 export interface IAddWgInterfaceReplicaBody {
   nodeId: string;
+}
+
+/** Назначение владельца интерфейса. */
+export interface IAssignWgInterfaceBody {
+  userId: string;
 }

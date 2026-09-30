@@ -8,8 +8,9 @@ import { WgStatsQueryService } from "./wg-stats-query.service";
 const actor = (permissions: string[]) =>
   ({ userId: "u1", sessionId: "s1", roles: [], permissions }) as any;
 
-describe("WgStatsQueryService: доступ к статистике нод", () => {
+describe("WgStatsQueryService: доступ к статистике нод и интерфейсов", () => {
   let nodes: { findOne: sinon.SinonStub };
+  let ifaces: { findOne: sinon.SinonStub };
   let metrics: { queryRange: sinon.SinonStub };
   let overview: Record<string, sinon.SinonStub>;
   let links: { forNode: sinon.SinonStub };
@@ -17,6 +18,7 @@ describe("WgStatsQueryService: доступ к статистике нод", () 
 
   beforeEach(() => {
     nodes = { findOne: sinon.stub().resolves(null) };
+    ifaces = { findOne: sinon.stub().resolves(null) };
     metrics = { queryRange: sinon.stub().resolves([]) };
     links = { forNode: sinon.stub().resolves([]) };
     overview = {
@@ -27,6 +29,7 @@ describe("WgStatsQueryService: доступ к статистике нод", () 
         .stub()
         .callsFake(a => a.permissions.includes("wg:stats:view:own")),
       getNodeLive: sinon.stub().resolves(null),
+      getInterfaceLive: sinon.stub().resolves(null),
       getSpeedWindow: sinon.stub().resolves([]),
     };
     service = new WgStatsQueryService(
@@ -35,6 +38,7 @@ describe("WgStatsQueryService: доступ к статистике нод", () 
       metrics as any,
       {} as any,
       nodes as any,
+      ifaces as any,
       overview as any,
       links as any,
       {} as any,
@@ -94,5 +98,20 @@ describe("WgStatsQueryService: доступ к статистике нод", () 
       service.nodeMetrics(actor(["wg:node:view:own"]), "n1", from, to),
     );
     await expectForbidden(() => service.nodeMetrics(actor([]), "n1", from, to));
+  });
+
+  it("интерфейс: вся статистика — любой, own — только свой", async () => {
+    await service.currentInterface(actor(["wg:stats:view"]), "i1");
+    expect(ifaces.findOne.called).to.be.false;
+
+    const own = actor(["wg:stats:view:own"]);
+
+    ifaces.findOne.resolves({ ownerId: "u1", createdById: null });
+    await service.currentInterface(own, "i1");
+    await service.interfaceWindow(own, "i1");
+
+    ifaces.findOne.resolves({ ownerId: "u2", createdById: "u3" });
+    await expectForbidden(() => service.interfaceWindow(own, "i1"));
+    await expectForbidden(() => service.currentInterface(actor([]), "i1"));
   });
 });

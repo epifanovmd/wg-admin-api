@@ -413,6 +413,8 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "id": {"dataType":"string","required":true},
+            "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "nodeId": {"dataType":"string","required":true},
             "nodeName": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "nodeStatus": {"dataType":"union","subSchemas":[{"ref":"EWgNodeStatus"},{"dataType":"enum","enums":[null]}],"required":true},
@@ -458,6 +460,7 @@ const models: TsoaRoute.Models = {
             "customPostUp": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
             "customPostDown": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
             "enabled": {"dataType":"boolean"},
+            "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
         },
         "additionalProperties": false,
     },
@@ -556,6 +559,14 @@ const models: TsoaRoute.Models = {
             "startedAt": {"dataType":"union","subSchemas":[{"dataType":"datetime"},{"dataType":"enum","enums":[null]}],"required":true},
             "finishedAt": {"dataType":"union","subSchemas":[{"dataType":"datetime"},{"dataType":"enum","enums":[null]}],"required":true},
             "createdAt": {"dataType":"datetime","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "IAssignWgInterfaceBody": {
+        "dataType": "refObject",
+        "properties": {
+            "userId": {"dataType":"string","required":true},
         },
         "additionalProperties": false,
     },
@@ -2809,6 +2820,7 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_listWgInterfaces: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 nodeId: {"in":"query","name":"nodeId","ref":"UUID"},
                 hostNodeId: {"in":"query","name":"hostNodeId","ref":"UUID"},
                 endpointId: {"in":"query","name":"endpointId","ref":"UUID"},
@@ -2819,7 +2831,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
         router.get('/api/v1/wg/interfaces',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.listWgInterfaces)),
 
@@ -2852,10 +2864,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_wgInterfaceOptions: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 nodeId: {"in":"query","name":"nodeId","ref":"UUID"},
         };
         router.get('/api/v1/wg/interfaces/options',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.wgInterfaceOptions)),
 
@@ -2888,10 +2901,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_getWgInterface: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/interfaces/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.getWgInterface)),
 
@@ -2929,7 +2943,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 body: {"in":"body","name":"body","required":true,"ref":"IUpdateWgInterfaceBody"},
         };
         router.patch('/api/v1/wg/interfaces/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:update"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:update:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.updateWgInterface)),
 
@@ -2962,10 +2976,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_deleteWgInterface: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.delete('/api/v1/wg/interfaces/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:delete"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:delete:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.deleteWgInterface)),
 
@@ -2998,10 +3013,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_enableWgInterface: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.post('/api/v1/wg/interfaces/:id/enable',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:control"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:control:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.enableWgInterface)),
 
@@ -3034,10 +3050,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_disableWgInterface: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.post('/api/v1/wg/interfaces/:id/disable',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:control"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:control:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.disableWgInterface)),
 
@@ -3070,11 +3087,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_moveWgInterface: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"IMoveWgInterfaceBody"},
         };
         router.post('/api/v1/wg/interfaces/:id/move',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:move"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:move:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.moveWgInterface)),
 
@@ -3107,11 +3125,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_addWgInterfaceReplica: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"IAddWgInterfaceReplicaBody"},
         };
         router.post('/api/v1/wg/interfaces/:id/replicas',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:replicas"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:replicas:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.addWgInterfaceReplica)),
 
@@ -3144,11 +3163,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgInterfaceController_removeWgInterfaceReplica: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 nodeId: {"in":"path","name":"nodeId","required":true,"ref":"UUID"},
         };
         router.delete('/api/v1/wg/interfaces/:id/replicas/:nodeId',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:replicas"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:replicas:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.removeWgInterfaceReplica)),
 
@@ -3185,7 +3205,7 @@ export function RegisterRoutes(router: KoaRouter) {
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.post('/api/v1/wg/interfaces/:id/restart',
-            authenticateMiddleware([{"jwt":["permission:wg:interface:control"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:interface:control:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
             ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.restartWgInterface)),
 
@@ -3214,6 +3234,81 @@ export function RegisterRoutes(router: KoaRouter) {
               context,
               validatedArgs,
               successStatus: 201,
+            });
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWgInterfaceController_assignWgInterface: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                id: {"in":"path","name":"id","required":true,"ref":"UUID"},
+                body: {"in":"body","name":"body","required":true,"ref":"IAssignWgInterfaceBody"},
+        };
+        router.post('/api/v1/wg/interfaces/:id/assign',
+            authenticateMiddleware([{"jwt":["permission:wg:interface:assign:own"]}]),
+            ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
+            ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.assignWgInterface)),
+
+            async function WgInterfaceController_assignWgInterface(context: Context, next: Next) {
+
+            let validatedArgs: any[] = [];
+            try {
+              validatedArgs = templateService.getValidatedArgs({ args: argsWgInterfaceController_assignWgInterface, context, next });
+            } catch (err) {
+              const error = err as any;
+              error.message ||= JSON.stringify({ fields: error.fields });
+              context.status = error.status;
+              context.throw(context.status, error.message, error);
+            }
+
+            const container: IocContainer = typeof iocContainer === 'function' ? (iocContainer as IocContainerFactory)(context.request) : iocContainer;
+
+            const controller: any = await container.get<WgInterfaceController>(WgInterfaceController);
+            if (typeof controller['setStatus'] === 'function') {
+                controller.setStatus(undefined);
+            }
+
+            return templateService.apiHandler({
+              methodName: 'assignWgInterface',
+              controller,
+              context,
+              validatedArgs,
+              successStatus: undefined,
+            });
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWgInterfaceController_revokeWgInterface: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                id: {"in":"path","name":"id","required":true,"ref":"UUID"},
+        };
+        router.post('/api/v1/wg/interfaces/:id/revoke',
+            authenticateMiddleware([{"jwt":["permission:wg:interface:assign:own"]}]),
+            ...(fetchMiddlewares<Middleware>(WgInterfaceController)),
+            ...(fetchMiddlewares<Middleware>(WgInterfaceController.prototype.revokeWgInterface)),
+
+            async function WgInterfaceController_revokeWgInterface(context: Context, next: Next) {
+
+            let validatedArgs: any[] = [];
+            try {
+              validatedArgs = templateService.getValidatedArgs({ args: argsWgInterfaceController_revokeWgInterface, context, next });
+            } catch (err) {
+              const error = err as any;
+              error.message ||= JSON.stringify({ fields: error.fields });
+              context.status = error.status;
+              context.throw(context.status, error.message, error);
+            }
+
+            const container: IocContainer = typeof iocContainer === 'function' ? (iocContainer as IocContainerFactory)(context.request) : iocContainer;
+
+            const controller: any = await container.get<WgInterfaceController>(WgInterfaceController);
+            if (typeof controller['setStatus'] === 'function') {
+                controller.setStatus(undefined);
+            }
+
+            return templateService.apiHandler({
+              methodName: 'revokeWgInterface',
+              controller,
+              context,
+              validatedArgs,
+              successStatus: undefined,
             });
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa

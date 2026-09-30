@@ -1,7 +1,11 @@
 import { inject } from "inversify";
 
 import { EventBus, Injectable, logger } from "../../core";
-import { ISocketEventListener, SocketEmitterService } from "../socket";
+import {
+  ISocketEventListener,
+  OwnedEntityEmitter,
+  SocketEmitterService,
+} from "../socket";
 import {
   WgEndpointChangedEvent,
   WgEndpointService,
@@ -14,17 +18,21 @@ import {
   WgInterfaceDeletedEvent,
   WgInterfaceUpdatedEvent,
 } from "./events";
+import { WgInterfacePermissions } from "./wg-interface.permissions";
 import { WgInterfaceRepository } from "./wg-interface.repository";
 import { wgInterfaceRoom } from "./wg-interface-room.policy";
 import { WgRelaySyncService } from "./wg-relay-sync.service";
 
-/** Комната списка интерфейсов: право `wg:interface:view`. */
+/** Комната списка интерфейсов: право `wg:interface:view` на все интерфейсы. */
 export const WG_INTERFACES_ROOM = "wg-interfaces";
 
 /**
- * Интерфейсы: изменения — в комнату списка интерфейсов и интерфейса; смена точки подключения —
- * пересинхронизация релей-линков и поднятие версий затронутых нод
- * (клиентские конфиги при этом менять не нужно — адрес стабилен).
+ * Интерфейсы: изменения — в комнату списка, комнату интерфейса и своим
+ * (владельцу и создателю с областью «только свои»); прежний владелец, для
+ * которого интерфейс больше не свой, получает `wg:interface:deleted`. Смена
+ * точки подключения — пересинхронизация релей-линков и поднятие версий
+ * затронутых нод (клиентские конфиги при этом менять не нужно — адрес
+ * стабилен).
  */
 @Injectable()
 export class WgInterfaceListener implements ISocketEventListener {
@@ -32,6 +40,7 @@ export class WgInterfaceListener implements ISocketEventListener {
     @inject(EventBus) private readonly _eventBus: EventBus,
     @inject(SocketEmitterService)
     private readonly _emitter: SocketEmitterService,
+    @inject(OwnedEntityEmitter) private readonly _owned: OwnedEntityEmitter,
     @inject(WgInterfaceRepository)
     private readonly _interfaces: WgInterfaceRepository,
     @inject(WgRelaySyncService)
@@ -41,23 +50,40 @@ export class WgInterfaceListener implements ISocketEventListener {
   ) {}
 
   register(): void {
-    this._eventBus.on(WgInterfaceCreatedEvent, ({ iface }) => {
-      this._send(iface);
+    this._eventBus.on(WgInterfaceCreatedEvent, async ({ iface }) => {
       void this._publishEndpoints([iface.endpointId]);
+      await this._send(iface);
     });
     this._eventBus.on(
       WgInterfaceUpdatedEvent,
-      ({ iface, previousEndpointId }) => {
-        this._send(iface);
+      async ({ iface, previousEndpointId, previousOwnerId }) => {
         void this._publishEndpoints([iface.endpointId, previousEndpointId]);
+        await this._send(iface);
+        if (previousOwnerId && previousOwnerId !== iface.createdById) {
+          await this._owned.detach(previousOwnerId, "wg:interface:deleted", {
+            id: iface.id,
+          });
+        }
       },
     );
-    this._eventBus.on(WgInterfaceDeletedEvent, ({ ifaceId, endpointId }) => {
-      for (const room of [WG_INTERFACES_ROOM, wgInterfaceRoom(ifaceId)]) {
-        this._emitter.toRoom(room, "wg:interface:deleted", { id: ifaceId });
-      }
-      void this._publishEndpoints([endpointId]);
-    });
+    this._eventBus.on(
+      WgInterfaceDeletedEvent,
+      ({ ifaceId, endpointId, ownerId, createdById }) => {
+        const payload = { id: ifaceId };
+
+        for (const room of [WG_INTERFACES_ROOM, wgInterfaceRoom(ifaceId)]) {
+          this._emitter.toRoom(room, "wg:interface:deleted", payload);
+        }
+        void this._publishEndpoints([endpointId]);
+
+        return this._owned.toOwners(
+          [ownerId, createdById],
+          WgInterfacePermissions.INTERFACE_VIEW,
+          "wg:interface:deleted",
+          payload,
+        );
+      },
+    );
     // Точка изменилась (режим, релей, маршрут, имя) — у её интерфейсов
     // меняется описание точки в DTO.
     this._eventBus.on(WgEndpointChangedEvent, ({ endpoint }) =>
@@ -105,7 +131,7 @@ export class WgInterfaceListener implements ISocketEventListener {
   private async _republishInterfaces(endpointId: string): Promise<void> {
     try {
       for (const iface of await this._interfaces.findByEndpoint(endpointId)) {
-        this._send(
+        await this._send(
           WgInterfaceDto.fromEntity(
             (await this._interfaces.findWithRelations(iface.id)) ?? iface,
           ),
@@ -119,10 +145,17 @@ export class WgInterfaceListener implements ISocketEventListener {
     }
   }
 
-  private _send(iface: WgInterfaceUpdatedEvent["iface"]): void {
+  private _send(iface: WgInterfaceDto): Promise<void> {
     this._emitter.toRoom(WG_INTERFACES_ROOM, "wg:interface:updated", iface);
     this._emitter.toRoom(
       wgInterfaceRoom(iface.id),
+      "wg:interface:updated",
+      iface,
+    );
+
+    return this._owned.toOwners(
+      [iface.ownerId, iface.createdById],
+      WgInterfacePermissions.INTERFACE_VIEW,
       "wg:interface:updated",
       iface,
     );

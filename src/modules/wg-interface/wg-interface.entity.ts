@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 
+import { User } from "../user/user.entity";
 import { WgEndpoint } from "../wg-endpoint";
 import { WgNode } from "../wg-node";
 import {
@@ -29,9 +30,27 @@ import { WgInterfaceReplica } from "./wg-interface-replica.entity";
 @Index("IDX_WG_INTERFACES_NODE_PORT", ["nodeId", "listenPort"], {
   unique: true,
 })
+@Index("IDX_WG_INTERFACES_OWNER", ["ownerId"])
+@Index("IDX_WG_INTERFACES_CREATED_BY", ["createdById"])
 export class WgInterface {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
+
+  /** Назначенный владелец; пользователь удалён — владельца нет. */
+  @Column({ name: "owner_id", type: "uuid", nullable: true })
+  ownerId!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "owner_id" })
+  owner?: User | null;
+
+  /** Кто создал интерфейс; пользователь удалён — создателя нет. */
+  @Column({ name: "created_by_id", type: "uuid", nullable: true })
+  createdById!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "created_by_id" })
+  createdBy?: User | null;
 
   /** Нода интерфейса; удаление ноды с интерфейсами блокируется. */
   @Column({ name: "node_id", type: "uuid" })
@@ -90,7 +109,7 @@ export class WgInterface {
   @Column({ name: "nat_enabled", type: "boolean", default: true })
   natEnabled!: boolean;
 
-  /** Произвольные хуки — только суперпользователь, попадают в аудит. */
+  /** Произвольные хуки — только с правом `wg:interface:hooks`. */
   @Column({ name: "custom_post_up", type: "text", nullable: true })
   customPostUp!: string | null;
 

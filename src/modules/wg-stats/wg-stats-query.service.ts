@@ -2,6 +2,7 @@ import { inject } from "inversify";
 
 import { Injectable } from "../../core";
 import type { AuthContext } from "../../types/koa";
+import { WgInterfaceAccess, WgInterfaceRepository } from "../wg-interface";
 import { WgNodeAccess, WgNodePermissions, WgNodeRepository } from "../wg-node";
 import { WgPeerAccess, WgPeerRepository } from "../wg-peer";
 import { WgLinkHealthService } from "./wg-link-health.service";
@@ -79,6 +80,8 @@ export class WgStatsQueryService {
     private readonly _metrics: WgNodeMetricRepository,
     @inject(WgPeerRepository) private readonly _peers: WgPeerRepository,
     @inject(WgNodeRepository) private readonly _nodes: WgNodeRepository,
+    @inject(WgInterfaceRepository)
+    private readonly _interfaces: WgInterfaceRepository,
     @inject(WgStatsOverviewService)
     private readonly _overview: WgStatsOverviewService,
     @inject(WgLinkHealthService) private readonly _links: WgLinkHealthService,
@@ -148,12 +151,12 @@ export class WgStatsQueryService {
     return this._overview.getSpeedWindow("peer", peerId);
   }
 
-  /** Короткий ряд скорости интерфейса (право `wg:stats:view`). */
+  /** Короткий ряд скорости интерфейса: вся статистика или свой интерфейс. */
   async interfaceWindow(
     actor: AuthContext,
     interfaceId: string,
   ): Promise<IWgSpeedPoint[]> {
-    if (!this._overview.canViewGlobal(actor)) throw WgStatsError.FORBIDDEN();
+    await this._assertInterfaceAccess(actor, interfaceId);
 
     return this._overview.getSpeedWindow("iface", interfaceId);
   }
@@ -178,6 +181,22 @@ export class WgStatsQueryService {
       !this._overview.canViewOwn(actor) ||
       !(await this._isOwnNode(actor, nodeId))
     ) {
+      throw WgStatsError.FORBIDDEN();
+    }
+  }
+
+  /** Статистика интерфейса: право на всю статистику или свой с `:own`. */
+  private async _assertInterfaceAccess(
+    actor: AuthContext,
+    interfaceId: string,
+  ): Promise<void> {
+    if (this._overview.canViewGlobal(actor)) return;
+
+    const iface = this._overview.canViewOwn(actor)
+      ? await this._interfaces.findOne({ where: { id: interfaceId } })
+      : null;
+
+    if (!iface || !WgInterfaceAccess.isOwn(actor.userId, iface)) {
       throw WgStatsError.FORBIDDEN();
     }
   }
@@ -208,12 +227,12 @@ export class WgStatsQueryService {
     }
   }
 
-  /** Live-снимок интерфейса (право `wg:stats:view`). */
+  /** Live-снимок интерфейса: вся статистика или свой интерфейс. */
   async currentInterface(
     actor: AuthContext,
     interfaceId: string,
   ): Promise<IWgInterfaceLive | null> {
-    if (!this._overview.canViewGlobal(actor)) throw WgStatsError.FORBIDDEN();
+    await this._assertInterfaceAccess(actor, interfaceId);
 
     return this._overview.getInterfaceLive(interfaceId);
   }

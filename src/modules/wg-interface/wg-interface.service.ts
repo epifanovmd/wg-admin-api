@@ -11,26 +11,31 @@ import {
   pgErrorCode,
   toPage,
 } from "../../core";
-import { hasPermission } from "../../core/auth/has-permission";
-import { isSuperUser } from "../../core/auth/user-context";
 import type { AuthContext } from "../../types/koa";
 import { WgEndpoint, WgEndpointService } from "../wg-endpoint";
 import {
   generateWgKeyPair,
   WgNodeCommandDto,
   WgNodeCommandService,
+  WgNodePermissions,
   WgNodeService,
   WgSecretBox,
 } from "../wg-node";
-import type { ICreateWgInterfaceBody, IUpdateWgInterfaceBody } from "./dto";
+import type {
+  IAssignWgInterfaceBody,
+  ICreateWgInterfaceBody,
+  IUpdateWgInterfaceBody,
+} from "./dto";
 import { WgInterfaceDto, WgInterfaceOptionDto } from "./dto";
 import { WgInterfaceCreatedEvent, WgInterfaceDeletedEvent } from "./events";
+import { WgInterfaceAccess } from "./wg-interface.access";
 import { WgInterface } from "./wg-interface.entity";
 import { WgInterfaceError } from "./wg-interface.errors";
 import { WgInterfaceGuard } from "./wg-interface.guard";
 import {
   copyStatus,
   emitInterfaceUpdated,
+  findInterfaceFor,
   findInterfaceOrFail,
   interfaceCopyNodes,
 } from "./wg-interface.lookup";
@@ -41,6 +46,13 @@ import { EWgInterfaceStatus } from "./wg-interface.types";
 import { WgInterfaceReplicaService } from "./wg-interface-replica.service";
 import { WgRelaySyncService } from "./wg-relay-sync.service";
 
+/** Тело задаёт произвольные PostUp/PostDown. */
+const touchesHooks = (
+  body: Pick<ICreateWgInterfaceBody, "customPostUp" | "customPostDown">,
+): boolean =>
+  (body.customPostUp !== undefined && body.customPostUp !== null) ||
+  (body.customPostDown !== undefined && body.customPostDown !== null);
+
 /** Фактический статус интерфейса из отчёта агента. */
 export interface IWgInterfaceStatusReport {
   name: string;
@@ -49,8 +61,11 @@ export interface IWgInterfaceStatusReport {
 }
 
 /**
- * WG-интерфейсы: CRUD, перенос, включение/выключение, статусы от агента.
- * Реплики — `WgInterfaceReplicaService`, проверки размещения — `WgInterfaceGuard`.
+ * WG-интерфейсы: CRUD с областью прав «все / свои» (владелец или создатель),
+ * перенос, включение/выключение, статусы от агента. Чужой интерфейс без права
+ * на все не раскрывается (404); видимый без права на действие — 403. Методы
+ * без актора — внутренние (агент, другие модули домена). Реплики —
+ * `WgInterfaceReplicaService`, проверки размещения — `WgInterfaceGuard`.
  */
 @Injectable()
 export class WgInterfaceService {
@@ -74,8 +89,23 @@ export class WgInterfaceService {
     actor: AuthContext,
     body: ICreateWgInterfaceBody,
   ): Promise<WgInterfaceDto> {
-    this._assertCustomHooks(actor, body);
-    await this._nodes.findEntity(body.nodeId);
+    const ownerId = body.ownerId ?? null;
+
+    if (
+      ownerId !== null &&
+      ownerId !== actor.userId &&
+      !WgInterfaceAccess.scope(actor, WgInterfacePermissions.INTERFACE_ASSIGN)
+    ) {
+      throw WgInterfaceError.FORBIDDEN();
+    }
+    // Новый интерфейс — свой для создателя: хватает любой области права.
+    if (
+      touchesHooks(body) &&
+      !WgInterfaceAccess.scope(actor, WgInterfacePermissions.INTERFACE_HOOKS)
+    ) {
+      throw WgInterfaceError.CUSTOM_HOOKS_FORBIDDEN();
+    }
+    await this._nodes.findFor(actor, body.nodeId, WgNodePermissions.NODE_VIEW);
     await this._guard.assertNodeFree(body.nodeId, body);
 
     const endpoint = await this._resolveEndpoint(body.endpointId ?? null);
@@ -101,6 +131,8 @@ export class WgInterfaceService {
       created = await this._dataSource.transaction(async manager => {
         const saved = await this._repo.getRepository(manager).save({
           nodeId: body.nodeId,
+          ownerId,
+          createdById: actor.userId,
           name: body.name,
           listenPort: body.listenPort,
           addressCidr: body.addressCidr,
@@ -124,7 +156,7 @@ export class WgInterfaceService {
         return saved;
       });
     } catch (err) {
-      throw this._mapUniqueError(err);
+      throw this._mapOwnerError(err);
     }
 
     await this._relaySync.syncRelaySafe(endpoint?.relayNodeId);
@@ -137,17 +169,31 @@ export class WgInterfaceService {
   }
 
   async list(
+    actor: AuthContext,
     filters: IWgInterfaceFilters,
     pagination: Pagination,
   ): Promise<IPaginatedDto<WgInterfaceDto>> {
-    const [items, total] = await this._repo.findPage(filters, pagination);
+    const [items, total] = await this._repo.findPage(
+      { ...filters, ...this.viewFilter(actor) },
+      pagination,
+    );
 
     return toPage(items.map(WgInterfaceDto.fromEntity), total, pagination);
   }
 
-  async options(nodeId?: string): Promise<WgInterfaceOptionDto[]> {
+  async options(
+    actor: AuthContext,
+    nodeId?: string,
+  ): Promise<WgInterfaceOptionDto[]> {
+    const { ownedBy } = this.viewFilter(actor);
+    const byNode = nodeId ? { nodeId } : {};
     const items = await this._repo.find({
-      where: nodeId ? { nodeId } : {},
+      where: ownedBy
+        ? WgInterfaceAccess.ownedWhere(ownedBy).map(owned => ({
+            ...owned,
+            ...byNode,
+          }))
+        : byNode,
       relations: { node: true },
       order: { name: "ASC" },
     });
@@ -155,8 +201,10 @@ export class WgInterfaceService {
     return items.map(WgInterfaceOptionDto.fromEntity);
   }
 
-  async get(id: string): Promise<WgInterfaceDto> {
-    return WgInterfaceDto.fromEntity(await findInterfaceOrFail(this._repo, id));
+  async get(actor: AuthContext, id: string): Promise<WgInterfaceDto> {
+    return WgInterfaceDto.fromEntity(
+      await this.findFor(actor, id, WgInterfacePermissions.INTERFACE_VIEW),
+    );
   }
 
   async update(
@@ -164,9 +212,23 @@ export class WgInterfaceService {
     id: string,
     body: IUpdateWgInterfaceBody,
   ): Promise<WgInterfaceDto> {
-    this._assertCustomHooks(actor, body);
+    const iface = await this.findFor(
+      actor,
+      id,
+      WgInterfacePermissions.INTERFACE_UPDATE,
+    );
 
-    const iface = await findInterfaceOrFail(this._repo, id);
+    if (
+      touchesHooks(body) &&
+      !WgInterfaceAccess.can(
+        actor,
+        WgInterfacePermissions.INTERFACE_HOOKS,
+        iface,
+      )
+    ) {
+      throw WgInterfaceError.CUSTOM_HOOKS_FORBIDDEN();
+    }
+
     const previousRelayNodeId = iface.endpoint?.relayNodeId ?? null;
     const previousEndpointId = iface.endpointId;
 
@@ -263,8 +325,16 @@ export class WgInterfaceService {
    * подключения клиентские конфиги не меняются. Обе ноды получают новую
    * версию, релей точки пересинхронизирует линк на новую ноду.
    */
-  async move(id: string, targetNodeId: string): Promise<WgInterfaceDto> {
-    const iface = await findInterfaceOrFail(this._repo, id);
+  async move(
+    actor: AuthContext,
+    id: string,
+    targetNodeId: string,
+  ): Promise<WgInterfaceDto> {
+    const iface = await this.findFor(
+      actor,
+      id,
+      WgInterfacePermissions.INTERFACE_MOVE,
+    );
     const previousNodeId = iface.nodeId;
     const endpoint = iface.endpoint ?? null;
 
@@ -272,7 +342,7 @@ export class WgInterfaceService {
       throw WgInterfaceError.MOVE_SAME_NODE();
     }
 
-    await this._nodes.findEntity(targetNodeId);
+    await this._nodes.findFor(actor, targetNodeId, WgNodePermissions.NODE_VIEW);
     if (iface.replicas?.some(replica => replica.nodeId === targetNodeId)) {
       throw WgInterfaceError.MOVE_TO_REPLICA();
     }
@@ -310,8 +380,12 @@ export class WgInterfaceService {
   }
 
   /** Удалить интерфейс; с пирами — 409. */
-  async delete(id: string): Promise<void> {
-    const iface = await findInterfaceOrFail(this._repo, id);
+  async delete(actor: AuthContext, id: string): Promise<void> {
+    const iface = await this.findFor(
+      actor,
+      id,
+      WgInterfacePermissions.INTERFACE_DELETE,
+    );
 
     try {
       await this._dataSource.transaction(async manager => {
@@ -331,12 +405,22 @@ export class WgInterfaceService {
         iface.id,
         interfaceCopyNodes(iface),
         iface.endpointId,
+        iface.ownerId,
+        iface.createdById,
       ),
     );
   }
 
-  async setEnabled(id: string, enabled: boolean): Promise<WgInterfaceDto> {
-    const iface = await findInterfaceOrFail(this._repo, id);
+  async setEnabled(
+    actor: AuthContext,
+    id: string,
+    enabled: boolean,
+  ): Promise<WgInterfaceDto> {
+    const iface = await this.findFor(
+      actor,
+      id,
+      WgInterfacePermissions.INTERFACE_CONTROL,
+    );
 
     if (iface.enabled !== enabled) {
       await this._dataSource.transaction(async manager => {
@@ -349,14 +433,76 @@ export class WgInterfaceService {
   }
 
   /** Перезапуск интерфейса на ноде (императивно, через команду агенту). */
-  async restart(actorId: string, id: string): Promise<WgNodeCommandDto> {
-    const iface = await findInterfaceOrFail(this._repo, id);
+  async restart(actor: AuthContext, id: string): Promise<WgNodeCommandDto> {
+    const iface = await this.findFor(
+      actor,
+      id,
+      WgInterfacePermissions.INTERFACE_CONTROL,
+    );
 
     return this._commands.createInterfaceRestart(
       iface.nodeId,
-      actorId,
+      actor.userId,
       iface.name,
     );
+  }
+
+  /** Назначить владельца интерфейса. */
+  async assign(
+    actor: AuthContext,
+    id: string,
+    body: IAssignWgInterfaceBody,
+  ): Promise<WgInterfaceDto> {
+    const iface = await this.findFor(
+      actor,
+      id,
+      WgInterfacePermissions.INTERFACE_ASSIGN,
+    );
+
+    try {
+      await this._repo.update({ id }, { ownerId: body.userId });
+    } catch (err) {
+      throw this._mapOwnerError(err);
+    }
+
+    return this._emitOwnerChanged(iface, body.userId);
+  }
+
+  /** Снять владельца интерфейса. */
+  async revoke(actor: AuthContext, id: string): Promise<WgInterfaceDto> {
+    const iface = await this.findFor(
+      actor,
+      id,
+      WgInterfacePermissions.INTERFACE_ASSIGN,
+    );
+
+    await this._repo.update({ id }, { ownerId: null });
+
+    return this._emitOwnerChanged(iface, null);
+  }
+
+  /**
+   * Интерфейс для действия актора: невидимый — 404, видимый без права на
+   * действие — 403. Проверка доступа и для других модулей домена.
+   */
+  findFor(
+    actor: AuthContext,
+    id: string,
+    permission: string,
+  ): Promise<WgInterface> {
+    return findInterfaceFor(this._repo, actor, id, permission);
+  }
+
+  /** Ограничение списков интерфейсов областью просмотра; права нет — 403. */
+  viewFilter(actor: AuthContext): { ownedBy?: string } {
+    const filter = WgInterfaceAccess.filter(
+      actor,
+      WgInterfacePermissions.INTERFACE_VIEW,
+    );
+
+    if (!filter) throw WgInterfaceError.FORBIDDEN();
+
+    return filter;
   }
 
   /** Отчёт агента о фактических статусах интерфейсов ноды. */
@@ -417,21 +563,17 @@ export class WgInterfaceService {
     return emitInterfaceUpdated(this._repo, this._eventBus, id);
   }
 
-  private _assertCustomHooks(
-    actor: AuthContext,
-    body: Pick<ICreateWgInterfaceBody, "customPostUp" | "customPostDown">,
-  ): void {
-    const touchesHooks =
-      (body.customPostUp !== undefined && body.customPostUp !== null) ||
-      (body.customPostDown !== undefined && body.customPostDown !== null);
-
-    const canSetHooks =
-      isSuperUser(actor) ||
-      hasPermission(actor.permissions, WgInterfacePermissions.INTERFACE_HOOKS);
-
-    if (touchesHooks && !canSetHooks) {
-      throw WgInterfaceError.CUSTOM_HOOKS_FORBIDDEN();
-    }
+  private _emitOwnerChanged(
+    iface: WgInterface,
+    ownerId: string | null,
+  ): Promise<WgInterfaceDto> {
+    return emitInterfaceUpdated(
+      this._repo,
+      this._eventBus,
+      iface.id,
+      null,
+      iface.ownerId !== ownerId ? iface.ownerId : null,
+    );
   }
 
   private async _resolveEndpoint(
@@ -440,6 +582,13 @@ export class WgInterfaceService {
     if (!endpointId) return null;
 
     return this._endpoints.findEntity(endpointId);
+  }
+
+  /** Владелец не найден: единственная FK сохранения, не проверенная заранее. */
+  private _mapOwnerError(err: unknown): unknown {
+    return pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION
+      ? WgInterfaceError.USER_NOT_FOUND()
+      : this._mapUniqueError(err);
   }
 
   private _mapUniqueError(err: unknown): unknown {

@@ -2,6 +2,7 @@ export * from "./dto";
 export * from "./events";
 export * from "./relay-extensions";
 export * from "./validation";
+export * from "./wg-interface.access";
 export * from "./wg-interface.controller";
 export * from "./wg-interface.entity";
 export * from "./wg-interface.errors";

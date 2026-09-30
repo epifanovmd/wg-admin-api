@@ -919,6 +919,16 @@
 					"id": {
 						"type": "string"
 					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец интерфейса."
+					},
+					"createdById": {
+						"type": "string",
+						"nullable": true,
+						"description": "Создатель интерфейса."
+					},
 					"nodeId": {
 						"type": "string"
 					},
@@ -1034,6 +1044,8 @@
 				},
 				"required": [
 					"id",
+					"ownerId",
+					"createdById",
 					"nodeId",
 					"nodeName",
 					"nodeStatus",
@@ -1107,7 +1119,7 @@
 					"customPostUp": {
 						"type": "string",
 						"nullable": true,
-						"description": "Только для суперпользователя."
+						"description": "Только с правом `wg:interface:hooks`."
 					},
 					"customPostDown": {
 						"type": "string",
@@ -1115,6 +1127,11 @@
 					},
 					"enabled": {
 						"type": "boolean"
+					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец; другой пользователь — только с правом назначения."
 					}
 				},
 				"required": [
@@ -1373,6 +1390,19 @@
 					"startedAt",
 					"finishedAt",
 					"createdAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAssignWgInterfaceBody": {
+				"description": "Назначение владельца интерфейса.",
+				"properties": {
+					"userId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"userId"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -6488,7 +6518,7 @@
 						}
 					}
 				},
-				"description": "Создать WireGuard-интерфейс на ноде; ключи генерируются на сервере,\nприватный ключ хранится зашифрованным. Произвольные PostUp/PostDown —\nтолько суперпользователь.",
+				"description": "Создать WireGuard-интерфейс на ноде; ключи генерируются на сервере,\nприватный ключ хранится зашифрованным. Нода должна быть видна автору;\nсоздатель — автор запроса, владелец, отличный от себя, — только с правом\n`wg:interface:assign`. Произвольные PostUp/PostDown — с правом\n`wg:interface:hooks`.",
 				"summary": "Создание интерфейса",
 				"tags": [
 					"WgInterface"
@@ -6536,7 +6566,7 @@
 						}
 					}
 				},
-				"description": "Интерфейсы с фильтрами (с копиями), новые первыми. `nodeId` — основная\nнода, `hostNodeId` — нода, где интерфейс работает (основная или копия).\n`viaRelay` — только\nинтерфейсы за точками через релей: что и куда пересылают релеи.",
+				"description": "Интерфейсы с фильтрами (с копиями), новые первыми. `nodeId` — основная\nнода, `hostNodeId` — нода, где интерфейс работает (основная или копия).\n`viaRelay` — только\nинтерфейсы за точками через релей: что и куда пересылают релеи. С правом\n`wg:interface:view:own` — только свои (владелец или создатель).",
 				"summary": "Список интерфейсов",
 				"tags": [
 					"WgInterface"
@@ -6544,7 +6574,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:view"
+							"permission:wg:interface:view:own"
 						]
 					}
 				],
@@ -6646,7 +6676,7 @@
 						}
 					}
 				},
-				"description": "Краткий список интерфейсов для выпадающих списков.",
+				"description": "Краткий список интерфейсов для выпадающих списков (в рамках прав).",
 				"summary": "Интерфейсы (options)",
 				"tags": [
 					"WgInterface"
@@ -6654,7 +6684,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:view"
+							"permission:wg:interface:view:own"
 						]
 					}
 				],
@@ -6695,7 +6725,7 @@
 						}
 					}
 				},
-				"description": "Интерфейс по id.",
+				"description": "Интерфейс по id; чужой без права на все интерфейсы — 404.",
 				"summary": "Интерфейс",
 				"tags": [
 					"WgInterface"
@@ -6703,7 +6733,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:view"
+							"permission:wg:interface:view:own"
 						]
 					}
 				],
@@ -6750,7 +6780,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:update"
+							"permission:wg:interface:update:own"
 						]
 					}
 				],
@@ -6800,7 +6830,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:delete"
+							"permission:wg:interface:delete:own"
 						]
 					}
 				],
@@ -6849,7 +6879,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:control"
+							"permission:wg:interface:control:own"
 						]
 					}
 				],
@@ -6898,7 +6928,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:control"
+							"permission:wg:interface:control:own"
 						]
 					}
 				],
@@ -6939,7 +6969,7 @@
 						}
 					}
 				},
-				"description": "Перенести интерфейс с ключом и пирами на другую ноду. С точкой\nподключения клиентские конфиги не меняются; без неё меняется адрес\nподключения (publicHost новой ноды).",
+				"description": "Перенести интерфейс с ключом и пирами на другую ноду (видимую автору).\nС точкой подключения клиентские конфиги не меняются; без неё меняется\nадрес подключения (publicHost новой ноды).",
 				"summary": "Перенос интерфейса на другую ноду",
 				"tags": [
 					"WgInterface"
@@ -6947,7 +6977,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:move"
+							"permission:wg:interface:move:own"
 						]
 					}
 				],
@@ -6998,7 +7028,7 @@
 						}
 					}
 				},
-				"description": "Скопировать интерфейс на ноду: тот же ключ, адреса и всегда те же пиры.\nРелей точки подключения держит туннели до всех копий и переключает\nтрафик (авто по здоровью или закреплённая копия — `activeReplicaNodeId`).",
+				"description": "Скопировать интерфейс на ноду (видимую автору): тот же ключ, адреса и\nвсегда те же пиры. Релей точки подключения держит туннели до всех копий\nи переключает трафик (авто по здоровью или закреплённая копия —\n`activeReplicaNodeId`).",
 				"summary": "Реплика интерфейса на ноде",
 				"tags": [
 					"WgInterface"
@@ -7006,7 +7036,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:replicas"
+							"permission:wg:interface:replicas:own"
 						]
 					}
 				],
@@ -7058,7 +7088,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:replicas"
+							"permission:wg:interface:replicas:own"
 						]
 					}
 				],
@@ -7115,7 +7145,115 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:interface:control"
+							"permission:wg:interface:control:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/wg/interfaces/{id}/assign": {
+			"post": {
+				"operationId": "AssignWgInterface",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgInterfaceDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Назначить владельца интерфейса (он станет для него своим).",
+				"summary": "Назначение владельца интерфейса",
+				"tags": [
+					"WgInterface"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:interface:assign:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IAssignWgInterfaceBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/interfaces/{id}/revoke": {
+			"post": {
+				"operationId": "RevokeWgInterface",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgInterfaceDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Снять владельца интерфейса.",
+				"summary": "Снятие владельца интерфейса",
+				"tags": [
+					"WgInterface"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:interface:assign:own"
 						]
 					}
 				],
@@ -8112,7 +8250,7 @@
 						}
 					}
 				},
-				"description": "Текущий live-снимок интерфейса.",
+				"description": "Текущий live-снимок интерфейса. С областью «свои» — только свой\nинтерфейс (владелец или создатель).",
 				"summary": "Текущий снимок интерфейса",
 				"tags": [
 					"WgStats"
@@ -8270,7 +8408,7 @@
 						}
 					}
 				},
-				"description": "Скорость интерфейса за последние минуты.",
+				"description": "Скорость интерфейса за последние минуты. С областью «свои» — только\nсвой интерфейс.",
 				"summary": "Короткий ряд скорости интерфейса",
 				"tags": [
 					"WgStats"

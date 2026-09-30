@@ -28,6 +28,7 @@ import { KoaRequest } from "../../types/koa";
 import { WgNodeCommandDto } from "../wg-node";
 import {
   IAddWgInterfaceReplicaBody,
+  IAssignWgInterfaceBody,
   ICreateWgInterfaceBody,
   IMoveWgInterfaceBody,
   IUpdateWgInterfaceBody,
@@ -36,6 +37,7 @@ import {
 } from "./dto";
 import {
   AddWgInterfaceReplicaSchema,
+  AssignWgInterfaceSchema,
   CreateWgInterfaceSchema,
   MoveWgInterfaceSchema,
   UpdateWgInterfaceSchema,
@@ -58,8 +60,10 @@ export class WgInterfaceController extends Controller {
 
   /**
    * Создать WireGuard-интерфейс на ноде; ключи генерируются на сервере,
-   * приватный ключ хранится зашифрованным. Произвольные PostUp/PostDown —
-   * только суперпользователь.
+   * приватный ключ хранится зашифрованным. Нода должна быть видна автору;
+   * создатель — автор запроса, владелец, отличный от себя, — только с правом
+   * `wg:interface:assign`. Произвольные PostUp/PostDown — с правом
+   * `wg:interface:hooks`.
    * @summary Создание интерфейса
    */
   @Security("jwt", ["permission:wg:interface:create"])
@@ -77,12 +81,14 @@ export class WgInterfaceController extends Controller {
    * Интерфейсы с фильтрами (с копиями), новые первыми. `nodeId` — основная
    * нода, `hostNodeId` — нода, где интерфейс работает (основная или копия).
    * `viaRelay` — только
-   * интерфейсы за точками через релей: что и куда пересылают релеи.
+   * интерфейсы за точками через релей: что и куда пересылают релеи. С правом
+   * `wg:interface:view:own` — только свои (владелец или создатель).
    * @summary Список интерфейсов
    */
-  @Security("jwt", ["permission:wg:interface:view"])
+  @Security("jwt", ["permission:wg:interface:view:own"])
   @Get()
   listWgInterfaces(
+    @Request() req: KoaRequest,
     @Query() nodeId?: UUID,
     @Query() hostNodeId?: UUID,
     @Query() endpointId?: UUID,
@@ -93,29 +99,36 @@ export class WgInterfaceController extends Controller {
     @Query() limit?: number,
   ): Promise<IPaginatedDto<WgInterfaceDto>> {
     return this._service.list(
+      getContextUser(req),
       { nodeId, hostNodeId, endpointId, viaRelay, enabled, query },
       normalizePagination(offset, limit),
     );
   }
 
   /**
-   * Краткий список интерфейсов для выпадающих списков.
+   * Краткий список интерфейсов для выпадающих списков (в рамках прав).
    * @summary Интерфейсы (options)
    */
-  @Security("jwt", ["permission:wg:interface:view"])
+  @Security("jwt", ["permission:wg:interface:view:own"])
   @Get("options")
-  wgInterfaceOptions(@Query() nodeId?: UUID): Promise<WgInterfaceOptionDto[]> {
-    return this._service.options(nodeId);
+  wgInterfaceOptions(
+    @Request() req: KoaRequest,
+    @Query() nodeId?: UUID,
+  ): Promise<WgInterfaceOptionDto[]> {
+    return this._service.options(getContextUser(req), nodeId);
   }
 
   /**
-   * Интерфейс по id.
+   * Интерфейс по id; чужой без права на все интерфейсы — 404.
    * @summary Интерфейс
    */
-  @Security("jwt", ["permission:wg:interface:view"])
+  @Security("jwt", ["permission:wg:interface:view:own"])
   @Get("{id}")
-  getWgInterface(@Path() id: UUID): Promise<WgInterfaceDto> {
-    return this._service.get(id);
+  getWgInterface(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+  ): Promise<WgInterfaceDto> {
+    return this._service.get(getContextUser(req), id);
   }
 
   /**
@@ -123,7 +136,7 @@ export class WgInterfaceController extends Controller {
    * конфигурацию автоматически.
    * @summary Изменение интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:update"])
+  @Security("jwt", ["permission:wg:interface:update:own"])
   @ValidateBody(UpdateWgInterfaceSchema)
   @Patch("{id}")
   updateWgInterface(
@@ -138,91 +151,132 @@ export class WgInterfaceController extends Controller {
    * Удалить интерфейс; с пирами — 409.
    * @summary Удаление интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:delete"])
+  @Security("jwt", ["permission:wg:interface:delete:own"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}")
-  async deleteWgInterface(@Path() id: UUID): Promise<void> {
-    await this._service.delete(id);
+  async deleteWgInterface(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+  ): Promise<void> {
+    await this._service.delete(getContextUser(req), id);
   }
 
   /**
    * Включить интерфейс (агент поднимет его).
    * @summary Включение интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:control"])
+  @Security("jwt", ["permission:wg:interface:control:own"])
   @Post("{id}/enable")
-  enableWgInterface(@Path() id: UUID): Promise<WgInterfaceDto> {
-    return this._service.setEnabled(id, true);
+  enableWgInterface(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+  ): Promise<WgInterfaceDto> {
+    return this._service.setEnabled(getContextUser(req), id, true);
   }
 
   /**
    * Выключить интерфейс (агент опустит его, пиры отключатся).
    * @summary Выключение интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:control"])
+  @Security("jwt", ["permission:wg:interface:control:own"])
   @Post("{id}/disable")
-  disableWgInterface(@Path() id: UUID): Promise<WgInterfaceDto> {
-    return this._service.setEnabled(id, false);
+  disableWgInterface(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+  ): Promise<WgInterfaceDto> {
+    return this._service.setEnabled(getContextUser(req), id, false);
   }
 
   /**
-   * Перенести интерфейс с ключом и пирами на другую ноду. С точкой
-   * подключения клиентские конфиги не меняются; без неё меняется адрес
-   * подключения (publicHost новой ноды).
+   * Перенести интерфейс с ключом и пирами на другую ноду (видимую автору).
+   * С точкой подключения клиентские конфиги не меняются; без неё меняется
+   * адрес подключения (publicHost новой ноды).
    * @summary Перенос интерфейса на другую ноду
    */
-  @Security("jwt", ["permission:wg:interface:move"])
+  @Security("jwt", ["permission:wg:interface:move:own"])
   @ValidateBody(MoveWgInterfaceSchema)
   @Post("{id}/move")
   moveWgInterface(
+    @Request() req: KoaRequest,
     @Path() id: UUID,
     @Body() body: IMoveWgInterfaceBody,
   ): Promise<WgInterfaceDto> {
-    return this._service.move(id, body.nodeId);
+    return this._service.move(getContextUser(req), id, body.nodeId);
   }
 
   /**
-   * Скопировать интерфейс на ноду: тот же ключ, адреса и всегда те же пиры.
-   * Релей точки подключения держит туннели до всех копий и переключает
-   * трафик (авто по здоровью или закреплённая копия — `activeReplicaNodeId`).
+   * Скопировать интерфейс на ноду (видимую автору): тот же ключ, адреса и
+   * всегда те же пиры. Релей точки подключения держит туннели до всех копий
+   * и переключает трафик (авто по здоровью или закреплённая копия —
+   * `activeReplicaNodeId`).
    * @summary Реплика интерфейса на ноде
    */
-  @Security("jwt", ["permission:wg:interface:replicas"])
+  @Security("jwt", ["permission:wg:interface:replicas:own"])
   @ValidateBody(AddWgInterfaceReplicaSchema)
   @SuccessResponse(201, "Created")
   @Post("{id}/replicas")
   addWgInterfaceReplica(
+    @Request() req: KoaRequest,
     @Path() id: UUID,
     @Body() body: IAddWgInterfaceReplicaBody,
   ): Promise<WgInterfaceDto> {
-    return this._replicas.addReplica(id, body.nodeId);
+    return this._replicas.addReplica(getContextUser(req), id, body.nodeId);
   }
 
   /**
    * Убрать реплику: агент ноды снимет интерфейс.
    * @summary Удаление реплики интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:replicas"])
+  @Security("jwt", ["permission:wg:interface:replicas:own"])
   @SuccessResponse(204, "No Content")
   @Delete("{id}/replicas/{nodeId}")
   async removeWgInterfaceReplica(
+    @Request() req: KoaRequest,
     @Path() id: UUID,
     @Path() nodeId: UUID,
   ): Promise<void> {
-    await this._replicas.removeReplica(id, nodeId);
+    await this._replicas.removeReplica(getContextUser(req), id, nodeId);
   }
 
   /**
    * Перезапустить интерфейс на ноде (`wg-quick down && up`).
    * @summary Перезапуск интерфейса
    */
-  @Security("jwt", ["permission:wg:interface:control"])
+  @Security("jwt", ["permission:wg:interface:control:own"])
   @SuccessResponse(201, "Created")
   @Post("{id}/restart")
   restartWgInterface(
     @Request() req: KoaRequest,
     @Path() id: UUID,
   ): Promise<WgNodeCommandDto> {
-    return this._service.restart(getContextUser(req).userId, id);
+    return this._service.restart(getContextUser(req), id);
+  }
+
+  /**
+   * Назначить владельца интерфейса (он станет для него своим).
+   * @summary Назначение владельца интерфейса
+   */
+  @Security("jwt", ["permission:wg:interface:assign:own"])
+  @ValidateBody(AssignWgInterfaceSchema)
+  @Post("{id}/assign")
+  assignWgInterface(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+    @Body() body: IAssignWgInterfaceBody,
+  ): Promise<WgInterfaceDto> {
+    return this._service.assign(getContextUser(req), id, body);
+  }
+
+  /**
+   * Снять владельца интерфейса.
+   * @summary Снятие владельца интерфейса
+   */
+  @Security("jwt", ["permission:wg:interface:assign:own"])
+  @Post("{id}/revoke")
+  revokeWgInterface(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+  ): Promise<WgInterfaceDto> {
+    return this._service.revoke(getContextUser(req), id);
   }
 }

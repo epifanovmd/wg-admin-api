@@ -11,6 +11,8 @@ export class WgInterfaceUpdatedEvent {
     public readonly iface: WgInterfaceDto,
     /** Точка до изменения, если интерфейс перешёл на другую. */
     public readonly previousEndpointId: string | null = null,
+    /** Прежний владелец, если он сменился (назначение и снятие). */
+    public readonly previousOwnerId: string | null = null,
   ) {}
 }
 
@@ -21,5 +23,8 @@ export class WgInterfaceDeletedEvent {
     /** Ноды всех копий: основная и реплики. */
     public readonly nodeIds: string[],
     public readonly endpointId: string | null = null,
+    /** Владелец и создатель — кому интерфейс был своим. */
+    public readonly ownerId: string | null = null,
+    public readonly createdById: string | null = null,
   ) {}
 }

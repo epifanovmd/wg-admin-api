@@ -51,6 +51,7 @@ export const CreateWgInterfaceSchema = z.object({
   customPostUp: hook.optional(),
   customPostDown: hook.optional(),
   enabled: z.boolean().optional(),
+  ownerId: z.uuid().nullable().optional(),
 });
 
 export const UpdateWgInterfaceSchema = z
@@ -78,4 +79,8 @@ export const MoveWgInterfaceSchema = z.object({
 
 export const AddWgInterfaceReplicaSchema = z.object({
   nodeId: z.uuid(),
+});
+
+export const AssignWgInterfaceSchema = z.object({
+  userId: z.uuid(),
 });

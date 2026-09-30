@@ -497,6 +497,112 @@ describe("wireguard", () => {
 
       expect(on.data.enabled).to.equal(true);
     });
+
+    it("область «свои»: интерфейс только на видимой ноде; свои видны и управляются, чужие — 404", async () => {
+      const tenant = await signUp("wg-iface-tenant");
+
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/user/setPrivileges/${tenant.id}`, {
+          roles: ["user"],
+          permissions: [
+            "wg:node:create",
+            "wg:node:view:own",
+            "wg:node:delete:own",
+            "wg:interface:create",
+            "wg:interface:view:own",
+            "wg:interface:control:own",
+          ],
+        }),
+        200,
+      );
+
+      const actor = await signIn(tenant.email, tenant.password);
+      const body = {
+        name: "wg-own",
+        listenPort: 51900,
+        addressCidr: "10.77.0.1/24",
+      };
+
+      // Чужая нода не видна — интерфейс на ней не создать.
+      expectStatus(
+        await call(actor, "POST", "/api/v1/wg/interfaces", {
+          ...body,
+          nodeId: nodeA.id,
+        }),
+        404,
+        "WG_NODE_NOT_FOUND",
+      );
+
+      const node = expectStatus(
+        await call(actor, "POST", "/api/v1/wg/nodes", {
+          name: "iface-tenant-node",
+        }),
+        201,
+      ).data.node;
+      const own = expectStatus(
+        await call(actor, "POST", "/api/v1/wg/interfaces", {
+          ...body,
+          nodeId: node.id,
+        }),
+        201,
+      ).data;
+
+      expect(own.createdById).to.equal(tenant.id);
+
+      const list = expectStatus(
+        await call(actor, "GET", "/api/v1/wg/interfaces"),
+        200,
+      );
+
+      expect(items(list.data).map((i: any) => i.id)).to.deep.equal([own.id]);
+      expectStatus(
+        await call(actor, "GET", `/api/v1/wg/interfaces/${iface.id}`),
+        404,
+        "WG_IFACE_NOT_FOUND",
+      );
+      expectStatus(
+        await call(actor, "POST", `/api/v1/wg/interfaces/${own.id}/disable`),
+        200,
+      );
+      // Свой, но без права удаления — 403.
+      expectStatus(
+        await call(actor, "DELETE", `/api/v1/wg/interfaces/${own.id}`),
+        403,
+      );
+
+      const assigned = expectStatus(
+        await call(admin, "POST", `/api/v1/wg/interfaces/${iface.id}/assign`, {
+          userId: tenant.id,
+        }),
+        200,
+      );
+
+      expect(assigned.data.ownerId).to.equal(tenant.id);
+      expectStatus(
+        await call(actor, "GET", `/api/v1/wg/interfaces/${iface.id}`),
+        200,
+      );
+
+      const revoked = expectStatus(
+        await call(admin, "POST", `/api/v1/wg/interfaces/${iface.id}/revoke`),
+        200,
+      );
+
+      expect(revoked.data.ownerId).to.equal(null);
+      expectStatus(
+        await call(actor, "GET", `/api/v1/wg/interfaces/${iface.id}`),
+        404,
+      );
+
+      expectStatus(
+        await call(admin, "DELETE", `/api/v1/wg/interfaces/${own.id}`),
+        204,
+      );
+      expectStatus(
+        await call(actor, "DELETE", `/api/v1/wg/nodes/${node.id}`),
+        204,
+      );
+    });
   });
 
   describe("пиры", () => {
@@ -675,6 +781,7 @@ describe("wireguard", () => {
         await call(admin, "PATCH", `/api/v1/user/setPrivileges/${editor.id}`, {
           roles: ["user"],
           permissions: [
+            "wg:interface:view",
             "wg:peer:create",
             "wg:peer:view",
             "wg:peer:update:own",

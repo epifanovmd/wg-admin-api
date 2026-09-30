@@ -4,9 +4,30 @@ WireGuard-интерфейсы нод. Желаемое состояние жи�
 шифрованный), применяет его агент ноды по версии конфигурации; фактический
 статус (`up/down/error/unknown`) агент сообщает обратно.
 
+## Доступ
+
+Действия над интерфейсом — с областью (`scoped`): право на все интерфейсы или
+`…:own` — только на свои. Свой интерфейс — где пользователь назначенный владелец
+(`ownerId`) или создатель (`createdById`); проверки — `WgInterfaceAccess`
+(`OwnedAccess` ядра). Невидимый интерфейс по id — 404, видимый без права на
+действие — 403 `WG_IFACE_FORBIDDEN`. Списки и options ограничиваются областью
+`wg:interface:view`.
+
+- `wg:interface:create` — без области; создатель — автор запроса, владелец
+  (`ownerId`), отличный от себя, — только с правом назначения. Нода интерфейса
+  должна быть видна автору (`WgNodeService.findFor(…, wg:node:view)`: иначе 404
+  `WG_NODE_NOT_FOUND`); то же — для целевой ноды переноса и ноды реплики.
+- `wg:interface:hooks[:own]` — хуки при создании (любая область: новый
+  интерфейс свой) и при изменении (право на этот интерфейс).
+- Проверка для других модулей — `WgInterfaceService.findFor(actor, id,
+permission)` / `viewFilter(actor)` (пир создаётся только на видимом
+  интерфейсе); методы без актора (`findEntity`, `markInterfaceDirty`, …) —
+  внутренние.
+
 ## Модель
 
-**WgInterface** (`wg_interfaces`): nodeId (FK RESTRICT), name (unique на
+**WgInterface** (`wg_interfaces`): ownerId — назначенный владелец, createdById
+— создатель (оба FK users SET NULL), nodeId (FK RESTRICT), name (unique на
 ноде, `^[a-zA-Z0-9_=+.-]{1,15}$`), listenPort (unique на ноде), addressCidr
 (+ addressV6Cidr), ключи, dns/mtu (дефолты клиентов), endpointId → точка
 подключения (`wg-endpoint`) + endpointPort, natEnabled (пресет masquerade),
@@ -26,19 +47,20 @@ customPostUp/Down (право `wg:interface:hooks`), enabled, status/statusMessa
 (только интерфейсы за точками через релей — что и куда пересылают релеи),
 `enabled`, `query`.
 
-| Право                   | Что даёт                                                                               |
-| ----------------------- | -------------------------------------------------------------------------------------- |
-| `wg:interface:view`     | `GET /`, `/options`, `/{id}`                                                           |
-| `wg:interface:create`   | `POST /`                                                                               |
-| `wg:interface:update`   | `PATCH /{id}`                                                                          |
-| `wg:interface:delete`   | `DELETE /{id}`                                                                         |
-| `wg:interface:control`  | `POST {id}/enable\|disable` (желаемое состояние), `POST {id}/restart` (команда агенту) |
-| `wg:interface:move`     | `POST {id}/move`                                                                       |
-| `wg:interface:replicas` | `POST {id}/replicas`, `DELETE {id}/replicas/{nodeId}`                                  |
-| `wg:interface:hooks`    | задавать `customPostUp`/`customPostDown` при создании и изменении                      |
+| Право                         | Что даёт                                                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------- |
+| `wg:interface:view[:own]`     | `GET /`, `/options`, `/{id}`                                                           |
+| `wg:interface:create`         | `POST /`                                                                               |
+| `wg:interface:update[:own]`   | `PATCH /{id}`                                                                          |
+| `wg:interface:delete[:own]`   | `DELETE /{id}`                                                                         |
+| `wg:interface:control[:own]`  | `POST {id}/enable\|disable` (желаемое состояние), `POST {id}/restart` (команда агенту) |
+| `wg:interface:move[:own]`     | `POST {id}/move`                                                                       |
+| `wg:interface:replicas[:own]` | `POST {id}/replicas`, `DELETE {id}/replicas/{nodeId}`                                  |
+| `wg:interface:hooks[:own]`    | задавать `customPostUp`/`customPostDown` при создании и изменении                      |
+| `wg:interface:assign[:own]`   | `POST {id}/assign` `{ userId }`, `POST {id}/revoke` — владелец                         |
 
-Без `wg:interface:hooks` (и не суперпользователь) тело с произвольными
-PostUp/PostDown — 403 `WG_IFACE_CUSTOM_HOOKS_FORBIDDEN`. Удаление с пирами —
+Без `wg:interface:hooks` тело с произвольными PostUp/PostDown — 403
+`WG_IFACE_CUSTOM_HOOKS_FORBIDDEN`. Удаление с пирами —
 409; конфликты имени/порта/порта точки — 409.
 
 Сервисы: `WgInterfaceService` — CRUD, перенос, включение, статусы;
@@ -55,11 +77,15 @@ PostUp/PostDown — 403 `WG_IFACE_CUSTOM_HOOKS_FORBIDDEN`. Удаление с �
 
 ## Сокет
 
-Комнаты: `wg-interfaces` — список (`permissionRoomPolicy`, `wg:interface:view`),
-`wg-interface_<id>` — страница интерфейса (policy `wg-interface`, `wg:interface:view`).
+Комнаты: `wg-interfaces` — список (`permissionRoomPolicy`, `wg:interface:view` —
+на все), `wg-interface_<id>` — страница интерфейса (policy `wg-interface`: право
+на все или свой интерфейс с `wg:interface:view:own`).
 `WgInterfaceListener` шлёт `wg:interface:updated` (DTO) и `wg:interface:deleted {id}`
-в `wg-interfaces` и `wg-interface_<id>`; в комнаты нод и `wg-overview` изменения
-интерфейсов не идут. Изменение интерфейса заново рассылает DTO его точек
+в `wg-interfaces`, `wg-interface_<id>` и своим — владельцу и создателю с
+областью `own` (`OwnedEntityEmitter.toOwners`); при смене владельца
+(`WgInterfaceUpdatedEvent.previousOwnerId`) прежний, если он не создатель,
+получает `wg:interface:deleted` и пересмотр комнат (`detach`). В комнаты нод и
+`wg-overview` изменения интерфейсов не идут. Изменение интерфейса заново рассылает DTO его точек
 (`publishInterfacesChanged` модуля wg-endpoint → `wg:endpoint:updated` в
 `wg-endpoints`), изменение точки (`WgEndpointChangedEvent`) — DTO её
 интерфейсов. Статистика (`wg:interface:stats`, `wg:peers:stats`) — модуль wg-stats.
@@ -76,7 +102,7 @@ UDP-порты релей-ноды общие для её relay-точек и с
 пробросом этой же ноды как релея — 409 `WG_IFACE_PORT_FORWARDED`.
 
 Перенос на другую ноду — `POST /api/v1/wg/interfaces/{id}/move` (право
-`wg:interface:move`): ключ и пиры сохраняются, обе ноды получают новую
+`wg:interface:move[:own]`, целевая нода видна автору): ключ и пиры сохраняются, обе ноды получают новую
 версию конфигурации, релей точки пересинхронизирует линк. С точкой
 подключения клиентские конфиги не меняются. Проверки — как при изменении
 (уникальность имени/порта на ноде, релей ≠ нода, порты релея); на ту же
@@ -88,7 +114,8 @@ UDP-порты релей-ноды общие для её relay-точек и с
 
 ## Реплики
 
-Интерфейс может иметь копии на других нодах (право `wg:interface:replicas`) (`WgInterfaceReplica`,
+Интерфейс может иметь копии на других нодах (право `wg:interface:replicas[:own]`,
+нода копии видна автору) (`WgInterfaceReplica`,
 `wg_interface_replicas`): тот же ключ, адреса и всегда тот же набор пиров —
 любое изменение интерфейса или его пиров поднимает версию всех копий
 (`markInterfaceDirty`). Имя и порт проверяются на ноде с учётом реплик чужих

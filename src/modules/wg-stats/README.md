@@ -54,7 +54,8 @@
 - `GET window/{peer|interface|node}/{id}` — ряд скорости последних минут
   (пир — `wg:stats:view` или свой пир с `wg:stats:view:own`).
 - `current/node`, `window/node`, `links/node` — `wg:stats:view` или своя нода
-  (владелец или создатель) с `wg:stats:view:own`.
+  (владелец или создатель) с `wg:stats:view:own`; `current/interface`,
+  `window/interface` — так же по своему интерфейсу.
 - `GET node-metrics` — CPU/память/диск/аптайм ноды (`wg:node:view` или своя
   нода с `wg:node:view:own`).
 

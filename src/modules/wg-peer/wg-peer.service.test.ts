@@ -45,7 +45,7 @@ describe("WgPeerService", () => {
   let txRepo: ReturnType<typeof createMockRepository>;
   let eventBus: ReturnType<typeof createMockEventBus>;
   let interfaces: {
-    findEntity: sinon.SinonStub;
+    findFor: sinon.SinonStub;
     markInterfaceDirty: sinon.SinonStub;
   };
   let nodes: { markDirty: sinon.SinonStub };
@@ -111,7 +111,7 @@ describe("WgPeerService", () => {
     };
     eventBus = createMockEventBus();
     interfaces = {
-      findEntity: sinon.stub().resolves(iface),
+      findFor: sinon.stub().resolves(iface),
       markInterfaceDirty: sinon.stub().resolves(),
     };
     nodes = { markDirty: sinon.stub().resolves() };
@@ -175,6 +175,28 @@ describe("WgPeerService", () => {
     });
 
     expect(txRepo.save.firstCall.args[0].createdById).to.equal(editor.userId);
+  });
+
+  it("create: интерфейс проверяется на видимость актору", async () => {
+    interfaces.findFor.rejects(
+      Object.assign(new Error("nf"), { code: "WG_IFACE_NOT_FOUND" }),
+    );
+
+    try {
+      await service.create(editor as any, {
+        interfaceId: iface.id,
+        name: "peer-1",
+      });
+      expect.fail("должно было упасть");
+    } catch (err: any) {
+      expect(err.code).to.equal("WG_IFACE_NOT_FOUND");
+    }
+    expect(interfaces.findFor.firstCall.args).to.deep.equal([
+      editor,
+      iface.id,
+      "wg:interface:view",
+    ]);
+    expect(txRepo.save.called).to.be.false;
   });
 
   it("create с чужим держателем без права назначения — 403", async () => {

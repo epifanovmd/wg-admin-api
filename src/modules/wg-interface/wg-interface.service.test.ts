@@ -8,6 +8,7 @@ import {
   createMockRepository,
   uuid,
   uuid2,
+  uuid3,
 } from "../../test/helpers";
 import { WgInterfaceGuard } from "./wg-interface.guard";
 import { WgInterfaceService } from "./wg-interface.service";
@@ -18,7 +19,23 @@ const superUser = { userId: uuid(), roles: ["admin"], permissions: ["*"] };
 const manager = {
   userId: uuid(),
   roles: ["user"],
-  permissions: ["wg:interface:create", "wg:interface:update"],
+  permissions: [
+    "wg:interface:create",
+    "wg:interface:view",
+    "wg:interface:update",
+  ],
+};
+/** Только свои интерфейсы: видит, меняет, управляет; ноды — все. */
+const tenant = {
+  userId: uuid3(),
+  roles: ["user"],
+  permissions: [
+    "wg:node:view",
+    "wg:interface:create",
+    "wg:interface:view:own",
+    "wg:interface:update:own",
+    "wg:interface:control:own",
+  ],
 };
 
 describe("WgInterfaceService", () => {
@@ -39,6 +56,7 @@ describe("WgInterfaceService", () => {
   let eventBus: ReturnType<typeof createMockEventBus>;
   let nodes: {
     findEntity: sinon.SinonStub;
+    findFor: sinon.SinonStub;
     markDirty: sinon.SinonStub;
     markDirtyMany: sinon.SinonStub;
   };
@@ -80,6 +98,7 @@ describe("WgInterfaceService", () => {
     eventBus = createMockEventBus();
     nodes = {
       findEntity: sinon.stub().resolves({}),
+      findFor: sinon.stub().resolves({}),
       markDirty: sinon.stub().resolves(),
       markDirtyMany: sinon.stub().resolves(),
     };
@@ -135,6 +154,8 @@ describe("WgInterfaceService", () => {
     customPostUp: null,
     customPostDown: null,
     enabled: true,
+    ownerId: null,
+    createdById: null,
     status: EWgInterfaceStatus.Unknown,
     statusMessage: null,
     node: { id: uuid2(), name: "node", publicHost: "1.2.3.4" },
@@ -277,7 +298,7 @@ describe("WgInterfaceService", () => {
 
       repo.findWithRelations.resolves(iface);
 
-      await service.move(iface.id, targetNodeId);
+      await service.move(superUser as any, iface.id, targetNodeId);
 
       expect(txRepo.save.firstCall.args[0].nodeId).to.equal(targetNodeId);
       expect(nodes.markDirty.calledWith(oldNodeId)).to.be.true;
@@ -299,7 +320,7 @@ describe("WgInterfaceService", () => {
         [relayNodeId, "WG_IFACE_ENDPOINT_RELAY_IS_NODE"],
       ]) {
         try {
-          await service.move(iface.id, target);
+          await service.move(superUser as any, iface.id, target);
           expect.fail("должно было упасть");
         } catch (err: any) {
           expect(err.code).to.equal(code);
@@ -453,7 +474,7 @@ describe("WgInterfaceService", () => {
 
     repo.findWithRelations.resolves(iface);
 
-    await service.restart(uuid(), iface.id);
+    await service.restart(superUser as any, iface.id);
 
     expect(
       commands.createInterfaceRestart.calledWith(
@@ -462,5 +483,181 @@ describe("WgInterfaceService", () => {
         "wg0",
       ),
     ).to.be.true;
+  });
+
+  describe("область «все / свои»", () => {
+    const expectCode = async (run: () => Promise<unknown>, code: string) => {
+      try {
+        await run();
+        expect.fail("должно было упасть");
+      } catch (err: any) {
+        expect(err.code).to.equal(code);
+      }
+    };
+
+    it("create: создатель — автор, нода проверяется на видимость актору", async () => {
+      const iface = makeIface();
+
+      txRepo.save.callsFake(async (data: any) => ({ ...iface, ...data }));
+      repo.findWithRelations.resolves(iface);
+
+      await service.create(tenant as any, {
+        nodeId: iface.nodeId,
+        name: "wg0",
+        listenPort: 51820,
+        addressCidr: "10.0.0.1/24",
+      });
+
+      expect(txRepo.save.firstCall.args[0]).to.include({
+        createdById: tenant.userId,
+        ownerId: null,
+      });
+      expect(nodes.findFor.firstCall.args).to.deep.equal([
+        tenant,
+        iface.nodeId,
+        "wg:node:view",
+      ]);
+    });
+
+    it("create: невидимая нода — ошибка ноды, интерфейс не создаётся", async () => {
+      nodes.findFor.rejects(
+        Object.assign(new Error("nf"), { code: "WG_NODE_NOT_FOUND" }),
+      );
+
+      await expectCode(
+        () =>
+          service.create(tenant as any, {
+            nodeId: uuid(),
+            name: "wg0",
+            listenPort: 51820,
+            addressCidr: "10.0.0.1/24",
+          }),
+        "WG_NODE_NOT_FOUND",
+      );
+      expect(txRepo.save.called).to.be.false;
+    });
+
+    it("create: чужой владелец без права назначения — 403", async () => {
+      await expectCode(
+        () =>
+          service.create(tenant as any, {
+            nodeId: uuid(),
+            name: "wg0",
+            listenPort: 51820,
+            addressCidr: "10.0.0.1/24",
+            ownerId: uuid(),
+          }),
+        "WG_IFACE_FORBIDDEN",
+      );
+    });
+
+    it("list: с областью own — только свои", async () => {
+      const findPage = sinon.stub().resolves([[], 0]);
+
+      Object.assign(repo, { findPage });
+      await service.list(tenant as any, {}, { offset: 0, limit: 20 });
+      await service.list(manager as any, {}, { offset: 0, limit: 20 });
+
+      expect(findPage.firstCall.args[0].ownedBy).to.equal(tenant.userId);
+      expect(findPage.secondCall.args[0].ownedBy).to.equal(undefined);
+    });
+
+    it("options: свои с фильтром ноды", async () => {
+      repo.find.resolves([]);
+      await service.options(tenant as any, uuid2());
+
+      expect(repo.find.firstCall.args[0].where).to.deep.equal([
+        { ownerId: tenant.userId, nodeId: uuid2() },
+        { createdById: tenant.userId, nodeId: uuid2() },
+      ]);
+    });
+
+    it("get: чужой — 404, свой (владелец) — виден", async () => {
+      repo.findWithRelations.resolves(makeIface({ ownerId: uuid2() }));
+      await expectCode(
+        () => service.get(tenant as any, uuid()),
+        "WG_IFACE_NOT_FOUND",
+      );
+
+      repo.findWithRelations.resolves(makeIface({ ownerId: tenant.userId }));
+      expect((await service.get(tenant as any, uuid())).ownerId).to.equal(
+        tenant.userId,
+      );
+    });
+
+    it("delete: свой без права удаления — 403", async () => {
+      repo.findWithRelations.resolves(
+        makeIface({ createdById: tenant.userId }),
+      );
+
+      await expectCode(
+        () => service.delete(tenant as any, uuid()),
+        "WG_IFACE_FORBIDDEN",
+      );
+    });
+
+    it("update: хуки на своём интерфейсе — только с правом hooks", async () => {
+      repo.findWithRelations.resolves(makeIface({ ownerId: tenant.userId }));
+
+      await expectCode(
+        () => service.update(tenant as any, uuid(), { customPostUp: "echo" }),
+        "WG_IFACE_CUSTOM_HOOKS_FORBIDDEN",
+      );
+    });
+
+    it("move: целевая нода проверяется на видимость актору", async () => {
+      repo.findWithRelations.resolves(makeIface());
+      nodes.findFor.rejects(
+        Object.assign(new Error("nf"), { code: "WG_NODE_NOT_FOUND" }),
+      );
+
+      await expectCode(
+        () => service.move(superUser as any, uuid(), uuid3()),
+        "WG_NODE_NOT_FOUND",
+      );
+      expect(txRepo.save.called).to.be.false;
+    });
+
+    it("assign и revoke: событие с прежним владельцем, если он сменился", async () => {
+      const iface = makeIface({ ownerId: uuid2() });
+
+      repo.findWithRelations.resolves(iface);
+
+      await service.assign(superUser as any, iface.id, { userId: uuid3() });
+      expect(repo.update.lastCall.args[1]).to.deep.equal({ ownerId: uuid3() });
+      expect(eventBus.emit.lastCall.args[0].previousOwnerId).to.equal(uuid2());
+
+      await service.revoke(superUser as any, iface.id);
+      expect(repo.update.lastCall.args[1]).to.deep.equal({ ownerId: null });
+
+      await service.assign(superUser as any, iface.id, { userId: uuid2() });
+      expect(eventBus.emit.lastCall.args[0].previousOwnerId).to.equal(null);
+    });
+
+    it("delete: событие несёт владельца и создателя", async () => {
+      const iface = makeIface({ ownerId: uuid2(), createdById: uuid3() });
+
+      repo.findWithRelations.resolves(iface);
+      await service.delete(superUser as any, iface.id);
+
+      expect(eventBus.emit.lastCall.args[0]).to.include({
+        ownerId: uuid2(),
+        createdById: uuid3(),
+      });
+    });
+
+    it("реплика: нода копии проверяется на видимость актору", async () => {
+      repo.findWithRelations.resolves(makeIface({ replicas: [] }));
+      nodes.findFor.rejects(
+        Object.assign(new Error("nf"), { code: "WG_NODE_NOT_FOUND" }),
+      );
+
+      const replicas = (service as any)._replicas as WgInterfaceReplicaService;
+
+      await expectCode(
+        () => replicas.addReplica(superUser as any, uuid(), uuid3()),
+        "WG_NODE_NOT_FOUND",
+      );
+    });
   });
 });

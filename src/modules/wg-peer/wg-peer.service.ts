@@ -13,7 +13,11 @@ import {
   toPage,
 } from "../../core";
 import type { AuthContext } from "../../types/koa";
-import { resolveClientEndpoint, WgInterfaceService } from "../wg-interface";
+import {
+  resolveClientEndpoint,
+  WgInterfacePermissions,
+  WgInterfaceService,
+} from "../wg-interface";
 import {
   generateWgKeyPair,
   generateWgPresharedKey,
@@ -102,7 +106,11 @@ export class WgPeerService {
       throw WgPeerError.FORBIDDEN();
     }
 
-    const iface = await this._interfaces.findEntity(body.interfaceId);
+    const iface = await this._interfaces.findFor(
+      actor,
+      body.interfaceId,
+      WgInterfacePermissions.INTERFACE_VIEW,
+    );
     const imported = Boolean(body.publicKey);
     const keys = imported ? null : generateWgKeyPair();
     const publicKey = body.publicKey ?? keys!.publicKey;

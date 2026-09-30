@@ -111,7 +111,8 @@ export class WgStatsController extends Controller {
   }
 
   /**
-   * Текущий live-снимок интерфейса.
+   * Текущий live-снимок интерфейса. С областью «свои» — только свой
+   * интерфейс (владелец или создатель).
    * @summary Текущий снимок интерфейса
    */
   @Security("jwt", ["permission:wg:stats:view:own"])
@@ -152,7 +153,8 @@ export class WgStatsController extends Controller {
   }
 
   /**
-   * Скорость интерфейса за последние минуты.
+   * Скорость интерфейса за последние минуты. С областью «свои» — только
+   * свой интерфейс.
    * @summary Короткий ряд скорости интерфейса
    */
   @Security("jwt", ["permission:wg:stats:view:own"])
