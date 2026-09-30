@@ -213,7 +213,11 @@ describe("WgInterfaceService", () => {
     const dto = await service.create(
       {
         ...manager,
-        permissions: [...manager.permissions, "wg:interface:hooks"],
+        permissions: [
+          ...manager.permissions,
+          "wg:interface:hooks",
+          "wg:node:update",
+        ],
       } as any,
       {
         nodeId: uuid(),
@@ -688,6 +692,110 @@ describe("WgInterfaceService", () => {
       await expectCode(
         () => replicas.addReplica(superUser as any, uuid(), uuid3()),
         "WG_NODE_NOT_FOUND",
+      );
+    });
+  });
+
+  describe("хуки выполняются на ноде: нужно право изменять ноду", () => {
+    /** Хуки своих интерфейсов; ноды видны все, изменяются только свои. */
+    const hooker = {
+      userId: uuid3(),
+      roles: ["user"],
+      permissions: [
+        "wg:node:view",
+        "wg:node:update:own",
+        "wg:interface:create",
+        "wg:interface:view:own",
+        "wg:interface:update:own",
+        "wg:interface:move:own",
+        "wg:interface:replicas:own",
+        "wg:interface:hooks:own",
+      ],
+    };
+    const foreignNode = { id: uuid2(), ownerId: uuid(), createdById: uuid() };
+    const ownNode = { id: uuid2(), ownerId: hooker.userId, createdById: null };
+    const expectHooksForbidden = async (run: () => Promise<unknown>) => {
+      try {
+        await run();
+        expect.fail("должно было упасть");
+      } catch (err: any) {
+        expect(err.code).to.equal("WG_IFACE_CUSTOM_HOOKS_FORBIDDEN");
+      }
+      expect(txRepo.save.called).to.be.false;
+    };
+
+    it("create с хуками на чужой ноде — 403", async () => {
+      nodes.findEntity.resolves(foreignNode);
+
+      await expectHooksForbidden(() =>
+        service.create(hooker as any, {
+          nodeId: foreignNode.id,
+          name: "wg0",
+          listenPort: 51820,
+          addressCidr: "10.0.0.1/24",
+          customPostUp: "rm -rf /",
+        }),
+      );
+    });
+
+    it("create с хуками на своей ноде — можно", async () => {
+      const iface = makeIface({ customPostUp: "echo" });
+
+      nodes.findEntity.resolves(ownNode);
+      txRepo.save.callsFake(async (data: any) => ({ ...iface, ...data }));
+      repo.findWithRelations.resolves(iface);
+
+      await service.create(hooker as any, {
+        nodeId: ownNode.id,
+        name: "wg0",
+        listenPort: 51820,
+        addressCidr: "10.0.0.1/24",
+        customPostUp: "echo",
+      });
+
+      expect(txRepo.save.called).to.be.true;
+    });
+
+    it("update хуков своего интерфейса на чужой ноде — 403", async () => {
+      nodes.findEntity.resolves(foreignNode);
+      repo.findWithRelations.resolves(
+        makeIface({ ownerId: hooker.userId, replicas: [] }),
+      );
+
+      await expectHooksForbidden(() =>
+        service.update(hooker as any, uuid(), { customPostUp: "echo" }),
+      );
+    });
+
+    it("перенос интерфейса с хуками на чужую ноду — 403", async () => {
+      nodes.findEntity.resolves(foreignNode);
+      repo.findWithRelations.resolves(
+        makeIface({
+          ownerId: hooker.userId,
+          customPostUp: "echo",
+          replicas: [],
+        }),
+      );
+
+      await expectHooksForbidden(() =>
+        service.move(hooker as any, uuid(), uuid3()),
+      );
+    });
+
+    it("копия интерфейса с хуками на чужой ноде — 403", async () => {
+      nodes.findEntity.resolves(foreignNode);
+      repo.findWithRelations.resolves(
+        makeIface({
+          ownerId: hooker.userId,
+          customPostUp: "echo",
+          replicas: [],
+        }),
+      );
+
+      const replicas = (service as any)._replicas as WgInterfaceReplicaService;
+
+      await expectHooksForbidden(() =>
+        replicas.addReplica(hooker as any, uuid(), uuid3()),
       );
     });
   });

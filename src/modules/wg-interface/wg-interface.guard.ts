@@ -1,11 +1,18 @@
 import { inject, multiInject, optional } from "inversify";
 
 import { Injectable } from "../../core";
+import type { AuthContext } from "../../types/koa";
 import { EWgEndpointMode, WgEndpoint } from "../wg-endpoint";
-import { WgNodeService } from "../wg-node";
+import { WgNodeAccess, WgNodePermissions, WgNodeService } from "../wg-node";
 import { IWgRelayConsumer, WG_RELAY_CONSUMER } from "./relay-extensions";
 import { WgInterfaceError } from "./wg-interface.errors";
 import { WgInterfaceRepository } from "./wg-interface.repository";
+
+/** У интерфейса есть произвольные PostUp/PostDown. */
+export const hasHooks = (iface: {
+  customPostUp: string | null;
+  customPostDown: string | null;
+}): boolean => Boolean(iface.customPostUp || iface.customPostDown);
 
 /** Размещение интерфейса (или его копии) на ноде с учётом релея точки. */
 export interface IWgInterfacePlacement {
@@ -47,6 +54,24 @@ export class WgInterfaceGuard {
       await this._repo.nodeListenPortInUse(nodeId, iface.listenPort, iface.id)
     ) {
       throw WgInterfaceError.PORT_TAKEN();
+    }
+  }
+
+  /**
+   * Произвольные PostUp/PostDown выполняются root-командами на ноде: кроме
+   * права на хуки интерфейса нужно право изменять каждую ноду, где они
+   * окажутся (все ноды или своя).
+   */
+  async assertHooksAllowedOn(
+    actor: AuthContext,
+    nodeIds: readonly string[],
+  ): Promise<void> {
+    for (const nodeId of new Set(nodeIds)) {
+      const node = await this._nodes.findEntity(nodeId);
+
+      if (!WgNodeAccess.can(actor, WgNodePermissions.NODE_UPDATE, node)) {
+        throw WgInterfaceError.CUSTOM_HOOKS_FORBIDDEN();
+      }
     }
   }
 

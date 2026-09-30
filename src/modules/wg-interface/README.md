@@ -20,7 +20,10 @@ WireGuard-интерфейсы нод. Желаемое состояние жи�
   Точка подключения при создании и смене — тоже видимая автору
   (`wg:endpoint:view[:own]`, иначе 404 `WG_ENDPOINT_NOT_FOUND`).
 - `wg:interface:hooks[:own]` — хуки при создании (любая область: новый
-  интерфейс свой) и при изменении (право на этот интерфейс).
+  интерфейс свой) и при изменении (право на этот интерфейс). Хуки — root-команды
+  на ноде, поэтому ещё нужно `wg:node:update[:own]` на каждую ноду, где они
+  окажутся: при создании и изменении хуков, переносе и копии интерфейса с хуками
+  (`WgInterfaceGuard.assertHooksAllowedOn`).
 - Проверка для других модулей — `WgInterfaceService.findFor(actor, id,
 permission)` / `viewFilter(actor)` (пир создаётся только на видимом
   интерфейсе); методы без актора (`findEntity`, `markInterfaceDirty`, …) —
@@ -61,7 +64,8 @@ customPostUp/Down (право `wg:interface:hooks`), enabled, status/statusMessa
 | `wg:interface:hooks[:own]`    | задавать `customPostUp`/`customPostDown` при создании и изменении                      |
 | `wg:interface:assign[:own]`   | `POST {id}/assign` `{ userId }`, `POST {id}/revoke` — владелец                         |
 
-Без `wg:interface:hooks` тело с произвольными PostUp/PostDown — 403
+Без `wg:interface:hooks` или права изменять ноду тело с произвольными
+PostUp/PostDown (а также перенос и копия интерфейса с хуками) — 403
 `WG_IFACE_CUSTOM_HOOKS_FORBIDDEN`. Удаление с пирами —
 409; конфликты имени/порта/порта точки — 409.
 

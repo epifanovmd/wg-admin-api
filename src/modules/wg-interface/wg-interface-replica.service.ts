@@ -6,7 +6,7 @@ import type { AuthContext } from "../../types/koa";
 import { WgNodePermissions, WgNodeService } from "../wg-node";
 import { WgInterfaceDto } from "./dto";
 import { WgInterfaceError } from "./wg-interface.errors";
-import { WgInterfaceGuard } from "./wg-interface.guard";
+import { hasHooks, WgInterfaceGuard } from "./wg-interface.guard";
 import { emitInterfaceUpdated, findInterfaceFor } from "./wg-interface.lookup";
 import { WgInterfacePermissions } from "./wg-interface.permissions";
 import { WgInterfaceRepository } from "./wg-interface.repository";
@@ -55,6 +55,9 @@ export class WgInterfaceReplicaService {
     }
 
     await this._nodes.findFor(actor, nodeId, WgNodePermissions.NODE_VIEW);
+    if (hasHooks(iface)) {
+      await this._guard.assertHooksAllowedOn(actor, [nodeId]);
+    }
     await this._guard.assertNodeFree(nodeId, iface);
     if (iface.endpoint) this._guard.assertRelayNotSelf(iface.endpoint, nodeId);
     await this._guard.assertRelayPortsFree({

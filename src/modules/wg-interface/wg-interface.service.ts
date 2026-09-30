@@ -35,7 +35,7 @@ import { WgInterfaceCreatedEvent, WgInterfaceDeletedEvent } from "./events";
 import { WgInterfaceAccess } from "./wg-interface.access";
 import { WgInterface } from "./wg-interface.entity";
 import { WgInterfaceError } from "./wg-interface.errors";
-import { WgInterfaceGuard } from "./wg-interface.guard";
+import { hasHooks, WgInterfaceGuard } from "./wg-interface.guard";
 import {
   copyStatus,
   emitInterfaceUpdated,
@@ -110,6 +110,9 @@ export class WgInterfaceService {
       throw WgInterfaceError.CUSTOM_HOOKS_FORBIDDEN();
     }
     await this._nodes.findFor(actor, body.nodeId, WgNodePermissions.NODE_VIEW);
+    if (touchesHooks(body)) {
+      await this._guard.assertHooksAllowedOn(actor, [body.nodeId]);
+    }
     await this._guard.assertNodeFree(body.nodeId, body);
 
     const endpoint = await this._resolveEndpoint(
@@ -235,6 +238,12 @@ export class WgInterfaceService {
     ) {
       throw WgInterfaceError.CUSTOM_HOOKS_FORBIDDEN();
     }
+    if (touchesHooks(body)) {
+      await this._guard.assertHooksAllowedOn(actor, [
+        iface.nodeId,
+        ...(iface.replicas ?? []).map(replica => replica.nodeId),
+      ]);
+    }
 
     const previousRelayNodeId = iface.endpoint?.relayNodeId ?? null;
     const previousEndpointId = iface.endpointId;
@@ -350,6 +359,9 @@ export class WgInterfaceService {
     }
 
     await this._nodes.findFor(actor, targetNodeId, WgNodePermissions.NODE_VIEW);
+    if (hasHooks(iface)) {
+      await this._guard.assertHooksAllowedOn(actor, [targetNodeId]);
+    }
     if (iface.replicas?.some(replica => replica.nodeId === targetNodeId)) {
       throw WgInterfaceError.MOVE_TO_REPLICA();
     }
