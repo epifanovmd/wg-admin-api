@@ -1,12 +1,18 @@
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
+import { WgForwardAccess } from "./wg-forward.access";
 import { WgForward } from "./wg-forward.entity";
 import { EWgForwardProtocol } from "./wg-forward.types";
 
 @InjectableRepository(WgForward)
 export class WgForwardRepository extends BaseRepository<WgForward> {
-  findPage({ offset, limit }: Pagination): Promise<[WgForward[], number]> {
+  /** Страница пробросов; `ownedBy` — только свои (владелец или создатель). */
+  findPage(
+    { offset, limit }: Pagination,
+    ownedBy?: string,
+  ): Promise<[WgForward[], number]> {
     return this.findAndCount({
+      where: ownedBy ? WgForwardAccess.ownedWhere(ownedBy) : {},
       relations: { relayNode: true, targetNode: true },
       order: { createdAt: "DESC", id: "DESC" },
       skip: offset,

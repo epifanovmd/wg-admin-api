@@ -2985,6 +2985,16 @@
 					"id": {
 						"type": "string"
 					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец проброса."
+					},
+					"createdById": {
+						"type": "string",
+						"nullable": true,
+						"description": "Создатель проброса."
+					},
 					"name": {
 						"type": "string"
 					},
@@ -3051,6 +3061,8 @@
 				},
 				"required": [
 					"id",
+					"ownerId",
+					"createdById",
 					"name",
 					"description",
 					"relayNodeId",
@@ -3112,6 +3124,11 @@
 					},
 					"enabled": {
 						"type": "boolean"
+					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец; другой пользователь — только с правом назначения."
 					}
 				},
 				"required": [
@@ -3192,6 +3209,19 @@
 						"type": "boolean"
 					}
 				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAssignWgForwardBody": {
+				"description": "Назначение владельца проброса.",
+				"properties": {
+					"userId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"userId"
+				],
 				"type": "object",
 				"additionalProperties": false
 			},
@@ -9780,7 +9810,7 @@
 						}
 					}
 				},
-				"description": "Создать проброс: релей, протокол и порт, цель (нода с агентом или\nадрес), путь и режим маршрута.",
+				"description": "Создать проброс: релей, протокол и порт, цель (нода с агентом или\nадрес), путь и режим маршрута. Релей и нода-цель должны быть видны\nавтору; создатель — автор запроса, владелец, отличный от себя, — только с\nправом `wg:forward:assign`.",
 				"summary": "Создание проброса",
 				"tags": [
 					"WgForward"
@@ -9828,7 +9858,7 @@
 						}
 					}
 				},
-				"description": "Пробросы с активным маршрутом по отчётам агентов.",
+				"description": "Пробросы с активным маршрутом по отчётам агентов. С правом\n`wg:forward:view:own` — только свои (владелец или создатель).",
 				"summary": "Список пробросов",
 				"tags": [
 					"WgForward"
@@ -9836,7 +9866,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:forward:view"
+							"permission:wg:forward:view:own"
 						]
 					}
 				],
@@ -9887,6 +9917,7 @@
 						}
 					}
 				},
+				"description": "Проброс по id; чужой без права на все пробросы — 404.",
 				"summary": "Проброс",
 				"tags": [
 					"WgForward"
@@ -9894,7 +9925,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:forward:view"
+							"permission:wg:forward:view:own"
 						]
 					}
 				],
@@ -9933,7 +9964,7 @@
 						}
 					}
 				},
-				"description": "Изменить проброс; в том числе переключить маршрут (auto / tunnel /\ndirect) — агент релея применит сразу.",
+				"description": "Изменить проброс; в том числе переключить маршрут (auto / tunnel /\ndirect) — агент релея применит сразу. Новая нода-цель должна быть видна\nавтору.",
 				"summary": "Изменение проброса",
 				"tags": [
 					"WgForward"
@@ -9941,7 +9972,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:forward:update"
+							"permission:wg:forward:update:own"
 						]
 					}
 				],
@@ -9990,7 +10021,115 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:forward:delete"
+							"permission:wg:forward:delete:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/wg/forwards/{id}/assign": {
+			"post": {
+				"operationId": "AssignWgForward",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgForwardDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Назначить владельца проброса (он станет для него своим).",
+				"summary": "Назначение владельца проброса",
+				"tags": [
+					"WgForward"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:forward:assign:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IAssignWgForwardBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/forwards/{id}/revoke": {
+			"post": {
+				"operationId": "RevokeWgForward",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgForwardDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Снять владельца проброса.",
+				"summary": "Снятие владельца проброса",
+				"tags": [
+					"WgForward"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:forward:assign:own"
 						]
 					}
 				],

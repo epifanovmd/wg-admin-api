@@ -1,5 +1,6 @@
 export * from "./dto";
 export * from "./events";
+export * from "./wg-forward.access";
 export * from "./wg-forward.controller";
 export * from "./wg-forward.entity";
 export * from "./wg-forward.errors";

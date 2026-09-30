@@ -1255,6 +1255,72 @@ describe("wireguard", () => {
       ).to.equal("direct");
       expectStatus(await call(user, "GET", "/api/v1/wg/forwards"), 403);
 
+      // Область «свои»: чужие релеи и пробросы не видны; назначенный — свой.
+      const tenant = await signUp("wg-forward-tenant");
+
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/user/setPrivileges/${tenant.id}`, {
+          roles: ["user"],
+          permissions: [
+            "wg:node:view:own",
+            "wg:forward:create",
+            "wg:forward:view:own",
+          ],
+        }),
+        200,
+      );
+
+      const tenantActor = await signIn(tenant.email, tenant.password);
+
+      expectStatus(
+        await call(tenantActor, "POST", "/api/v1/wg/forwards", {
+          name: "tenant-forward",
+          relayNodeId: relayNode.id,
+          protocol: "tcp",
+          listenPort: 18443,
+          targetHost: "198.51.100.30",
+          targetPort: 443,
+          path: "direct",
+        }),
+        404,
+        "WG_NODE_NOT_FOUND",
+      );
+      expect(
+        items(
+          expectStatus(
+            await call(tenantActor, "GET", "/api/v1/wg/forwards"),
+            200,
+          ).data,
+        ),
+      ).to.deep.equal([]);
+      expectStatus(
+        await call(tenantActor, "GET", `/api/v1/wg/forwards/${udp.id}`),
+        404,
+        "WG_FORWARD_NOT_FOUND",
+      );
+      expect(
+        expectStatus(
+          await call(admin, "POST", `/api/v1/wg/forwards/${udp.id}/assign`, {
+            userId: tenant.id,
+          }),
+          200,
+        ).data.ownerId,
+      ).to.equal(tenant.id);
+      expectStatus(
+        await call(tenantActor, "GET", `/api/v1/wg/forwards/${udp.id}`),
+        200,
+      );
+      expect(
+        expectStatus(
+          await call(admin, "POST", `/api/v1/wg/forwards/${udp.id}/revoke`),
+          200,
+        ).data.ownerId,
+      ).to.equal(null);
+      expectStatus(
+        await call(tenantActor, "GET", `/api/v1/wg/forwards/${udp.id}`),
+        404,
+      );
+
       // Ручное переключение: принудительно напрямую — агент применит сразу.
       expect(
         expectStatus(

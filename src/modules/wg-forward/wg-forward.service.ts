@@ -6,22 +6,31 @@ import {
   EventBus,
   Injectable,
   isUniqueViolation,
+  PG_ERROR,
   pgConstraint,
+  pgErrorCode,
   toPage,
 } from "../../core";
+import type { AuthContext } from "../../types/koa";
 import {
   IWgRelayConsumer,
   WG_RELAY_CONSUMER,
   WgInterfaceRepository,
   WgRelaySyncService,
 } from "../wg-interface";
-import { WgNode, WgNodeService } from "../wg-node";
+import { WgNode, WgNodePermissions, WgNodeService } from "../wg-node";
 import { WgLiveStore } from "../wg-stats";
-import type { ICreateWgForwardBody, IUpdateWgForwardBody } from "./dto";
+import type {
+  IAssignWgForwardBody,
+  ICreateWgForwardBody,
+  IUpdateWgForwardBody,
+} from "./dto";
 import { WgForwardDto } from "./dto";
 import { WgForwardDeletedEvent, WgForwardUpdatedEvent } from "./events";
+import { WgForwardAccess } from "./wg-forward.access";
 import { WgForward } from "./wg-forward.entity";
 import { WgForwardError } from "./wg-forward.errors";
+import { WgForwardPermissions } from "./wg-forward.permissions";
 import { WgForwardRepository } from "./wg-forward.repository";
 import {
   EWgForwardActiveRoute,
@@ -35,9 +44,11 @@ const ROUTE_TTL_SEC = 60;
 const routeKey = (id: string): string => `forward-route:${id}`;
 
 /**
- * Пробросы портов на релее до внешних сервисов. Изменение поднимает версию
- * релея (в транзакции) и пересинхронизирует его линки: цель пути `ipip`
- * получает свой конец туннеля.
+ * Пробросы портов на релее до внешних сервисов с областью прав «все / свои»
+ * (владелец или создатель): чужой проброс без права на все не раскрывается
+ * (404), видимый без права на действие — 403; релей и нода-цель выбираются
+ * только из видимых нод. Изменение поднимает версию релея (в транзакции) и
+ * пересинхронизирует его линки: цель пути `ipip` получает свой конец туннеля.
  */
 @Injectable()
 export class WgForwardService {
@@ -55,8 +66,25 @@ export class WgForwardService {
     private readonly _consumers: IWgRelayConsumer[] | undefined = [],
   ) {}
 
-  async create(body: ICreateWgForwardBody): Promise<WgForwardDto> {
+  async create(
+    actor: AuthContext,
+    body: ICreateWgForwardBody,
+  ): Promise<WgForwardDto> {
+    const ownerId = body.ownerId ?? null;
+
+    if (
+      ownerId !== null &&
+      ownerId !== actor.userId &&
+      !WgForwardAccess.scope(actor, WgForwardPermissions.FORWARD_ASSIGN)
+    ) {
+      throw WgForwardError.FORBIDDEN();
+    }
+    await this._assertNodeVisible(actor, body.relayNodeId);
+    await this._assertNodeVisible(actor, body.targetNodeId ?? null);
+
     const draft = this._repo.create({
+      ownerId,
+      createdById: actor.userId,
       name: body.name,
       description: body.description ?? null,
       relayNodeId: body.relayNodeId,
@@ -72,18 +100,37 @@ export class WgForwardService {
 
     await this._validate(draft, { checkHost: draft.enabled });
 
-    return this._save(draft);
+    try {
+      return await this._save(draft);
+    } catch (err) {
+      if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION && ownerId) {
+        throw WgForwardError.USER_NOT_FOUND();
+      }
+      throw err;
+    }
   }
 
-  async update(id: string, body: IUpdateWgForwardBody): Promise<WgForwardDto> {
-    const forward = await this._findOrFail(id);
+  async update(
+    actor: AuthContext,
+    id: string,
+    body: IUpdateWgForwardBody,
+  ): Promise<WgForwardDto> {
+    const forward = await this.findFor(
+      actor,
+      id,
+      WgForwardPermissions.FORWARD_UPDATE,
+    );
     const portChanged =
       body.listenPort !== undefined && body.listenPort !== forward.listenPort;
 
     if (body.name !== undefined) forward.name = body.name;
     if (body.description !== undefined) forward.description = body.description;
     if (body.listenPort !== undefined) forward.listenPort = body.listenPort;
-    if (body.targetNodeId !== undefined) {
+    if (
+      body.targetNodeId !== undefined &&
+      body.targetNodeId !== forward.targetNodeId
+    ) {
+      await this._assertNodeVisible(actor, body.targetNodeId);
       forward.targetNodeId = body.targetNodeId;
       forward.targetNode = undefined;
     }
@@ -100,27 +147,109 @@ export class WgForwardService {
     return this._save(forward);
   }
 
-  async delete(id: string): Promise<void> {
-    const forward = await this._findOrFail(id);
+  async delete(actor: AuthContext, id: string): Promise<void> {
+    const forward = await this.findFor(
+      actor,
+      id,
+      WgForwardPermissions.FORWARD_DELETE,
+    );
 
     await this._dataSource.transaction(async manager => {
       await this._repo.getRepository(manager).delete({ id: forward.id });
       await this._nodes.markDirty(forward.relayNodeId, manager);
     });
     await this._relaySync.syncRelaySafe(forward.relayNodeId);
-    this._eventBus.emit(new WgForwardDeletedEvent(forward.id));
+    this._eventBus.emit(
+      new WgForwardDeletedEvent(
+        forward.id,
+        forward.ownerId,
+        forward.createdById,
+      ),
+    );
   }
 
-  async list(pagination: Pagination): Promise<IPaginatedDto<WgForwardDto>> {
-    const [items, total] = await this._repo.findPage(pagination);
+  async list(
+    actor: AuthContext,
+    pagination: Pagination,
+  ): Promise<IPaginatedDto<WgForwardDto>> {
+    const filter = WgForwardAccess.filter(
+      actor,
+      WgForwardPermissions.FORWARD_VIEW,
+    );
+
+    if (!filter) throw WgForwardError.FORBIDDEN();
+
+    const [items, total] = await this._repo.findPage(
+      pagination,
+      filter.ownedBy,
+    );
 
     return toPage(await this._toDtos(items), total, pagination);
   }
 
-  async get(id: string): Promise<WgForwardDto> {
-    const [dto] = await this._toDtos([await this._findOrFail(id)]);
+  async get(actor: AuthContext, id: string): Promise<WgForwardDto> {
+    const [dto] = await this._toDtos([
+      await this.findFor(actor, id, WgForwardPermissions.FORWARD_VIEW),
+    ]);
 
     return dto;
+  }
+
+  /** Назначить владельца проброса. */
+  async assign(
+    actor: AuthContext,
+    id: string,
+    body: IAssignWgForwardBody,
+  ): Promise<WgForwardDto> {
+    const forward = await this.findFor(
+      actor,
+      id,
+      WgForwardPermissions.FORWARD_ASSIGN,
+    );
+
+    try {
+      await this._repo.update({ id }, { ownerId: body.userId });
+    } catch (err) {
+      if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+        throw WgForwardError.USER_NOT_FOUND();
+      }
+      throw err;
+    }
+
+    return this._emitOwnerChanged(forward, body.userId);
+  }
+
+  /** Снять владельца проброса. */
+  async revoke(actor: AuthContext, id: string): Promise<WgForwardDto> {
+    const forward = await this.findFor(
+      actor,
+      id,
+      WgForwardPermissions.FORWARD_ASSIGN,
+    );
+
+    await this._repo.update({ id }, { ownerId: null });
+
+    return this._emitOwnerChanged(forward, null);
+  }
+
+  /** Проброс для действия актора: невидимый — 404, без права на действие — 403. */
+  async findFor(
+    actor: AuthContext,
+    id: string,
+    permission: string,
+  ): Promise<WgForward> {
+    const forward = await this._findOrFail(id);
+
+    if (
+      !WgForwardAccess.can(actor, WgForwardPermissions.FORWARD_VIEW, forward)
+    ) {
+      throw WgForwardError.NOT_FOUND();
+    }
+    if (!WgForwardAccess.can(actor, permission, forward)) {
+      throw WgForwardError.FORBIDDEN();
+    }
+
+    return forward;
   }
 
   /** Отчёт агента релея об активных маршрутах его пробросов. */
@@ -151,9 +280,41 @@ export class WgForwardService {
       // Агент шлёт маршрут с каждой статистикой — событие только при смене.
       if (previous !== route.activeRoute) {
         this._eventBus.emit(
-          new WgForwardUpdatedEvent(await this.get(route.id)),
+          new WgForwardUpdatedEvent(await this._dto(route.id)),
         );
       }
+    }
+  }
+
+  private async _dto(id: string): Promise<WgForwardDto> {
+    const [dto] = await this._toDtos([await this._findOrFail(id)]);
+
+    return dto;
+  }
+
+  private async _emitOwnerChanged(
+    forward: WgForward,
+    ownerId: string | null,
+  ): Promise<WgForwardDto> {
+    const dto = await this._dto(forward.id);
+
+    this._eventBus.emit(
+      new WgForwardUpdatedEvent(
+        dto,
+        forward.ownerId !== ownerId ? forward.ownerId : null,
+      ),
+    );
+
+    return dto;
+  }
+
+  /** Нода проброса (релей или цель) должна быть видна актору. */
+  private async _assertNodeVisible(
+    actor: AuthContext,
+    nodeId: string | null,
+  ): Promise<void> {
+    if (nodeId) {
+      await this._nodes.findFor(actor, nodeId, WgNodePermissions.NODE_VIEW);
     }
   }
 
@@ -188,7 +349,7 @@ export class WgForwardService {
 
     await this._relaySync.syncRelaySafe(forward.relayNodeId);
 
-    const dto = await this.get(saved.id);
+    const dto = await this._dto(saved.id);
 
     this._eventBus.emit(new WgForwardUpdatedEvent(dto));
 

@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 
+import { User } from "../user/user.entity";
 import { WgNode } from "../wg-node";
 import {
   EWgForwardPath,
@@ -32,9 +33,27 @@ import {
     unique: true,
   },
 )
+@Index("IDX_WG_FORWARDS_OWNER", ["ownerId"])
+@Index("IDX_WG_FORWARDS_CREATED_BY", ["createdById"])
 export class WgForward {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
+
+  /** Назначенный владелец; пользователь удалён — владельца нет. */
+  @Column({ name: "owner_id", type: "uuid", nullable: true })
+  ownerId!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "owner_id" })
+  owner?: User | null;
+
+  /** Кто создал проброс; пользователь удалён — создателя нет. */
+  @Column({ name: "created_by_id", type: "uuid", nullable: true })
+  createdById!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "created_by_id" })
+  createdBy?: User | null;
 
   @Column({ type: "varchar", length: WG_FORWARD_NAME_MAX })
   name!: string;

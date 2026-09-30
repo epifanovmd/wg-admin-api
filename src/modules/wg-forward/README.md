@@ -4,9 +4,26 @@
 (WireGuard-сервер в своём контейнере, SOCKS/TLS-прокси) — напрямую или через
 IPIP-туннель до ноды-цели.
 
+## Доступ
+
+Действия над пробросом — с областью (`scoped`): право на все пробросы или
+`…:own` — только на свои. Свой проброс — где пользователь назначенный владелец
+(`ownerId`) или создатель (`createdById`); проверки — `WgForwardAccess`
+(`OwnedAccess` ядра). Невидимый проброс по id — 404, видимый без права на
+действие — 403 `WG_FORWARD_FORBIDDEN`; список ограничен областью
+`wg:forward:view`.
+
+- `wg:forward:create` — без области; создатель — автор запроса, владелец
+  (`ownerId`), отличный от себя, — только с правом назначения.
+- Релей и нода-цель при создании (и новая цель при изменении) должны быть
+  видны автору (`wg:node:view[:own]`), иначе 404 `WG_NODE_NOT_FOUND`; прежняя
+  цель не перепроверяется.
+- `recordRoutes` (отчёт агента) — внутренний, без проверки прав.
+
 ## Модель
 
-**WgForward** (`wg_forwards`): name (unique), relayNodeId (FK RESTRICT),
+**WgForward** (`wg_forwards`): ownerId (владелец), createdById (создатель;
+оба FK users SET NULL), name (unique), relayNodeId (FK RESTRICT),
 protocol `udp|tcp`, listenPort (unique на релее в паре с протоколом),
 цель — targetNodeId (нода с агентом, FK RESTRICT) и/или targetHost, targetPort,
 path `direct|ipip`, route `auto|tunnel|direct`, enabled.
@@ -39,10 +56,17 @@ live-хранилище (TTL 60 с) — `activeRoute` в DTO.
 
 ## Эндпоинты (`/api/v1/wg/forwards`, тег WgForward)
 
-CRUD; права `wg:forward:view` (чтение), `wg:forward:create`, `wg:forward:update`
-(изменение, включение и маршрут), `wg:forward:delete`.
+CRUD и `POST {id}/assign` `{ userId }` / `POST {id}/revoke` — владелец; права
+`wg:forward:view[:own]` (чтение), `wg:forward:create`,
+`wg:forward:update[:own]` (изменение, включение и маршрут),
+`wg:forward:delete[:own]`, `wg:forward:assign[:own]`.
 
 ## Сокет
 
-Комната `wg-forwards` (право `wg:forward:view`): `wg:forward:updated` (создание, изменение и смена активного маршрута по
-отчёту агента — только при смене), `wg:forward:deleted`.
+Комната `wg-forwards` (право `wg:forward:view` — на все пробросы):
+`wg:forward:updated` (создание, изменение и смена активного маршрута по отчёту
+агента — только при смене), `wg:forward:deleted`. Те же события — своим
+(владельцу и создателю с областью `own`, `OwnedEntityEmitter.toOwners`); при
+смене владельца (`WgForwardUpdatedEvent.previousOwnerId`) прежний, если он не
+создатель, получает `wg:forward:deleted` (`detach`). Комнаты отдельного
+проброса нет.

@@ -18,6 +18,8 @@ export interface ICreateWgForwardBody {
   path: EWgForwardPath;
   route?: EWgForwardRoute;
   enabled?: boolean;
+  /** Назначенный владелец; другой пользователь — только с правом назначения. */
+  ownerId?: string | null;
 }
 
 export interface IUpdateWgForwardBody {
@@ -30,4 +32,9 @@ export interface IUpdateWgForwardBody {
   path?: EWgForwardPath;
   route?: EWgForwardRoute;
   enabled?: boolean;
+}
+
+/** Назначение владельца проброса. */
+export interface IAssignWgForwardBody {
+  userId: string;
 }

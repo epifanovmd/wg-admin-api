@@ -1132,6 +1132,8 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "id": {"dataType":"string","required":true},
+            "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "relayNodeId": {"dataType":"string","required":true},
@@ -1166,6 +1168,7 @@ const models: TsoaRoute.Models = {
             "path": {"ref":"EWgForwardPath","required":true},
             "route": {"ref":"EWgForwardRoute"},
             "enabled": {"dataType":"boolean"},
+            "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
         },
         "additionalProperties": false,
     },
@@ -1193,6 +1196,14 @@ const models: TsoaRoute.Models = {
             "path": {"ref":"EWgForwardPath"},
             "route": {"ref":"EWgForwardRoute"},
             "enabled": {"dataType":"boolean"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "IAssignWgForwardBody": {
+        "dataType": "refObject",
+        "properties": {
+            "userId": {"dataType":"string","required":true},
         },
         "additionalProperties": false,
     },
@@ -5009,6 +5020,7 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgForwardController_createWgForward: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 body: {"in":"body","name":"body","required":true,"ref":"ICreateWgForwardBody"},
         };
         router.post('/api/v1/wg/forwards',
@@ -5045,11 +5057,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgForwardController_listWgForwards: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 offset: {"in":"query","name":"offset","dataType":"double"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
         router.get('/api/v1/wg/forwards',
-            authenticateMiddleware([{"jwt":["permission:wg:forward:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:forward:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgForwardController)),
             ...(fetchMiddlewares<Middleware>(WgForwardController.prototype.listWgForwards)),
 
@@ -5082,10 +5095,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgForwardController_getWgForward: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/forwards/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:forward:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:forward:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgForwardController)),
             ...(fetchMiddlewares<Middleware>(WgForwardController.prototype.getWgForward)),
 
@@ -5118,11 +5132,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgForwardController_updateWgForward: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"IUpdateWgForwardBody"},
         };
         router.patch('/api/v1/wg/forwards/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:forward:update"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:forward:update:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgForwardController)),
             ...(fetchMiddlewares<Middleware>(WgForwardController.prototype.updateWgForward)),
 
@@ -5155,10 +5170,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgForwardController_deleteWgForward: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.delete('/api/v1/wg/forwards/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:forward:delete"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:forward:delete:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgForwardController)),
             ...(fetchMiddlewares<Middleware>(WgForwardController.prototype.deleteWgForward)),
 
@@ -5187,6 +5203,81 @@ export function RegisterRoutes(router: KoaRouter) {
               context,
               validatedArgs,
               successStatus: 204,
+            });
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWgForwardController_assignWgForward: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                id: {"in":"path","name":"id","required":true,"ref":"UUID"},
+                body: {"in":"body","name":"body","required":true,"ref":"IAssignWgForwardBody"},
+        };
+        router.post('/api/v1/wg/forwards/:id/assign',
+            authenticateMiddleware([{"jwt":["permission:wg:forward:assign:own"]}]),
+            ...(fetchMiddlewares<Middleware>(WgForwardController)),
+            ...(fetchMiddlewares<Middleware>(WgForwardController.prototype.assignWgForward)),
+
+            async function WgForwardController_assignWgForward(context: Context, next: Next) {
+
+            let validatedArgs: any[] = [];
+            try {
+              validatedArgs = templateService.getValidatedArgs({ args: argsWgForwardController_assignWgForward, context, next });
+            } catch (err) {
+              const error = err as any;
+              error.message ||= JSON.stringify({ fields: error.fields });
+              context.status = error.status;
+              context.throw(context.status, error.message, error);
+            }
+
+            const container: IocContainer = typeof iocContainer === 'function' ? (iocContainer as IocContainerFactory)(context.request) : iocContainer;
+
+            const controller: any = await container.get<WgForwardController>(WgForwardController);
+            if (typeof controller['setStatus'] === 'function') {
+                controller.setStatus(undefined);
+            }
+
+            return templateService.apiHandler({
+              methodName: 'assignWgForward',
+              controller,
+              context,
+              validatedArgs,
+              successStatus: undefined,
+            });
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWgForwardController_revokeWgForward: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                id: {"in":"path","name":"id","required":true,"ref":"UUID"},
+        };
+        router.post('/api/v1/wg/forwards/:id/revoke',
+            authenticateMiddleware([{"jwt":["permission:wg:forward:assign:own"]}]),
+            ...(fetchMiddlewares<Middleware>(WgForwardController)),
+            ...(fetchMiddlewares<Middleware>(WgForwardController.prototype.revokeWgForward)),
+
+            async function WgForwardController_revokeWgForward(context: Context, next: Next) {
+
+            let validatedArgs: any[] = [];
+            try {
+              validatedArgs = templateService.getValidatedArgs({ args: argsWgForwardController_revokeWgForward, context, next });
+            } catch (err) {
+              const error = err as any;
+              error.message ||= JSON.stringify({ fields: error.fields });
+              context.status = error.status;
+              context.throw(context.status, error.message, error);
+            }
+
+            const container: IocContainer = typeof iocContainer === 'function' ? (iocContainer as IocContainerFactory)(context.request) : iocContainer;
+
+            const controller: any = await container.get<WgForwardController>(WgForwardController);
+            if (typeof controller['setStatus'] === 'function') {
+                controller.setStatus(undefined);
+            }
+
+            return templateService.apiHandler({
+              methodName: 'revokeWgForward',
+              controller,
+              context,
+              validatedArgs,
+              successStatus: undefined,
             });
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa

@@ -6,7 +6,7 @@ import { WgForwardPermissions } from "./wg-forward.permissions";
 
 export const WG_FORWARDS_ROOM = "wg-forwards";
 
-/** Комната списка пробросов: право `wg:forward:view`. */
+/** Комната списка пробросов: право `wg:forward:view` на все пробросы. */
 @Injectable()
 export class WgForwardsRoomPolicy implements ISocketRoomPolicy {
   readonly type = WG_FORWARDS_ROOM;

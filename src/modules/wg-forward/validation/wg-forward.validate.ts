@@ -43,6 +43,7 @@ export const CreateWgForwardSchema = z.object({
   name,
   relayNodeId: z.uuid(),
   protocol: z.enum(EWgForwardProtocol),
+  ownerId: z.uuid().nullable().optional(),
 });
 
 export const UpdateWgForwardSchema = z
@@ -60,3 +61,7 @@ export const UpdateWgForwardSchema = z
   .refine(body => Object.values(body).some(v => v !== undefined), {
     message: "Нужно хотя бы одно поле",
   });
+
+export const AssignWgForwardSchema = z.object({
+  userId: z.uuid(),
+});

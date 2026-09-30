@@ -6,6 +6,14 @@ export const WgForwardError = defineErrors("WG_FORWARD", {
     status: HttpStatus.NOT_FOUND,
     message: "Проброс не найден",
   },
+  FORBIDDEN: {
+    status: HttpStatus.FORBIDDEN,
+    message: "Недостаточно прав для работы с пробросом",
+  },
+  USER_NOT_FOUND: {
+    status: HttpStatus.NOT_FOUND,
+    message: "Пользователь не найден",
+  },
   NAME_TAKEN: {
     status: HttpStatus.CONFLICT,
     message: "Проброс с таким названием уже есть",

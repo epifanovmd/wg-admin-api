@@ -9,6 +9,10 @@ import type {
 
 export class WgForwardDto extends BaseDto {
   id: string;
+  /** Назначенный владелец проброса. */
+  ownerId: string | null;
+  /** Создатель проброса. */
+  createdById: string | null;
   name: string;
   description: string | null;
   relayNodeId: string;
@@ -34,6 +38,8 @@ export class WgForwardDto extends BaseDto {
     super(entity);
 
     this.id = entity.id;
+    this.ownerId = entity.ownerId;
+    this.createdById = entity.createdById;
     this.name = entity.name;
     this.description = entity.description;
     this.relayNodeId = entity.relayNodeId;
