@@ -2,6 +2,7 @@ import { inject } from "inversify";
 
 import { Injectable } from "../../core";
 import type { AuthContext } from "../../types/koa";
+import { WgNodeAccess, WgNodePermissions, WgNodeRepository } from "../wg-node";
 import { WgPeerAccess, WgPeerRepository } from "../wg-peer";
 import { WgLinkHealthService } from "./wg-link-health.service";
 import { WgMeshService } from "./wg-mesh.service";
@@ -77,6 +78,7 @@ export class WgStatsQueryService {
     @inject(WgNodeMetricRepository)
     private readonly _metrics: WgNodeMetricRepository,
     @inject(WgPeerRepository) private readonly _peers: WgPeerRepository,
+    @inject(WgNodeRepository) private readonly _nodes: WgNodeRepository,
     @inject(WgStatsOverviewService)
     private readonly _overview: WgStatsOverviewService,
     @inject(WgLinkHealthService) private readonly _links: WgLinkHealthService,
@@ -156,14 +158,37 @@ export class WgStatsQueryService {
     return this._overview.getSpeedWindow("iface", interfaceId);
   }
 
-  /** Короткий ряд скорости ноды (право `wg:stats:view`). */
+  /** Короткий ряд скорости ноды: вся статистика или своя нода. */
   async nodeWindow(
     actor: AuthContext,
     nodeId: string,
   ): Promise<IWgSpeedPoint[]> {
-    if (!this._overview.canViewGlobal(actor)) throw WgStatsError.FORBIDDEN();
+    await this._assertNodeAccess(actor, nodeId);
 
     return this._overview.getSpeedWindow("node", nodeId);
+  }
+
+  /** Статистика ноды: право на всю статистику или своя нода с `:own`. */
+  private async _assertNodeAccess(
+    actor: AuthContext,
+    nodeId: string,
+  ): Promise<void> {
+    if (this._overview.canViewGlobal(actor)) return;
+    if (
+      !this._overview.canViewOwn(actor) ||
+      !(await this._isOwnNode(actor, nodeId))
+    ) {
+      throw WgStatsError.FORBIDDEN();
+    }
+  }
+
+  private async _isOwnNode(
+    actor: AuthContext,
+    nodeId: string,
+  ): Promise<boolean> {
+    const node = await this._nodes.findOne({ where: { id: nodeId } });
+
+    return node !== null && WgNodeAccess.isOwn(actor.userId, node);
   }
 
   private async _assertPeerAccess(
@@ -193,22 +218,22 @@ export class WgStatsQueryService {
     return this._overview.getInterfaceLive(interfaceId);
   }
 
-  /** Live-снимок ноды с системными метриками (право `wg:stats:view`). */
+  /** Live-снимок ноды с системными метриками: вся статистика или своя нода. */
   async currentNode(
     actor: AuthContext,
     nodeId: string,
   ): Promise<IWgNodeLive | null> {
-    if (!this._overview.canViewGlobal(actor)) throw WgStatsError.FORBIDDEN();
+    await this._assertNodeAccess(actor, nodeId);
 
     return this._overview.getNodeLive(nodeId);
   }
 
-  /** Здоровье IPIP-линков ноды (право `wg:stats:view`). */
+  /** Здоровье IPIP-линков ноды: вся статистика или своя нода. */
   async nodeLinks(
     actor: AuthContext,
     nodeId: string,
   ): Promise<IWgLinkHealth[]> {
-    if (!this._overview.canViewGlobal(actor)) throw WgStatsError.FORBIDDEN();
+    await this._assertNodeAccess(actor, nodeId);
 
     return this._links.forNode(nodeId);
   }
@@ -220,8 +245,9 @@ export class WgStatsQueryService {
     return this._mesh.matrix();
   }
 
-  /** Системные метрики ноды за период (право `wg:node:view`). */
+  /** Системные метрики ноды за период: право просмотра ноды (все или своя). */
   async nodeMetrics(
+    actor: AuthContext,
     nodeId: string,
     from: Date,
     to: Date,
@@ -230,6 +256,15 @@ export class WgStatsQueryService {
     const rangeMs = to.getTime() - from.getTime();
 
     if (!(rangeMs > 0)) throw WgStatsError.BAD_RANGE();
+
+    const scope = WgNodeAccess.scope(actor, WgNodePermissions.NODE_VIEW);
+
+    if (
+      scope !== "all" &&
+      !(scope === "own" && (await this._isOwnNode(actor, nodeId)))
+    ) {
+      throw WgStatsError.FORBIDDEN();
+    }
 
     const step = Math.max(
       stepSec ?? 0,

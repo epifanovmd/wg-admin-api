@@ -293,19 +293,20 @@ describe("renderInstallScript", () => {
 });
 
 describe("WgProvisionService", () => {
+  const actor = { userId: uuid2(), roles: [], permissions: [] } as any;
   let service: WgProvisionService;
   let jobs: { enqueue: sinon.SinonStub };
   let nodes: {
-    findEntity: sinon.SinonStub;
-    rotateAgentKey: sinon.SinonStub;
+    findFor: sinon.SinonStub;
+    reissueAgentKey: sinon.SinonStub;
     setStatus: sinon.SinonStub;
   };
 
   beforeEach(() => {
     jobs = { enqueue: sinon.stub().resolves("job-1") };
     nodes = {
-      findEntity: sinon.stub().resolves({ id: uuid(), name: "node" }),
-      rotateAgentKey: sinon.stub().resolves({ agentKey: "prefix.secret" }),
+      findFor: sinon.stub().resolves({ id: uuid(), name: "node" }),
+      reissueAgentKey: sinon.stub().resolves({ agentKey: "prefix.secret" }),
       setStatus: sinon.stub().resolves(),
     };
     service = new WgProvisionService(
@@ -316,7 +317,7 @@ describe("WgProvisionService", () => {
   });
 
   it("шифрует секреты и ставит задачу с дедупликацией", async () => {
-    const result = await service.provision(uuid2(), uuid(), {
+    const result = await service.provision(actor, uuid(), {
       host: "1.2.3.4",
       privateKey: "PEM",
       backendUrl: "https://api.example.com",
@@ -335,11 +336,33 @@ describe("WgProvisionService", () => {
     // provisioning с ноды, а прогресс доходил в комнату ноды.
     expect(options.scope).to.deep.equal({ type: "wg-node", id: uuid() });
     expect(nodes.setStatus.calledOnce).to.be.true;
+    expect(nodes.findFor.firstCall.args).to.deep.equal([
+      actor,
+      uuid(),
+      "wg:node:provision",
+    ]);
+  });
+
+  it("нода недоступна актору — задача не ставится", async () => {
+    nodes.findFor.rejects(Object.assign(new Error("nf"), { code: "X" }));
+
+    try {
+      await service.provision(actor, uuid(), {
+        host: "1.2.3.4",
+        password: "x",
+        backendUrl: "https://api.example.com",
+      });
+      expect.fail("должно было упасть");
+    } catch (err: any) {
+      expect(err.code).to.equal("X");
+    }
+    expect(jobs.enqueue.called).to.be.false;
+    expect(nodes.reissueAgentKey.called).to.be.false;
   });
 
   it("без ключа и пароля — 400", async () => {
     try {
-      await service.provision(uuid2(), uuid(), {
+      await service.provision(actor, uuid(), {
         host: "1.2.3.4",
         backendUrl: "https://api.example.com",
       });
@@ -353,7 +376,7 @@ describe("WgProvisionService", () => {
     jobs.enqueue.resolves(null);
 
     try {
-      await service.provision(uuid2(), uuid(), {
+      await service.provision(actor, uuid(), {
         host: "1.2.3.4",
         password: "x",
         backendUrl: "https://api.example.com",

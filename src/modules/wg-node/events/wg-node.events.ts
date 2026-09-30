@@ -5,9 +5,15 @@ export class WgNodeCreatedEvent {
   constructor(public readonly node: WgNodeDto) {}
 }
 
-/** Нода изменена (поля или статус/состояние агента). */
+/**
+ * Нода изменена (поля или статус/состояние агента). `previousOwnerId` —
+ * прежний владелец, если он сменился (назначение и снятие), иначе `null`.
+ */
 export class WgNodeUpdatedEvent {
-  constructor(public readonly node: WgNodeDto) {}
+  constructor(
+    public readonly node: WgNodeDto,
+    public readonly previousOwnerId: string | null = null,
+  ) {}
 }
 
 /**
@@ -18,9 +24,13 @@ export class WgNodeHostChangedEvent {
   constructor(public readonly nodeId: string) {}
 }
 
-/** Нода удалена. */
+/** Нода удалена; владелец и создатель — кому она была своей. */
 export class WgNodeDeletedEvent {
-  constructor(public readonly nodeId: string) {}
+  constructor(
+    public readonly nodeId: string,
+    public readonly ownerId: string | null = null,
+    public readonly createdById: string | null = null,
+  ) {}
 }
 
 /** Статус ноды изменился (online/offline/error/provisioning). */

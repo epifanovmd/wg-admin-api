@@ -124,7 +124,8 @@ export class WgStatsController extends Controller {
   }
 
   /**
-   * Текущий live-снимок ноды с системными метриками.
+   * Текущий live-снимок ноды с системными метриками. С областью «свои» —
+   * только своя нода (владелец или создатель).
    * @summary Текущий снимок ноды
    */
   @Security("jwt", ["permission:wg:stats:view:own"])
@@ -164,7 +165,7 @@ export class WgStatsController extends Controller {
   }
 
   /**
-   * Скорость ноды за последние минуты.
+   * Скорость ноды за последние минуты. С областью «свои» — только своя нода.
    * @summary Короткий ряд скорости ноды
    */
   @Security("jwt", ["permission:wg:stats:view:own"])
@@ -188,7 +189,8 @@ export class WgStatsController extends Controller {
   }
 
   /**
-   * Здоровье IPIP-туннелей ноды: RTT и потери по каждому линку релея.
+   * Здоровье IPIP-туннелей ноды: RTT и потери по каждому линку релея. С
+   * областью «свои» — только своя нода.
    * @summary Туннели ноды
    */
   @Security("jwt", ["permission:wg:stats:view:own"])
@@ -201,12 +203,14 @@ export class WgStatsController extends Controller {
   }
 
   /**
-   * Системные метрики ноды (CPU, память, диск) за период.
+   * Системные метрики ноды (CPU, память, диск) за период. С
+   * `wg:node:view:own` — только своя нода.
    * @summary Метрики ноды
    */
-  @Security("jwt", ["permission:wg:node:view"])
+  @Security("jwt", ["permission:wg:node:view:own"])
   @Get("node-metrics")
   wgNodeMetrics(
+    @Request() req: KoaRequest,
     @Query() nodeId: UUID,
     @Query() from?: Date,
     @Query() to?: Date,
@@ -214,6 +218,12 @@ export class WgStatsController extends Controller {
   ): Promise<IWgNodeMetricPointDto[]> {
     const range = defaultRange(from, to);
 
-    return this._query.nodeMetrics(nodeId, range.from, range.to, stepSec);
+    return this._query.nodeMetrics(
+      getContextUser(req),
+      nodeId,
+      range.from,
+      range.to,
+      stepSec,
+    );
   }
 }

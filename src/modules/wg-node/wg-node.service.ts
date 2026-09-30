@@ -11,8 +11,10 @@ import {
   pgErrorCode,
   toPage,
 } from "../../core";
+import type { AuthContext } from "../../types/koa";
 import { ApiKeyService } from "../api-key";
 import type {
+  IAssignWgNodeBody,
   ICreatedWgNodeDto,
   ICreateWgNodeBody,
   IUpdateWgNodeBody,
@@ -26,8 +28,10 @@ import {
   WgNodeStatusChangedEvent,
   WgNodeUpdatedEvent,
 } from "./events";
+import { WgNodeAccess } from "./wg-node.access";
 import { WgNode } from "./wg-node.entity";
 import { WgNodeError } from "./wg-node.errors";
+import { WgNodePermissions } from "./wg-node.permissions";
 import type { IWgNodeFilters } from "./wg-node.repository";
 import { WgNodeRepository } from "./wg-node.repository";
 import {
@@ -47,11 +51,25 @@ export interface IWgAgentStateReport {
   osInfo?: IWgNodeOsInfo;
 }
 
-/** Ноды: CRUD, ключи агентов, версии конфигурации и живость агентов. */
 /** Установка агента вручную: установщик с бэкенда, ключ — аргументом. */
 const installCommand = (agentKey: string): string =>
   `curl -fsSL ${config.app.publicUrl}/api/v1/wg-agent/install.sh | sudo sh -s -- --key '${agentKey.replace(/'/g, "'\\''")}'`;
 
+const mapSaveError = (err: unknown): unknown => {
+  if (isUniqueViolation(err)) return WgNodeError.NAME_TAKEN();
+  if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+    return WgNodeError.USER_NOT_FOUND();
+  }
+
+  return err;
+};
+
+/**
+ * Ноды: CRUD с областью прав «все / свои» (владелец или создатель), ключи
+ * агентов, версии конфигурации и живость агентов. Чужая нода без права на
+ * все не раскрывается (404); видимая, но без права на действие — 403.
+ * Методы без актора — внутренние (агент, задачи, другие модули домена).
+ */
 @Injectable()
 export class WgNodeService {
   constructor(
@@ -62,9 +80,19 @@ export class WgNodeService {
 
   /** Создать ноду и выпустить ключ агента (секрет возвращается один раз). */
   async create(
-    actorId: string,
+    actor: AuthContext,
     body: ICreateWgNodeBody,
   ): Promise<ICreatedWgNodeDto> {
+    const ownerId = body.ownerId ?? null;
+
+    if (
+      ownerId !== null &&
+      ownerId !== actor.userId &&
+      !WgNodeAccess.scope(actor, WgNodePermissions.NODE_ASSIGN)
+    ) {
+      throw WgNodeError.FORBIDDEN();
+    }
+
     let node: WgNode;
 
     try {
@@ -72,15 +100,16 @@ export class WgNodeService {
         name: body.name,
         description: body.description ?? null,
         publicHost: body.publicHost ?? null,
+        ownerId,
+        createdById: actor.userId,
         status: EWgNodeStatus.Created,
       });
     } catch (err) {
-      if (isUniqueViolation(err)) throw WgNodeError.NAME_TAKEN();
-      throw err;
+      throw mapSaveError(err);
     }
 
     try {
-      const agentKey = await this._issueAgentKey(actorId, node);
+      const agentKey = await this._issueAgentKey(actor.userId, node);
       const dto = WgNodeDto.fromEntity(node);
 
       this._eventBus.emit(new WgNodeCreatedEvent(dto));
@@ -92,8 +121,18 @@ export class WgNodeService {
     }
   }
 
-  /** Перевыпустить ключ агента: старый отзывается сразу. */
-  async rotateAgentKey(actorId: string, id: string): Promise<IWgAgentKeyDto> {
+  /** Перевыпустить ключ агента по запросу пользователя (право agent). */
+  async rotateAgentKey(
+    actor: AuthContext,
+    id: string,
+  ): Promise<IWgAgentKeyDto> {
+    const node = await this.findFor(actor, id, WgNodePermissions.NODE_AGENT);
+
+    return this.reissueAgentKey(actor.userId, node.id);
+  }
+
+  /** Перевыпустить ключ агента без проверки прав: старый отзывается сразу. */
+  async reissueAgentKey(actorId: string, id: string): Promise<IWgAgentKeyDto> {
     const node = await this._findOrFail(id);
 
     if (node.agentKeyId) {
@@ -106,26 +145,40 @@ export class WgNodeService {
   }
 
   async list(
+    actor: AuthContext,
     filters: IWgNodeFilters,
     pagination: Pagination,
   ): Promise<IPaginatedDto<WgNodeDto>> {
-    const [items, total] = await this._repo.findPage(filters, pagination);
+    const [items, total] = await this._repo.findPage(
+      { ...filters, ...this.viewFilter(actor) },
+      pagination,
+    );
 
     return toPage(items.map(WgNodeDto.fromEntity), total, pagination);
   }
 
-  async options(): Promise<WgNodeOptionDto[]> {
-    const items = await this._repo.find({ order: { name: "ASC" } });
+  async options(actor: AuthContext): Promise<WgNodeOptionDto[]> {
+    const { ownedBy } = this.viewFilter(actor);
+    const items = await this._repo.find({
+      where: ownedBy ? WgNodeAccess.ownedWhere(ownedBy) : {},
+      order: { name: "ASC" },
+    });
 
     return items.map(WgNodeOptionDto.fromEntity);
   }
 
-  async get(id: string): Promise<WgNodeDto> {
-    return WgNodeDto.fromEntity(await this._findOrFail(id));
+  async get(actor: AuthContext, id: string): Promise<WgNodeDto> {
+    return WgNodeDto.fromEntity(
+      await this.findFor(actor, id, WgNodePermissions.NODE_VIEW),
+    );
   }
 
-  async update(id: string, body: IUpdateWgNodeBody): Promise<WgNodeDto> {
-    const node = await this._findOrFail(id);
+  async update(
+    actor: AuthContext,
+    id: string,
+    body: IUpdateWgNodeBody,
+  ): Promise<WgNodeDto> {
+    const node = await this.findFor(actor, id, WgNodePermissions.NODE_UPDATE);
     const hostChanged =
       body.publicHost !== undefined && body.publicHost !== node.publicHost;
     // Только изменённые колонки: полный save вернул бы configVersion,
@@ -157,8 +210,8 @@ export class WgNodeService {
   }
 
   /** Удалить ноду; интерфейсы удаляются заранее (FK RESTRICT → 409). */
-  async delete(actorId: string, id: string): Promise<void> {
-    const node = await this._findOrFail(id);
+  async delete(actor: AuthContext, id: string): Promise<void> {
+    const node = await this.findFor(actor, id, WgNodePermissions.NODE_DELETE);
 
     try {
       await this._repo.delete({ id: node.id });
@@ -170,10 +223,68 @@ export class WgNodeService {
     }
 
     if (node.agentKeyId) {
-      await this._apiKeys.revoke(node.agentKeyId, actorId);
+      await this._apiKeys.revoke(node.agentKeyId, actor.userId);
     }
 
-    this._eventBus.emit(new WgNodeDeletedEvent(node.id));
+    this._eventBus.emit(
+      new WgNodeDeletedEvent(node.id, node.ownerId, node.createdById),
+    );
+  }
+
+  /** Назначить владельца ноды. */
+  async assign(
+    actor: AuthContext,
+    id: string,
+    body: IAssignWgNodeBody,
+  ): Promise<WgNodeDto> {
+    const node = await this.findFor(actor, id, WgNodePermissions.NODE_ASSIGN);
+
+    try {
+      await this._repo.update({ id }, { ownerId: body.userId });
+    } catch (err) {
+      throw mapSaveError(err);
+    }
+
+    return this._emitOwnerChanged(node, body.userId);
+  }
+
+  /** Снять владельца ноды. */
+  async revoke(actor: AuthContext, id: string): Promise<WgNodeDto> {
+    const node = await this.findFor(actor, id, WgNodePermissions.NODE_ASSIGN);
+
+    await this._repo.update({ id }, { ownerId: null });
+
+    return this._emitOwnerChanged(node, null);
+  }
+
+  /**
+   * Нода для действия актора: невидимая — 404, видимая без права на
+   * действие — 403. Проверка доступа к ноде и для других модулей домена.
+   */
+  async findFor(
+    actor: AuthContext,
+    id: string,
+    permission: string,
+  ): Promise<WgNode> {
+    const node = await this._findOrFail(id);
+
+    if (!WgNodeAccess.can(actor, WgNodePermissions.NODE_VIEW, node)) {
+      throw WgNodeError.NOT_FOUND();
+    }
+    if (!WgNodeAccess.can(actor, permission, node)) {
+      throw WgNodeError.FORBIDDEN();
+    }
+
+    return node;
+  }
+
+  /** Ограничение списков нод областью просмотра; права нет — 403. */
+  viewFilter(actor: AuthContext): { ownedBy?: string } {
+    const filter = WgNodeAccess.filter(actor, WgNodePermissions.NODE_VIEW);
+
+    if (!filter) throw WgNodeError.FORBIDDEN();
+
+    return filter;
   }
 
   /** Нода по scopes агентского api-ключа; чужой/не агентский ключ — 403. */
@@ -318,6 +429,18 @@ export class WgNodeService {
 
   async findEntity(id: string): Promise<WgNode> {
     return this._findOrFail(id);
+  }
+
+  private async _emitOwnerChanged(
+    node: WgNode,
+    ownerId: string | null,
+  ): Promise<WgNodeDto> {
+    const dto = WgNodeDto.fromEntity(await this._findOrFail(node.id));
+    const previous = node.ownerId !== ownerId ? node.ownerId : null;
+
+    this._eventBus.emit(new WgNodeUpdatedEvent(dto, previous));
+
+    return dto;
   }
 
   private async _issueAgentKey(actorId: string, node: WgNode): Promise<string> {

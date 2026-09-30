@@ -1,7 +1,8 @@
 # Модуль wg-provision
 
 Установка агента на новый VPS из интерфейса: `POST /api/v1/wg/nodes/{id}/provision`
-(право `wg:node:provision`) с хостом, SSH-ключом или паролем.
+(право `wg:node:provision[:own]` — с областью «свои» только на свою ноду) с
+хостом, SSH-ключом или паролем.
 
 Постановка (`WgProvisionService`):
 
@@ -31,13 +32,13 @@ sudo sh -s -- --key '<ключ>'` на VPS (её возвращают созда
 файлом.
 
 Задача ставится со `scope: wg-node/<nodeId>`: её обновления приходят в
-сокет-комнату ноды, видят её все с `wg:node:view`, отменяют — с
-`wg:node:provision` (`WgNodeJobAccessPolicy`). `WgProvisionListener` на
+сокет-комнату ноды, видят её все с правом просмотра ноды, отменяют — с правом
+установки (`WgNodeJobAccessPolicy`; с областью `own` — только задачи своих нод). `WgProvisionListener` на
 `JobUpdatedEvent`: провал или отмена установки (в том числе закрытая reaper
 после падения воркера) переводят ноду из `provisioning` в `error`.
 
 Удаление агента — `POST /api/v1/wg/nodes/{id}/uninstall` (право
-`wg:node:provision`, SSH как при установке) → задача `wg.uninstall-node`:
+`wg:node:provision[:own]`, SSH как при установке) → задача `wg.uninstall-node`:
 установщик с `--uninstall` — остановка службы (агент по SIGTERM откатывает
 свои интерфейсы, туннели и пробросы), страховочный `cleanup`, откат хоста по
 журналу установки (пакеты, forwarding, модули — см. `agent/README.md`),

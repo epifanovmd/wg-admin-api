@@ -6,6 +6,14 @@ export const WgNodeError = defineErrors("WG_NODE", {
     status: HttpStatus.NOT_FOUND,
     message: "Нода не найдена",
   },
+  FORBIDDEN: {
+    status: HttpStatus.FORBIDDEN,
+    message: "Недостаточно прав для работы с нодой",
+  },
+  USER_NOT_FOUND: {
+    status: HttpStatus.NOT_FOUND,
+    message: "Пользователь не найден",
+  },
   NAME_TAKEN: {
     status: HttpStatus.CONFLICT,
     message: "Нода с таким названием уже существует",

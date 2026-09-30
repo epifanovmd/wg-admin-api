@@ -72,9 +72,10 @@ MTU 1480), пробросы — из интерфейсов, обслужива�
 
 `WgAgentBinaryService` читает `wg-admin-agent-linux-<arch>` и `VERSION` из
 каталога `WG_AGENT_DIST_DIR` (по умолчанию `agent/dist`; бинари собираются в
-образе бэкенда) и считает sha256. `GET /api/v1/wg/agent/release` (право `wg:node:view`) —
+образе бэкенда) и считает sha256. `GET /api/v1/wg/agent/release` (право `wg:node:view[:own]`) —
 версия и хэши по архитектурам; нода, чей `agentCodeHash` отличается от хэша
 её архитектуры, — кандидат на обновление. `POST
-/api/v1/wg/agent/nodes/{nodeId}/update` (право `wg:node:agent`) — команда
+/api/v1/wg/agent/nodes/{nodeId}/update` (право `wg:node:agent[:own]`, с
+областью «свои» — только своя нода) — команда
 `agent-update` с `hash` бинаря архитектуры ноды (`osInfo.arch`); архитектура
 неизвестна или бинаря нет — 404 `WG_AGENT_BINARY_NOT_BUILT`.

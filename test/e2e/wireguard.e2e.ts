@@ -129,6 +129,101 @@ describe("wireguard", () => {
         401,
       );
     });
+    it("область «свои»: создатель и назначенный владелец видят и меняют только свои ноды", async () => {
+      const tenant = await signUp("wg-node-tenant");
+
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/user/setPrivileges/${tenant.id}`, {
+          roles: ["user"],
+          permissions: [
+            "wg:node:create",
+            "wg:node:view:own",
+            "wg:node:update:own",
+          ],
+        }),
+        200,
+      );
+
+      const actor = await signIn(tenant.email, tenant.password);
+      const created = expectStatus(
+        await call(actor, "POST", "/api/v1/wg/nodes", { name: "tenant-node" }),
+        201,
+      ).data.node;
+
+      expect(created.createdById).to.equal(tenant.id);
+      expect(created.ownerId).to.equal(null);
+
+      // Чужого владельца без права назначения не поставить.
+      expectStatus(
+        await call(actor, "POST", "/api/v1/wg/nodes", {
+          name: "tenant-node-2",
+          ownerId: user.id,
+        }),
+        403,
+        "WG_NODE_FORBIDDEN",
+      );
+
+      const list = expectStatus(
+        await call(actor, "GET", "/api/v1/wg/nodes"),
+        200,
+      );
+
+      expect(items(list.data).map((n: any) => n.id)).to.deep.equal([
+        created.id,
+      ]);
+
+      // Чужая нода не раскрывается.
+      expectStatus(
+        await call(actor, "GET", `/api/v1/wg/nodes/${nodeA.id}`),
+        404,
+        "WG_NODE_NOT_FOUND",
+      );
+
+      const assigned = expectStatus(
+        await call(admin, "POST", `/api/v1/wg/nodes/${nodeA.id}/assign`, {
+          userId: tenant.id,
+        }),
+        200,
+      );
+
+      expect(assigned.data.ownerId).to.equal(tenant.id);
+
+      const options = expectStatus(
+        await call(actor, "GET", "/api/v1/wg/nodes/options"),
+        200,
+      );
+
+      expect(options.data.map((o: any) => o.id)).to.have.members([
+        created.id,
+        nodeA.id,
+      ]);
+      expectStatus(
+        await call(actor, "PATCH", `/api/v1/wg/nodes/${created.id}`, {
+          description: "своя",
+        }),
+        200,
+      );
+      // Видимая, но без права на действие — 403.
+      expectStatus(
+        await call(actor, "DELETE", `/api/v1/wg/nodes/${created.id}`),
+        403,
+      );
+
+      const revoked = expectStatus(
+        await call(admin, "POST", `/api/v1/wg/nodes/${nodeA.id}/revoke`),
+        200,
+      );
+
+      expect(revoked.data.ownerId).to.equal(null);
+      expectStatus(
+        await call(actor, "GET", `/api/v1/wg/nodes/${nodeA.id}`),
+        404,
+      );
+      expectStatus(
+        await call(admin, "DELETE", `/api/v1/wg/nodes/${created.id}`),
+        204,
+      );
+    });
   });
 
   describe("точки подключения", () => {

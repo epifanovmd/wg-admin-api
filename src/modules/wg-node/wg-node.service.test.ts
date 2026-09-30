@@ -2,15 +2,32 @@ import "reflect-metadata";
 
 import { expect } from "chai";
 import sinon from "sinon";
+import { QueryFailedError } from "typeorm";
 
 import {
   createMockEventBus,
   createMockRepository,
   uuid,
+  uuid2,
+  uuid3,
 } from "../../test/helpers";
 import { WgNodeHostChangedEvent, WgNodeStatusChangedEvent } from "./events";
 import { WgNodeService } from "./wg-node.service";
 import { EWgNodeStatus, wgAgentScope } from "./wg-node.types";
+
+const admin = { userId: uuid(), roles: ["admin"], permissions: ["*"] } as any;
+/** Видит все ноды, меняет и удаляет только свои. */
+const editor = {
+  userId: uuid2(),
+  roles: ["user"],
+  permissions: ["wg:node:view", "wg:node:update:own", "wg:node:delete:own"],
+} as any;
+/** Только свои ноды. */
+const tenant = {
+  userId: uuid3(),
+  roles: ["user"],
+  permissions: ["wg:node:create", "wg:node:view:own", "wg:node:update:own"],
+} as any;
 
 const makeNode = (overrides: Record<string, unknown> = {}) => ({
   id: uuid(),
@@ -18,6 +35,8 @@ const makeNode = (overrides: Record<string, unknown> = {}) => ({
   description: null,
   publicHost: "1.2.3.4",
   status: EWgNodeStatus.Created,
+  ownerId: null,
+  createdById: null,
   agentKeyId: null,
   configVersion: 1,
   appliedVersion: 0,
@@ -56,7 +75,7 @@ describe("WgNodeService", () => {
     repo.createAndSave.resolves(node);
     repo.update.resolves({});
 
-    const created = await service.create(uuid(), {
+    const created = await service.create(admin, {
       name: "node-1",
       publicHost: "1.2.3.4",
     });
@@ -75,7 +94,7 @@ describe("WgNodeService", () => {
     apiKeys.create.rejects(new Error("boom"));
 
     try {
-      await service.create(uuid(), { name: "node-1" });
+      await service.create(admin, { name: "node-1" });
       expect.fail("должно было упасть");
     } catch {
       expect(repo.delete.calledWith({ id: node.id })).to.be.true;
@@ -89,7 +108,7 @@ describe("WgNodeService", () => {
     repo.findOne.resolves(node);
     repo.update.resolves({});
 
-    const result = await service.rotateAgentKey(uuid(), node.id);
+    const result = await service.rotateAgentKey(admin, node.id);
 
     expect(apiKeys.revoke.calledWith(oldKeyId)).to.be.true;
     expect(result.agentKey).to.equal("prefix.secret");
@@ -151,7 +170,7 @@ describe("WgNodeService", () => {
       .resolves({ ...node, configVersion: 5, name: "n" });
     repo.update.resolves({});
 
-    const dto = await service.update(node.id, { name: "n" });
+    const dto = await service.update(admin, node.id, { name: "n" });
 
     expect(repo.save.called).to.equal(false);
     expect(repo.update.firstCall.args[1]).to.deep.equal({ name: "n" });
@@ -180,8 +199,10 @@ describe("WgNodeService", () => {
     repo.findOne.resolves(node);
     repo.update.resolves({});
 
-    await service.update(node.id, { publicHost: "203.0.113.2" });
-    await service.update(node.id, { description: "без смены адреса" });
+    await service.update(admin, node.id, { publicHost: "203.0.113.2" });
+    await service.update(admin, node.id, {
+      description: "без смены адреса",
+    });
 
     const hostEvents = eventBus.emit
       .getCalls()
@@ -218,6 +239,159 @@ describe("WgNodeService", () => {
 
     expect(node.status).to.equal(EWgNodeStatus.Online);
     expect(eventBus.emit.calledOnce).to.be.true;
+  });
+
+  describe("область «все / свои»", () => {
+    it("create: создатель — автор запроса, владелец — только с правом назначения", async () => {
+      repo.createAndSave.callsFake(async (data: any) => makeNode(data));
+      repo.update.resolves({});
+
+      await service.create(tenant, { name: "own" });
+      expect(repo.createAndSave.firstCall.args[0]).to.include({
+        createdById: tenant.userId,
+        ownerId: null,
+      });
+
+      try {
+        await service.create(tenant, { name: "x", ownerId: uuid() });
+        expect.fail("должно было упасть");
+      } catch (err: any) {
+        expect(err.code).to.equal("WG_NODE_FORBIDDEN");
+      }
+
+      await service.create(tenant, { name: "self", ownerId: tenant.userId });
+      await service.create(admin, { name: "assigned", ownerId: uuid3() });
+      expect(repo.createAndSave.lastCall.args[0].ownerId).to.equal(uuid3());
+    });
+
+    it("list и options: с областью own — только свои, с правом на все — без ограничения", async () => {
+      const findPage = sinon.stub().resolves([[], 0]);
+
+      Object.assign(repo, { findPage });
+
+      await service.list(tenant, {}, { offset: 0, limit: 20 });
+      expect(findPage.firstCall.args[0].ownedBy).to.equal(tenant.userId);
+
+      await service.list(editor, {}, { offset: 0, limit: 20 });
+      expect(findPage.secondCall.args[0].ownedBy).to.equal(undefined);
+
+      repo.find.resolves([]);
+      await service.options(tenant);
+      expect(repo.find.firstCall.args[0].where).to.deep.equal([
+        { ownerId: tenant.userId },
+        { createdById: tenant.userId },
+      ]);
+    });
+
+    it("list: без права просмотра — 403", async () => {
+      try {
+        await service.list(
+          { userId: uuid(), roles: [], permissions: [] } as any,
+          {},
+          { offset: 0, limit: 20 },
+        );
+        expect.fail("должно было упасть");
+      } catch (err: any) {
+        expect(err.code).to.equal("WG_NODE_FORBIDDEN");
+      }
+    });
+
+    it("get: чужая нода с областью own — 404, своя (владелец или создатель) — видна", async () => {
+      repo.findOne.resolves(
+        makeNode({ ownerId: uuid(), createdById: uuid2() }),
+      );
+
+      try {
+        await service.get(tenant, uuid());
+        expect.fail("должно было упасть");
+      } catch (err: any) {
+        expect(err.code).to.equal("WG_NODE_NOT_FOUND");
+      }
+
+      repo.findOne.resolves(makeNode({ ownerId: tenant.userId }));
+      expect((await service.get(tenant, uuid())).ownerId).to.equal(
+        tenant.userId,
+      );
+
+      repo.findOne.resolves(makeNode({ createdById: tenant.userId }));
+      expect((await service.get(tenant, uuid())).createdById).to.equal(
+        tenant.userId,
+      );
+    });
+
+    it("update: видит все, но чужую ноду менять нельзя — 403", async () => {
+      repo.findOne.resolves(makeNode({ ownerId: uuid3() }));
+
+      try {
+        await service.update(editor, uuid(), { name: "x" });
+        expect.fail("должно было упасть");
+      } catch (err: any) {
+        expect(err.code).to.equal("WG_NODE_FORBIDDEN");
+      }
+    });
+
+    it("delete: своя нода без права удаления — 403", async () => {
+      repo.findOne.resolves(makeNode({ ownerId: tenant.userId }));
+
+      try {
+        await service.delete(tenant, uuid());
+        expect.fail("должно было упасть");
+      } catch (err: any) {
+        expect(err.code).to.equal("WG_NODE_FORBIDDEN");
+      }
+      expect(repo.delete.called).to.be.false;
+    });
+
+    it("delete: событие несёт владельца и создателя", async () => {
+      const node = makeNode({ ownerId: uuid2(), createdById: uuid3() });
+
+      repo.findOne.resolves(node);
+      repo.delete.resolves({});
+
+      await service.delete(admin, node.id);
+
+      expect(eventBus.emit.lastCall.args[0]).to.include({
+        nodeId: node.id,
+        ownerId: uuid2(),
+        createdById: uuid3(),
+      });
+    });
+
+    it("assign и revoke: событие с прежним владельцем, если он сменился", async () => {
+      const node = makeNode({ ownerId: uuid2() });
+
+      repo.findOne.resolves(node);
+      repo.update.resolves({});
+
+      await service.assign(admin, node.id, { userId: uuid3() });
+      expect(repo.update.lastCall.args[1]).to.deep.equal({ ownerId: uuid3() });
+      expect(eventBus.emit.lastCall.args[0].previousOwnerId).to.equal(uuid2());
+
+      await service.assign(admin, node.id, { userId: uuid2() });
+      expect(eventBus.emit.lastCall.args[0].previousOwnerId).to.equal(null);
+
+      await service.revoke(admin, node.id);
+      expect(repo.update.lastCall.args[1]).to.deep.equal({ ownerId: null });
+      expect(eventBus.emit.lastCall.args[0].previousOwnerId).to.equal(uuid2());
+    });
+
+    it("assign: несуществующий пользователь — 404", async () => {
+      repo.findOne.resolves(makeNode());
+      repo.update.rejects(
+        new QueryFailedError(
+          "UPDATE",
+          [],
+          Object.assign(new Error("fk"), { code: "23503" }),
+        ),
+      );
+
+      try {
+        await service.assign(admin, uuid(), { userId: uuid3() });
+        expect.fail("должно было упасть");
+      } catch (err: any) {
+        expect(err.code).to.equal("WG_NODE_USER_NOT_FOUND");
+      }
+    });
   });
 
   describe("отметка offline", () => {

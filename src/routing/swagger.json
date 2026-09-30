@@ -313,6 +313,16 @@
 					"id": {
 						"type": "string"
 					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец ноды."
+					},
+					"createdById": {
+						"type": "string",
+						"nullable": true,
+						"description": "Создатель ноды."
+					},
 					"name": {
 						"type": "string"
 					},
@@ -389,6 +399,8 @@
 				},
 				"required": [
 					"id",
+					"ownerId",
+					"createdById",
 					"name",
 					"description",
 					"publicHost",
@@ -446,6 +458,11 @@
 						"type": "string",
 						"nullable": true,
 						"description": "Публичный хост (IP/домен) — endpoint клиентов по умолчанию."
+					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец; другой пользователь — только с правом назначения."
 					}
 				},
 				"required": [
@@ -521,6 +538,18 @@
 						"nullable": true
 					}
 				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAssignWgNodeBody": {
+				"properties": {
+					"userId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"userId"
+				],
 				"type": "object",
 				"additionalProperties": false
 			},
@@ -5628,7 +5657,7 @@
 						}
 					}
 				},
-				"description": "Создать ноду (VPS с агентом). Ключ агента возвращается только в этом\nответе — сохранить сразу.",
+				"description": "Создать ноду (VPS с агентом). Ключ агента возвращается только в этом\nответе — сохранить сразу. Создатель — автор запроса; владелец, отличный\nот себя, — только с правом `wg:node:assign`.",
 				"summary": "Создание ноды",
 				"tags": [
 					"WgNode"
@@ -5676,7 +5705,7 @@
 						}
 					}
 				},
-				"description": "Ноды с фильтрами, новые первыми.",
+				"description": "Ноды с фильтрами, новые первыми. С правом `wg:node:view:own` — только\nсвои (владелец или создатель).",
 				"summary": "Список нод",
 				"tags": [
 					"WgNode"
@@ -5684,7 +5713,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:view"
+							"permission:wg:node:view:own"
 						]
 					}
 				],
@@ -5754,7 +5783,7 @@
 						}
 					}
 				},
-				"description": "Краткий список нод для выпадающих списков.",
+				"description": "Краткий список нод для выпадающих списков (в рамках прав).",
 				"summary": "Ноды (options)",
 				"tags": [
 					"WgNode"
@@ -5762,7 +5791,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:view"
+							"permission:wg:node:view:own"
 						]
 					}
 				],
@@ -5794,7 +5823,7 @@
 						}
 					}
 				},
-				"description": "Нода по id.",
+				"description": "Нода по id; чужая без права на все ноды — 404.",
 				"summary": "Нода",
 				"tags": [
 					"WgNode"
@@ -5802,7 +5831,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:view"
+							"permission:wg:node:view:own"
 						]
 					}
 				],
@@ -5849,7 +5878,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:update"
+							"permission:wg:node:update:own"
 						]
 					}
 				],
@@ -5899,7 +5928,115 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:delete"
+							"permission:wg:node:delete:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/wg/nodes/{id}/assign": {
+			"post": {
+				"operationId": "AssignWgNode",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgNodeDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Назначить владельца ноды (она станет для него своей).",
+				"summary": "Назначение владельца ноды",
+				"tags": [
+					"WgNode"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:node:assign:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IAssignWgNodeBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/nodes/{id}/revoke": {
+			"post": {
+				"operationId": "RevokeWgNode",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgNodeDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Снять владельца ноды.",
+				"summary": "Снятие владельца ноды",
+				"tags": [
+					"WgNode"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:node:assign:own"
 						]
 					}
 				],
@@ -5948,7 +6085,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:agent"
+							"permission:wg:node:agent:own"
 						]
 					}
 				],
@@ -5997,7 +6134,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:logs"
+							"permission:wg:node:logs:own"
 						]
 					}
 				],
@@ -8029,7 +8166,7 @@
 						}
 					}
 				},
-				"description": "Текущий live-снимок ноды с системными метриками.",
+				"description": "Текущий live-снимок ноды с системными метриками. С областью «свои» —\nтолько своя нода (владелец или создатель).",
 				"summary": "Текущий снимок ноды",
 				"tags": [
 					"WgStats"
@@ -8185,7 +8322,7 @@
 						}
 					}
 				},
-				"description": "Скорость ноды за последние минуты.",
+				"description": "Скорость ноды за последние минуты. С областью «свои» — только своя нода.",
 				"summary": "Короткий ряд скорости ноды",
 				"tags": [
 					"WgStats"
@@ -8277,7 +8414,7 @@
 						}
 					}
 				},
-				"description": "Здоровье IPIP-туннелей ноды: RTT и потери по каждому линку релея.",
+				"description": "Здоровье IPIP-туннелей ноды: RTT и потери по каждому линку релея. С\nобластью «свои» — только своя нода.",
 				"summary": "Туннели ноды",
 				"tags": [
 					"WgStats"
@@ -8329,7 +8466,7 @@
 						}
 					}
 				},
-				"description": "Системные метрики ноды (CPU, память, диск) за период.",
+				"description": "Системные метрики ноды (CPU, память, диск) за период. С\n`wg:node:view:own` — только своя нода.",
 				"summary": "Метрики ноды",
 				"tags": [
 					"WgStats"
@@ -8337,7 +8474,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:view"
+							"permission:wg:node:view:own"
 						]
 					}
 				],
@@ -9257,7 +9394,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:provision"
+							"permission:wg:node:provision:own"
 						]
 					}
 				],
@@ -9316,7 +9453,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:provision"
+							"permission:wg:node:provision:own"
 						]
 					}
 				],
@@ -10167,7 +10304,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:view"
+							"permission:wg:node:view:own"
 						]
 					}
 				],
@@ -10207,7 +10344,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:node:agent"
+							"permission:wg:node:agent:own"
 						]
 					}
 				],

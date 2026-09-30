@@ -2,18 +2,21 @@ import type { EntityManager } from "typeorm";
 
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
+import { WgNodeAccess } from "./wg-node.access";
 import { WgNode } from "./wg-node.entity";
 import { EWgNodeStatus } from "./wg-node.types";
 
 export interface IWgNodeFilters {
   query?: string;
   status?: EWgNodeStatus;
+  /** Только свои ноды пользователя: владелец или создатель. */
+  ownedBy?: string;
 }
 
 @InjectableRepository(WgNode)
 export class WgNodeRepository extends BaseRepository<WgNode> {
   findPage(
-    { query, status }: IWgNodeFilters,
+    { query, status, ownedBy }: IWgNodeFilters,
     { offset, limit }: Pagination,
   ): Promise<[WgNode[], number]> {
     const qb = this.createQueryBuilder("node")
@@ -23,6 +26,7 @@ export class WgNodeRepository extends BaseRepository<WgNode> {
       .take(limit);
 
     if (status) qb.andWhere("node.status = :status", { status });
+    if (ownedBy) qb.andWhere(WgNodeAccess.ownedCondition("node"), { ownedBy });
     if (query) {
       qb.andWhere("(node.name ILIKE :query OR node.publicHost ILIKE :query)", {
         query: `%${query}%`,

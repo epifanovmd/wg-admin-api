@@ -2,7 +2,13 @@ import { inject } from "inversify";
 
 import { config } from "../../config";
 import { Injectable, JobQueue } from "../../core";
-import { EWgNodeStatus, WgNodeService, WgSecretBox } from "../wg-node";
+import type { AuthContext } from "../../types/koa";
+import {
+  EWgNodeStatus,
+  WgNodePermissions,
+  WgNodeService,
+  WgSecretBox,
+} from "../wg-node";
 import type {
   IProvisionWgNodeBody,
   IUninstallWgNodeBody,
@@ -27,11 +33,16 @@ export class WgProvisionService {
   ) {}
 
   async provision(
-    actorId: string,
+    actor: AuthContext,
     nodeId: string,
     body: IProvisionWgNodeBody,
   ): Promise<IWgProvisionStartedDto> {
-    const node = await this._nodes.findEntity(nodeId);
+    const actorId = actor.userId;
+    const node = await this._nodes.findFor(
+      actor,
+      nodeId,
+      WgNodePermissions.NODE_PROVISION,
+    );
     const backendUrl = body.backendUrl ?? config.app.publicUrl;
 
     if (!body.privateKey && !body.password) {
@@ -40,7 +51,7 @@ export class WgProvisionService {
     if (!backendUrl) throw WgProvisionError.BACKEND_URL_REQUIRED();
 
     // Свежий ключ агента: прежний отзывается, VPS получает только новый.
-    const { agentKey } = await this._nodes.rotateAgentKey(actorId, node.id);
+    const { agentKey } = await this._nodes.reissueAgentKey(actorId, node.id);
     const data: IWgProvisionJobData = {
       nodeId: node.id,
       host: body.host,
@@ -75,11 +86,16 @@ export class WgProvisionService {
    * образ и конфигурация удаляются, ключ отзывается.
    */
   async uninstall(
-    actorId: string,
+    actor: AuthContext,
     nodeId: string,
     body: IUninstallWgNodeBody,
   ): Promise<IWgProvisionStartedDto> {
-    const node = await this._nodes.findEntity(nodeId);
+    const actorId = actor.userId;
+    const node = await this._nodes.findFor(
+      actor,
+      nodeId,
+      WgNodePermissions.NODE_PROVISION,
+    );
     const data: IWgUninstallJobData = {
       nodeId: node.id,
       actorId,

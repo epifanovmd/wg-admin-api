@@ -18,6 +18,7 @@ import { SplitManagePermissions1790600000000 } from "./1790600000000-SplitManage
 import { EndpointRoute1790631837419 } from "./1790631837419-EndpointRoute";
 import { PeerCreatedBy1790759944024 } from "./1790759944024-PeerCreatedBy";
 import { ScopedPeerPermissions1790759944025 } from "./1790759944025-ScopedPeerPermissions";
+import { NodeOwnership1790760661381 } from "./1790760661381-NodeOwnership";
 
 /**
  * Миграции в порядке применения. Новая миграция: `yarn migration:generate
@@ -45,4 +46,5 @@ export const migrations: Function[] = [
   EndpointRoute1790631837419,
   PeerCreatedBy1790759944024,
   ScopedPeerPermissions1790759944025,
+  NodeOwnership1790760661381,
 ];

@@ -22,6 +22,7 @@ export const CreateWgNodeSchema = z.object({
   name,
   description: description.optional(),
   publicHost: wgHostSchema.nullable().optional(),
+  ownerId: z.uuid().nullable().optional(),
 });
 
 export const UpdateWgNodeSchema = z
@@ -33,3 +34,7 @@ export const UpdateWgNodeSchema = z
   .refine(body => Object.values(body).some(v => v !== undefined), {
     message: "Нужно хотя бы одно поле",
   });
+
+export const AssignWgNodeSchema = z.object({
+  userId: z.uuid(),
+});

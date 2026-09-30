@@ -3,11 +3,14 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from "typeorm";
 
 import { bigintNumber } from "../../core/db/transformers";
+import { User } from "../user/user.entity";
 import {
   EWgNodeStatus,
   IWgNodeOsInfo,
@@ -23,9 +26,27 @@ import {
 @Entity("wg_nodes")
 @Index("IDX_WG_NODES_NAME", ["name"], { unique: true })
 @Index("IDX_WG_NODES_STATUS", ["status"])
+@Index("IDX_WG_NODES_OWNER", ["ownerId"])
+@Index("IDX_WG_NODES_CREATED_BY", ["createdById"])
 export class WgNode {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
+
+  /** Назначенный владелец; пользователь удалён — владельца нет. */
+  @Column({ name: "owner_id", type: "uuid", nullable: true })
+  ownerId!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "owner_id" })
+  owner?: User | null;
+
+  /** Кто создал ноду; пользователь удалён — создателя нет. */
+  @Column({ name: "created_by_id", type: "uuid", nullable: true })
+  createdById!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "created_by_id" })
+  createdBy?: User | null;
 
   @Column({ type: "varchar", length: WG_NODE_NAME_MAX })
   name!: string;

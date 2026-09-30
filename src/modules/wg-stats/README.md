@@ -53,7 +53,10 @@
 - `GET current` — live-снимок для первой отрисовки.
 - `GET window/{peer|interface|node}/{id}` — ряд скорости последних минут
   (пир — `wg:stats:view` или свой пир с `wg:stats:view:own`).
-- `GET node-metrics` — CPU/память/диск/аптайм ноды (`wg:node:view`).
+- `current/node`, `window/node`, `links/node` — `wg:stats:view` или своя нода
+  (владелец или создатель) с `wg:stats:view:own`.
+- `GET node-metrics` — CPU/память/диск/аптайм ноды (`wg:node:view` или своя
+  нода с `wg:node:view:own`).
 
 ## Комната overview
 
@@ -69,7 +72,8 @@ wg-interface, wg-peer).
 (`ping -I wgtN`, 3 пакета) и шлют RTT/потери в `POST /wg-agent/stats`
 (`tunnels`). `WgLinkHealthService` сопоставляет туннель с линком по индексу
 и хранит последнюю пробу стороны в live-хранилище (TTL 60 с).
-`GET /api/v1/wg/stats/links/node/{nodeId}` (право `wg:stats:view`) — линки
+`GET /api/v1/wg/stats/links/node/{nodeId}` (право `wg:stats:view` или своя нода
+с `:own`) — линки
 ноды в обеих ролях: встречная нода, RTT, потери, статус `ok` / `degraded`
 (потери > 0) / `down` (100%) / `unknown` (нет свежей пробы).
 После проб агента — `wg:node:links { nodeId, links }` в комнату каждой ноды

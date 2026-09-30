@@ -4,6 +4,10 @@ import type { EWgNodeStatus, IWgNodeOsInfo } from "../wg-node.types";
 
 export class WgNodeDto extends BaseDto {
   id: string;
+  /** Назначенный владелец ноды. */
+  ownerId: string | null;
+  /** Создатель ноды. */
+  createdById: string | null;
   name: string;
   description: string | null;
   publicHost: string | null;
@@ -30,6 +34,8 @@ export class WgNodeDto extends BaseDto {
     super(entity);
 
     this.id = entity.id;
+    this.ownerId = entity.ownerId;
+    this.createdById = entity.createdById;
     this.name = entity.name;
     this.description = entity.description;
     this.publicHost = entity.publicHost;

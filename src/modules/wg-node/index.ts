@@ -6,6 +6,7 @@ export * from "./node-offline.job";
 export * from "./validation";
 export * from "./wg.config";
 export * from "./wg-keys";
+export * from "./wg-node.access";
 export * from "./wg-node.controller";
 export * from "./wg-node.entity";
 export * from "./wg-node.errors";

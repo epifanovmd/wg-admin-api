@@ -43,7 +43,7 @@ export class WgProvisionController extends Controller {
    * и в открытом виде не сохраняются.
    * @summary Установка агента на VPS
    */
-  @Security("jwt", ["permission:wg:node:provision"])
+  @Security("jwt", ["permission:wg:node:provision:own"])
   @ValidateBody(ProvisionWgNodeSchema)
   @SuccessResponse(202, "Accepted")
   @Post("{id}/provision")
@@ -54,7 +54,7 @@ export class WgProvisionController extends Controller {
   ): Promise<IWgProvisionStartedDto> {
     this.setStatus(202);
 
-    return this._service.provision(getContextUser(req).userId, id, body);
+    return this._service.provision(getContextUser(req), id, body);
   }
 
   /**
@@ -63,7 +63,7 @@ export class WgProvisionController extends Controller {
    * задаче (комната ноды).
    * @summary Удаление агента с ноды
    */
-  @Security("jwt", ["permission:wg:node:provision"])
+  @Security("jwt", ["permission:wg:node:provision:own"])
   @ValidateBody(UninstallWgNodeSchema)
   @SuccessResponse(202, "Accepted")
   @Post("{id}/uninstall")
@@ -74,6 +74,6 @@ export class WgProvisionController extends Controller {
   ): Promise<IWgProvisionStartedDto> {
     this.setStatus(202);
 
-    return this._service.uninstall(getContextUser(req).userId, id, body);
+    return this._service.uninstall(getContextUser(req), id, body);
   }
 }

@@ -19,6 +19,7 @@ import { KoaRequest } from "../../types/koa";
 import {
   WgNodeCommandDto,
   WgNodeCommandService,
+  WgNodePermissions,
   WgNodeService,
 } from "../wg-node";
 import { WgAgentError } from "./wg-agent.errors";
@@ -57,7 +58,7 @@ export class WgAgentUpdateController extends Controller {
    * другим `agentCodeHash` для своей архитектуры — кандидат на обновление.
    * @summary Доступная версия агента
    */
-  @Security("jwt", ["permission:wg:node:view"])
+  @Security("jwt", ["permission:wg:node:view:own"])
   @Get("release")
   async wgAgentRelease(): Promise<IWgAgentReleaseInfo> {
     const release = await this._binaries.release();
@@ -79,25 +80,25 @@ export class WgAgentUpdateController extends Controller {
    * собран — 404.
    * @summary Обновить агента
    */
-  @Security("jwt", ["permission:wg:node:agent"])
+  @Security("jwt", ["permission:wg:node:agent:own"])
   @SuccessResponse(201, "Created")
   @Post("nodes/{nodeId}/update")
   async updateWgAgent(
     @Request() req: KoaRequest,
     @Path() nodeId: UUID,
   ): Promise<WgNodeCommandDto> {
-    const node = await this._nodes.findEntity(nodeId);
-
+    const actor = getContextUser(req);
+    const node = await this._nodes.findFor(
+      actor,
+      nodeId,
+      WgNodePermissions.NODE_AGENT,
+    );
     const binary = await this._binaries.binary(
       normalizeArch(node.osInfo?.arch) ?? "",
     );
 
     if (!binary) throw WgAgentError.BINARY_NOT_BUILT();
 
-    return this._commands.createAgentUpdate(
-      nodeId,
-      getContextUser(req).userId,
-      binary.hash,
-    );
+    return this._commands.createAgentUpdate(nodeId, actor.userId, binary.hash);
   }
 }
