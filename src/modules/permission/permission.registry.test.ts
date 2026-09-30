@@ -87,6 +87,35 @@ describe("permission registry", () => {
     expect(getRegisteredPermissions()).to.include(ALL_PERMISSIONS);
   });
 
+  it("scoped-право объявляет вариант «только на свои»", () => {
+    const perms = definePermissions("report", REPORT, {
+      VIEW: { name: "report:view", label: "Просмотр", scoped: true },
+      EXPORT: { name: "report:export", label: "Выгрузка" },
+    });
+
+    expect(perms.VIEW).to.equal("report:view");
+    expect(getDomainPermissions("report")).to.have.members([
+      "report:view",
+      "report:view:own",
+      "report:export",
+    ]);
+    expect(getRegisteredPermissions()).to.include("report:view:own");
+    expect(
+      getPermissionCatalog().find(g => g.key === "report")?.permissions,
+    ).to.deep.equal([
+      { name: "report:view", label: "Просмотр", own: "report:view:own" },
+      { name: "report:export", label: "Выгрузка" },
+    ]);
+  });
+
+  it("scoped-wildcard — ошибка объявления", () => {
+    expectInvalid(() =>
+      definePermissions("report", REPORT, {
+        ALL: { name: "report:*", label: "Всё", scoped: true },
+      }),
+    );
+  });
+
   it("платформенные права объявлены", () => {
     expect(getRegisteredPermissions()).to.include.members([
       "apikey:view",

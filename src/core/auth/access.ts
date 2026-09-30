@@ -2,6 +2,7 @@ import { inject } from "inversify";
 
 import type { TokenProvider } from "../decorators";
 import { Injectable } from "../decorators";
+import { type AccessScope, resolveScope } from "./access-scope";
 import { hasPermission, isSuperUserGrant } from "./has-permission";
 
 /** Роли и эффективные права пользователя (права ролей ∪ прямые). */
@@ -46,6 +47,13 @@ export class AccessService {
 
   async can(userId: string, permission: string): Promise<boolean> {
     return AccessService.allows(await this.grantOf(userId), permission);
+  }
+
+  /** Область права пользователя: все сущности, только свои или нет права. */
+  async scope(userId: string, permission: string): Promise<AccessScope | null> {
+    const grant = await this.grantOf(userId);
+
+    return resolveScope(grant.roles, grant.permissions, permission);
   }
 
   async isSuperUser(userId: string): Promise<boolean> {

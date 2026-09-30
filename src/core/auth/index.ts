@@ -1,4 +1,5 @@
 export * from "./access";
+export * from "./access-scope";
 export * from "./auth-token.errors";
 export * from "./has-permission";
 export * from "./jwt";

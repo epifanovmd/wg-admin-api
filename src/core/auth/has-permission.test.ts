@@ -62,6 +62,24 @@ describe("hasPermission", () => {
   });
 });
 
+describe("hasPermission: own-scope", () => {
+  it("право на все покрывает право «только на свои»", () => {
+    expect(hasPermission(["wg:peer:update"], "wg:peer:update:own")).to.be.true;
+    expect(hasPermission(["wg:peer:*"], "wg:peer:update:own")).to.be.true;
+    expect(hasPermission(["wg:*"], "wg:peer:update:own")).to.be.true;
+  });
+
+  it("право «только на свои» не даёт права на все", () => {
+    expect(hasPermission(["wg:peer:update:own"], "wg:peer:update")).to.be.false;
+    expect(hasPermission(["wg:peer:update:own"], "wg:peer:update:own")).to.be
+      .true;
+  });
+
+  it("право на другое действие не покрывает own", () => {
+    expect(hasPermission(["wg:peer:view"], "wg:peer:update:own")).to.be.false;
+  });
+});
+
 describe("isSuperUserGrant", () => {
   it("grants the superuser role or the all-permissions wildcard", () => {
     expect(isSuperUserGrant([SUPERUSER_ROLE], [])).to.be.true;

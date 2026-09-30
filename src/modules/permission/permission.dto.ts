@@ -14,6 +14,11 @@ export interface IPermissionListDto extends IPaginatedDto<IPermissionDto> {}
 export interface IPermissionCatalogItemDto {
   name: TPermission;
   label: string;
+  /**
+   * Право «только на свои» (владелец или создатель) для этого действия;
+   * нет — действие без области.
+   */
+  own?: TPermission;
 }
 
 /** Группа прав каталога (обычно — сущность домена). */
