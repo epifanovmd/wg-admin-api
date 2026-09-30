@@ -12,7 +12,11 @@ import {
   toPage,
 } from "../../core";
 import type { AuthContext } from "../../types/koa";
-import { WgEndpoint, WgEndpointService } from "../wg-endpoint";
+import {
+  WgEndpoint,
+  WgEndpointPermissions,
+  WgEndpointService,
+} from "../wg-endpoint";
 import {
   generateWgKeyPair,
   WgNodeCommandDto,
@@ -108,7 +112,10 @@ export class WgInterfaceService {
     await this._nodes.findFor(actor, body.nodeId, WgNodePermissions.NODE_VIEW);
     await this._guard.assertNodeFree(body.nodeId, body);
 
-    const endpoint = await this._resolveEndpoint(body.endpointId ?? null);
+    const endpoint = await this._resolveEndpoint(
+      actor,
+      body.endpointId ?? null,
+    );
 
     if (endpoint) {
       this._guard.assertRelayNotSelf(endpoint, body.nodeId);
@@ -249,8 +256,8 @@ export class WgInterfaceService {
 
     let endpoint: WgEndpoint | null = iface.endpoint ?? null;
 
-    if (body.endpointId !== undefined) {
-      endpoint = await this._resolveEndpoint(body.endpointId);
+    if (body.endpointId !== undefined && body.endpointId !== iface.endpointId) {
+      endpoint = await this._resolveEndpoint(actor, body.endpointId);
       iface.endpointId = endpoint?.id ?? null;
       iface.endpoint = endpoint;
     }
@@ -576,12 +583,18 @@ export class WgInterfaceService {
     );
   }
 
+  /** Точка подключения интерфейса: должна быть видна актору. */
   private async _resolveEndpoint(
+    actor: AuthContext,
     endpointId: string | null,
   ): Promise<WgEndpoint | null> {
     if (!endpointId) return null;
 
-    return this._endpoints.findEntity(endpointId);
+    return this._endpoints.findFor(
+      actor,
+      endpointId,
+      WgEndpointPermissions.ENDPOINT_VIEW,
+    );
   }
 
   /** Владелец не найден: единственная FK сохранения, не проверенная заранее. */

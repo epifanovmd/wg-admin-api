@@ -3,6 +3,7 @@ export * from "./endpoint-usage";
 export * from "./events";
 export * from "./relay-tunnel";
 export * from "./validation";
+export * from "./wg-endpoint.access";
 export * from "./wg-endpoint.controller";
 export * from "./wg-endpoint.entity";
 export * from "./wg-endpoint.errors";

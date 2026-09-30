@@ -19,9 +19,31 @@
     нода недоступна целиком — следующая копия; `tunnel` — только туннели;
     `direct` — только прямые адреса.
 
+## Доступ
+
+Действия над точкой — с областью (`scoped`): право на все точки или `…:own` —
+только на свои. Своя точка — где пользователь назначенный владелец (`ownerId`)
+или создатель (`createdById`); проверки — `WgEndpointAccess` (`OwnedAccess`
+ядра). Невидимая точка по id — 404, видимая без права на действие — 403
+`WG_ENDPOINT_FORBIDDEN`; списки и options ограничены областью
+`wg:endpoint:view`.
+
+- `wg:endpoint:create` — без области; создатель — автор запроса, владелец
+  (`ownerId`), отличный от себя, — только с правом назначения.
+- Релей-нода при создании и при смене релея должна быть видна автору
+  (`wg:node:view[:own]`), иначе 404 `WG_ENDPOINT_RELAY_NODE_NOT_FOUND`; прежний
+  релей при изменении других полей не перепроверяется.
+- Интерфейс подключается только к видимой автору точке
+  (`WgEndpointService.findFor(actor, id, wg:endpoint:view)` в wg-interface).
+- Методы без актора (`findEntity`, линки, `publishInterfacesChanged`) —
+  внутренние.
+- `WgEndpointDto.interfaces` перечисляет все интерфейсы точки, без фильтра по
+  правам просматривающего.
+
 ## Модель
 
-- **WgEndpoint** (`wg_endpoints`) — name (unique), host, mode, relayNodeId
+- **WgEndpoint** (`wg_endpoints`) — ownerId (владелец), createdById
+  (создатель; оба FK users SET NULL), name (unique), host, mode, relayNodeId
   (FK RESTRICT), forwardMode, route (`auto` по умолчанию).
 - **WgRelayLink** (`wg_relay_links`) — линк (relayNode, targetNode) с
   уникальным `tunnelIndex`: /30-блок в `WG_RELAY_TUNNEL_CIDR`
@@ -42,8 +64,10 @@ multi-inject `WG_ENDPOINT_USAGE` (`asWgEndpointUsage`, реализует wg-int
 порт клиентов, ноды копий): куда она ведёт. Данные — от модуля интерфейсов
 через `IWgEndpointUsage.interfacesByEndpoint` (один запрос на список точек).
 
-CRUD + options; права `wg:endpoint:view` (чтение), `wg:endpoint:create`,
-`wg:endpoint:update`, `wg:endpoint:delete`.
+CRUD + options и `POST {id}/assign` `{ userId }` / `POST {id}/revoke` —
+владелец; права `wg:endpoint:view[:own]` (чтение), `wg:endpoint:create`,
+`wg:endpoint:update[:own]`, `wg:endpoint:delete[:own]`,
+`wg:endpoint:assign[:own]`.
 Удаление используемой точки — 409 (FK RESTRICT от интерфейсов).
 
 ## События
@@ -51,10 +75,14 @@ CRUD + options; права `wg:endpoint:view` (чтение), `wg:endpoint:creat
 `WgEndpointUpdatedEvent(dto, previous)` — при изменении host/mode/relay/
 forwardMode/route; модуль wg-interface пересинхронизирует линки и поднимает
 версии конфигурации затронутых нод. `WgEndpointChangedEvent(dto)` — при любом
-сохранении (в том числе названия и описания), для UI.
+сохранении (в том числе названия и описания), для UI; при назначении и снятии
+владельца несёт `previousOwnerId` (прежний, если сменился).
 
-Сокет: комната `wg-endpoints` (право `wg:endpoint:view`) —
+Сокет: комната `wg-endpoints` (право `wg:endpoint:view` — на все точки) —
 `wg:endpoint:updated` (создание, любое изменение и изменение её интерфейсов —
-`WgEndpointInterfacesChangedEvent`, только для UI), `wg:endpoint:deleted`.
+`WgEndpointInterfacesChangedEvent`, только для UI), `wg:endpoint:deleted`. Те же
+события — своим (владельцу и создателю с областью `own`,
+`OwnedEntityEmitter.toOwners`); прежний владелец, если он не создатель, получает
+`wg:endpoint:deleted` (`detach`). Комнаты отдельной точки нет.
 Изменение точки (`WgEndpointChangedEvent`) заново рассылает DTO её интерфейсов
 (в них — `endpoint`: имя, режим, релей).

@@ -103,6 +103,10 @@ describe("WgInterfaceService", () => {
       markDirtyMany: sinon.stub().resolves(),
     };
     endpoints = { findEntity: sinon.stub() };
+    // Видимость точки актору — как у findEntity; отказ проверяется отдельно.
+    Object.assign(endpoints, {
+      findFor: (_actor: unknown, id: string) => endpoints.findEntity(id),
+    });
     relaySync = { syncRelaySafe: sinon.stub().resolves() };
     secrets = {
       seal: sinon.stub().callsFake((v: string) => `enc:${v}`),
@@ -644,6 +648,33 @@ describe("WgInterfaceService", () => {
         ownerId: uuid2(),
         createdById: uuid3(),
       });
+    });
+
+    it("точка подключения проверяется на видимость актору; прежняя — нет", async () => {
+      const findFor = sinon
+        .stub()
+        .rejects(
+          Object.assign(new Error("nf"), { code: "WG_ENDPOINT_NOT_FOUND" }),
+        );
+
+      Object.assign(endpoints, { findFor });
+      repo.findWithRelations.resolves(
+        makeIface({ ownerId: tenant.userId, endpointId: uuid2() }),
+      );
+
+      await expectCode(
+        () => service.update(tenant as any, uuid(), { endpointId: uuid3() }),
+        "WG_ENDPOINT_NOT_FOUND",
+      );
+      expect(findFor.firstCall.args).to.deep.equal([
+        tenant,
+        uuid3(),
+        "wg:endpoint:view",
+      ]);
+
+      findFor.resetHistory();
+      await service.update(tenant as any, uuid(), { endpointId: uuid2() });
+      expect(findFor.called).to.be.false;
     });
 
     it("реплика: нода копии проверяется на видимость актору", async () => {

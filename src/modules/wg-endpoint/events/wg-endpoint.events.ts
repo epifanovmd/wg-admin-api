@@ -25,7 +25,6 @@ export class WgEndpointUpdatedEvent {
   ) {}
 }
 
-/** Точка подключения сохранена (любое поле) — для подписчиков UI. */
 /**
  * Изменились интерфейсы точки (подключение, копии, порт, имя) — только для
  * UI: «куда ведёт» в списке точек. Доменных реакций нет.
@@ -34,11 +33,23 @@ export class WgEndpointInterfacesChangedEvent {
   constructor(public readonly endpoint: WgEndpointDto) {}
 }
 
+/**
+ * Точка подключения сохранена (любое поле) — для подписчиков UI.
+ * `previousOwnerId` — прежний владелец, если он сменился.
+ */
 export class WgEndpointChangedEvent {
-  constructor(public readonly endpoint: WgEndpointDto) {}
+  constructor(
+    public readonly endpoint: WgEndpointDto,
+    public readonly previousOwnerId: string | null = null,
+  ) {}
 }
 
 /** Точка подключения удалена (использовавших интерфейсов не было). */
 export class WgEndpointDeletedEvent {
-  constructor(public readonly endpointId: string) {}
+  constructor(
+    public readonly endpointId: string,
+    /** Владелец и создатель — кому точка была своей. */
+    public readonly ownerId: string | null = null,
+    public readonly createdById: string | null = null,
+  ) {}
 }

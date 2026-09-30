@@ -41,6 +41,7 @@ export const CreateWgEndpointSchema = z
     relayNodeId: z.uuid().nullable().optional(),
     forwardMode: z.enum(EWgForwardMode).optional(),
     route: z.enum(EWgEndpointRoute).optional(),
+    ownerId: z.uuid().nullable().optional(),
   })
   .refine(relayConsistent, {
     message: "Для режима relay нужна релей-нода",
@@ -60,3 +61,7 @@ export const UpdateWgEndpointSchema = z
   .refine(body => Object.values(body).some(v => v !== undefined), {
     message: "Нужно хотя бы одно поле",
   });
+
+export const AssignWgEndpointSchema = z.object({
+  userId: z.uuid(),
+});

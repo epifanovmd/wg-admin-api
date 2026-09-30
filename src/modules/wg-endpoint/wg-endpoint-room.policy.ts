@@ -6,7 +6,7 @@ import { WgEndpointPermissions } from "./wg-endpoint.permissions";
 
 export const WG_ENDPOINTS_ROOM = "wg-endpoints";
 
-/** Комната списка точек подключения: право `wg:endpoint:view`. */
+/** Комната списка точек подключения: право `wg:endpoint:view` на все точки. */
 @Injectable()
 export class WgEndpointsRoomPolicy implements ISocketRoomPolicy {
   readonly type = WG_ENDPOINTS_ROOM;

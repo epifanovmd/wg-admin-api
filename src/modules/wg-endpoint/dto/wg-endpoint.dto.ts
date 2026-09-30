@@ -9,6 +9,10 @@ import type {
 
 export class WgEndpointDto extends BaseDto {
   id: string;
+  /** Назначенный владелец точки. */
+  ownerId: string | null;
+  /** Создатель точки. */
+  createdById: string | null;
   name: string;
   description: string | null;
   host: string;
@@ -26,6 +30,8 @@ export class WgEndpointDto extends BaseDto {
     super(entity);
 
     this.id = entity.id;
+    this.ownerId = entity.ownerId;
+    this.createdById = entity.createdById;
     this.name = entity.name;
     this.description = entity.description;
     this.host = entity.host;

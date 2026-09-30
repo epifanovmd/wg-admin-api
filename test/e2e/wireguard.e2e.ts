@@ -265,6 +265,98 @@ describe("wireguard", () => {
         200,
       );
     });
+
+    it("область «свои»: релей — только видимая нода; своя точка видна, чужая — 404", async () => {
+      const tenant = await signUp("wg-endpoint-tenant");
+
+      expectStatus(
+        await call(admin, "PATCH", `/api/v1/user/setPrivileges/${tenant.id}`, {
+          roles: ["user"],
+          permissions: [
+            "wg:node:view:own",
+            "wg:endpoint:create",
+            "wg:endpoint:view:own",
+            "wg:endpoint:update:own",
+          ],
+        }),
+        200,
+      );
+
+      const actor = await signIn(tenant.email, tenant.password);
+
+      expectStatus(
+        await call(actor, "POST", "/api/v1/wg/endpoints", {
+          name: "tenant-relay",
+          host: "203.0.113.99",
+          mode: "relay",
+          relayNodeId: relayNode.id,
+        }),
+        404,
+        "WG_ENDPOINT_RELAY_NODE_NOT_FOUND",
+      );
+
+      const own = expectStatus(
+        await call(actor, "POST", "/api/v1/wg/endpoints", {
+          name: "tenant-direct",
+          host: "203.0.113.99",
+          mode: "direct",
+        }),
+        201,
+      ).data;
+
+      expect(own.createdById).to.equal(tenant.id);
+
+      const list = expectStatus(
+        await call(actor, "GET", "/api/v1/wg/endpoints"),
+        200,
+      );
+
+      expect(items(list.data).map((e: any) => e.id)).to.deep.equal([own.id]);
+      expectStatus(
+        await call(actor, "PATCH", `/api/v1/wg/endpoints/${own.id}`, {
+          description: "своя",
+        }),
+        200,
+      );
+      expectStatus(
+        await call(actor, "GET", `/api/v1/wg/endpoints/${endpoint.id}`),
+        404,
+        "WG_ENDPOINT_NOT_FOUND",
+      );
+
+      const assigned = expectStatus(
+        await call(
+          admin,
+          "POST",
+          `/api/v1/wg/endpoints/${endpoint.id}/assign`,
+          {
+            userId: tenant.id,
+          },
+        ),
+        200,
+      );
+
+      expect(assigned.data.ownerId).to.equal(tenant.id);
+      expectStatus(
+        await call(actor, "GET", `/api/v1/wg/endpoints/${endpoint.id}`),
+        200,
+      );
+
+      const revoked = expectStatus(
+        await call(admin, "POST", `/api/v1/wg/endpoints/${endpoint.id}/revoke`),
+        200,
+      );
+
+      expect(revoked.data.ownerId).to.equal(null);
+      expectStatus(
+        await call(actor, "DELETE", `/api/v1/wg/endpoints/${own.id}`),
+        403,
+      );
+      expectStatus(
+        await call(admin, "DELETE", `/api/v1/wg/endpoints/${own.id}`),
+        204,
+      );
+    });
   });
 
   describe("интерфейсы", () => {

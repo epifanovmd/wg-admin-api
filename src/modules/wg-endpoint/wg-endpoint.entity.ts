@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 
+import { User } from "../user/user.entity";
 import { WgNode } from "../wg-node";
 import {
   EWgEndpointMode,
@@ -25,9 +26,27 @@ import {
  */
 @Entity("wg_endpoints")
 @Index("IDX_WG_ENDPOINTS_NAME", ["name"], { unique: true })
+@Index("IDX_WG_ENDPOINTS_OWNER", ["ownerId"])
+@Index("IDX_WG_ENDPOINTS_CREATED_BY", ["createdById"])
 export class WgEndpoint {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
+
+  /** Назначенный владелец; пользователь удалён — владельца нет. */
+  @Column({ name: "owner_id", type: "uuid", nullable: true })
+  ownerId!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "owner_id" })
+  owner?: User | null;
+
+  /** Кто создал точку; пользователь удалён — создателя нет. */
+  @Column({ name: "created_by_id", type: "uuid", nullable: true })
+  createdById!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "created_by_id" })
+  createdBy?: User | null;
 
   @Column({ type: "varchar", length: WG_ENDPOINT_NAME_MAX })
   name!: string;

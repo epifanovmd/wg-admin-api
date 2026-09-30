@@ -20,6 +20,7 @@ import { PeerCreatedBy1790759944024 } from "./1790759944024-PeerCreatedBy";
 import { ScopedPeerPermissions1790759944025 } from "./1790759944025-ScopedPeerPermissions";
 import { NodeOwnership1790760661381 } from "./1790760661381-NodeOwnership";
 import { InterfaceOwnership1790761119419 } from "./1790761119419-InterfaceOwnership";
+import { EndpointOwnership1790761514632 } from "./1790761514632-EndpointOwnership";
 
 /**
  * Миграции в порядке применения. Новая миграция: `yarn migration:generate
@@ -49,4 +50,5 @@ export const migrations: Function[] = [
   ScopedPeerPermissions1790759944025,
   NodeOwnership1790760661381,
   InterfaceOwnership1790761119419,
+  EndpointOwnership1790761514632,
 ];

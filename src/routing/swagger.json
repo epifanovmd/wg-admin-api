@@ -655,6 +655,16 @@
 					"id": {
 						"type": "string"
 					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец точки."
+					},
+					"createdById": {
+						"type": "string",
+						"nullable": true,
+						"description": "Создатель точки."
+					},
 					"name": {
 						"type": "string"
 					},
@@ -697,6 +707,8 @@
 				},
 				"required": [
 					"id",
+					"ownerId",
+					"createdById",
 					"name",
 					"description",
 					"host",
@@ -738,6 +750,11 @@
 					"route": {
 						"$ref": "#/components/schemas/EWgEndpointRoute",
 						"description": "Маршрут при IPIP: по умолчанию `auto` (запасной прямой путь)."
+					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец; другой пользователь — только с правом назначения."
 					}
 				},
 				"required": [
@@ -831,6 +848,19 @@
 						"$ref": "#/components/schemas/EWgEndpointRoute"
 					}
 				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAssignWgEndpointBody": {
+				"description": "Назначение владельца точки подключения.",
+				"properties": {
+					"userId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"userId"
+				],
 				"type": "object",
 				"additionalProperties": false
 			},
@@ -6214,7 +6244,7 @@
 						}
 					}
 				},
-				"description": "Создать точку подключения — стабильный адрес для клиентских конфигов\n(напрямую или через релей-ноду).",
+				"description": "Создать точку подключения — стабильный адрес для клиентских конфигов\n(напрямую или через релей-ноду, видимую автору). Создатель — автор\nзапроса; владелец, отличный от себя, — только с правом\n`wg:endpoint:assign`.",
 				"summary": "Создание точки подключения",
 				"tags": [
 					"WgEndpoint"
@@ -6262,7 +6292,7 @@
 						}
 					}
 				},
-				"description": "Точки подключения, новые первыми.",
+				"description": "Точки подключения, новые первыми. С правом `wg:endpoint:view:own` —\nтолько свои (владелец или создатель).",
 				"summary": "Список точек подключения",
 				"tags": [
 					"WgEndpoint"
@@ -6270,7 +6300,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:endpoint:view"
+							"permission:wg:endpoint:view:own"
 						]
 					}
 				],
@@ -6332,7 +6362,7 @@
 						}
 					}
 				},
-				"description": "Краткий список для выпадающих списков.",
+				"description": "Краткий список для выпадающих списков (в рамках прав).",
 				"summary": "Точки подключения (options)",
 				"tags": [
 					"WgEndpoint"
@@ -6340,7 +6370,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:endpoint:view"
+							"permission:wg:endpoint:view:own"
 						]
 					}
 				],
@@ -6372,7 +6402,7 @@
 						}
 					}
 				},
-				"description": "Точка подключения по id.",
+				"description": "Точка подключения по id; чужая без права на все точки — 404.",
 				"summary": "Точка подключения",
 				"tags": [
 					"WgEndpoint"
@@ -6380,7 +6410,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:endpoint:view"
+							"permission:wg:endpoint:view:own"
 						]
 					}
 				],
@@ -6419,7 +6449,7 @@
 						}
 					}
 				},
-				"description": "Изменить точку подключения; смена хоста/релея применяется к нодам\nавтоматически, клиентские конфиги перевыпускать не нужно.",
+				"description": "Изменить точку подключения; смена хоста/релея применяется к нодам\nавтоматически, клиентские конфиги перевыпускать не нужно. Новый релей\nдолжен быть виден автору.",
 				"summary": "Изменение точки подключения",
 				"tags": [
 					"WgEndpoint"
@@ -6427,7 +6457,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:endpoint:update"
+							"permission:wg:endpoint:update:own"
 						]
 					}
 				],
@@ -6477,7 +6507,115 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:endpoint:delete"
+							"permission:wg:endpoint:delete:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/wg/endpoints/{id}/assign": {
+			"post": {
+				"operationId": "AssignWgEndpoint",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgEndpointDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Назначить владельца точки подключения (она станет для него своей).",
+				"summary": "Назначение владельца точки",
+				"tags": [
+					"WgEndpoint"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:endpoint:assign:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IAssignWgEndpointBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/endpoints/{id}/revoke": {
+			"post": {
+				"operationId": "RevokeWgEndpoint",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgEndpointDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Снять владельца точки подключения.",
+				"summary": "Снятие владельца точки",
+				"tags": [
+					"WgEndpoint"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:endpoint:assign:own"
 						]
 					}
 				],

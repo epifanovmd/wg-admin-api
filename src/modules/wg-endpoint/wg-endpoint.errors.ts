@@ -6,6 +6,14 @@ export const WgEndpointError = defineErrors("WG_ENDPOINT", {
     status: HttpStatus.NOT_FOUND,
     message: "Точка подключения не найдена",
   },
+  FORBIDDEN: {
+    status: HttpStatus.FORBIDDEN,
+    message: "Недостаточно прав для работы с точкой подключения",
+  },
+  USER_NOT_FOUND: {
+    status: HttpStatus.NOT_FOUND,
+    message: "Пользователь не найден",
+  },
   NAME_TAKEN: {
     status: HttpStatus.CONFLICT,
     message: "Точка подключения с таким названием уже существует",

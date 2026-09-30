@@ -316,6 +316,8 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "id": {"dataType":"string","required":true},
+            "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "host": {"dataType":"string","required":true},
@@ -340,6 +342,7 @@ const models: TsoaRoute.Models = {
             "relayNodeId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
             "forwardMode": {"ref":"EWgForwardMode"},
             "route": {"ref":"EWgEndpointRoute"},
+            "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
         },
         "additionalProperties": false,
     },
@@ -376,6 +379,14 @@ const models: TsoaRoute.Models = {
             "relayNodeId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
             "forwardMode": {"ref":"EWgForwardMode"},
             "route": {"ref":"EWgEndpointRoute"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "IAssignWgEndpointBody": {
+        "dataType": "refObject",
+        "properties": {
+            "userId": {"dataType":"string","required":true},
         },
         "additionalProperties": false,
     },
@@ -2565,6 +2576,7 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgEndpointController_createWgEndpoint: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 body: {"in":"body","name":"body","required":true,"ref":"ICreateWgEndpointBody"},
         };
         router.post('/api/v1/wg/endpoints',
@@ -2601,12 +2613,13 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgEndpointController_listWgEndpoints: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 query: {"in":"query","name":"query","dataType":"string"},
                 offset: {"in":"query","name":"offset","dataType":"double"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
         router.get('/api/v1/wg/endpoints',
-            authenticateMiddleware([{"jwt":["permission:wg:endpoint:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:endpoint:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgEndpointController)),
             ...(fetchMiddlewares<Middleware>(WgEndpointController.prototype.listWgEndpoints)),
 
@@ -2639,9 +2652,10 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgEndpointController_wgEndpointOptions: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
         };
         router.get('/api/v1/wg/endpoints/options',
-            authenticateMiddleware([{"jwt":["permission:wg:endpoint:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:endpoint:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgEndpointController)),
             ...(fetchMiddlewares<Middleware>(WgEndpointController.prototype.wgEndpointOptions)),
 
@@ -2674,10 +2688,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgEndpointController_getWgEndpoint: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/endpoints/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:endpoint:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:endpoint:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgEndpointController)),
             ...(fetchMiddlewares<Middleware>(WgEndpointController.prototype.getWgEndpoint)),
 
@@ -2710,11 +2725,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgEndpointController_updateWgEndpoint: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"IUpdateWgEndpointBody"},
         };
         router.patch('/api/v1/wg/endpoints/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:endpoint:update"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:endpoint:update:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgEndpointController)),
             ...(fetchMiddlewares<Middleware>(WgEndpointController.prototype.updateWgEndpoint)),
 
@@ -2747,10 +2763,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgEndpointController_deleteWgEndpoint: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.delete('/api/v1/wg/endpoints/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:endpoint:delete"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:endpoint:delete:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgEndpointController)),
             ...(fetchMiddlewares<Middleware>(WgEndpointController.prototype.deleteWgEndpoint)),
 
@@ -2779,6 +2796,81 @@ export function RegisterRoutes(router: KoaRouter) {
               context,
               validatedArgs,
               successStatus: 204,
+            });
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWgEndpointController_assignWgEndpoint: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                id: {"in":"path","name":"id","required":true,"ref":"UUID"},
+                body: {"in":"body","name":"body","required":true,"ref":"IAssignWgEndpointBody"},
+        };
+        router.post('/api/v1/wg/endpoints/:id/assign',
+            authenticateMiddleware([{"jwt":["permission:wg:endpoint:assign:own"]}]),
+            ...(fetchMiddlewares<Middleware>(WgEndpointController)),
+            ...(fetchMiddlewares<Middleware>(WgEndpointController.prototype.assignWgEndpoint)),
+
+            async function WgEndpointController_assignWgEndpoint(context: Context, next: Next) {
+
+            let validatedArgs: any[] = [];
+            try {
+              validatedArgs = templateService.getValidatedArgs({ args: argsWgEndpointController_assignWgEndpoint, context, next });
+            } catch (err) {
+              const error = err as any;
+              error.message ||= JSON.stringify({ fields: error.fields });
+              context.status = error.status;
+              context.throw(context.status, error.message, error);
+            }
+
+            const container: IocContainer = typeof iocContainer === 'function' ? (iocContainer as IocContainerFactory)(context.request) : iocContainer;
+
+            const controller: any = await container.get<WgEndpointController>(WgEndpointController);
+            if (typeof controller['setStatus'] === 'function') {
+                controller.setStatus(undefined);
+            }
+
+            return templateService.apiHandler({
+              methodName: 'assignWgEndpoint',
+              controller,
+              context,
+              validatedArgs,
+              successStatus: undefined,
+            });
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWgEndpointController_revokeWgEndpoint: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                id: {"in":"path","name":"id","required":true,"ref":"UUID"},
+        };
+        router.post('/api/v1/wg/endpoints/:id/revoke',
+            authenticateMiddleware([{"jwt":["permission:wg:endpoint:assign:own"]}]),
+            ...(fetchMiddlewares<Middleware>(WgEndpointController)),
+            ...(fetchMiddlewares<Middleware>(WgEndpointController.prototype.revokeWgEndpoint)),
+
+            async function WgEndpointController_revokeWgEndpoint(context: Context, next: Next) {
+
+            let validatedArgs: any[] = [];
+            try {
+              validatedArgs = templateService.getValidatedArgs({ args: argsWgEndpointController_revokeWgEndpoint, context, next });
+            } catch (err) {
+              const error = err as any;
+              error.message ||= JSON.stringify({ fields: error.fields });
+              context.status = error.status;
+              context.throw(context.status, error.message, error);
+            }
+
+            const container: IocContainer = typeof iocContainer === 'function' ? (iocContainer as IocContainerFactory)(context.request) : iocContainer;
+
+            const controller: any = await container.get<WgEndpointController>(WgEndpointController);
+            if (typeof controller['setStatus'] === 'function') {
+                controller.setStatus(undefined);
+            }
+
+            return templateService.apiHandler({
+              methodName: 'revokeWgEndpoint',
+              controller,
+              context,
+              validatedArgs,
+              successStatus: undefined,
             });
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa

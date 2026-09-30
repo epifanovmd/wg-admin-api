@@ -10,8 +10,18 @@ import {
   pgErrorCode,
   toPage,
 } from "../../core";
-import { wgConfig, WgNodeError, WgNodeService } from "../wg-node";
-import type { ICreateWgEndpointBody, IUpdateWgEndpointBody } from "./dto";
+import type { AuthContext } from "../../types/koa";
+import {
+  wgConfig,
+  WgNodeError,
+  WgNodePermissions,
+  WgNodeService,
+} from "../wg-node";
+import type {
+  IAssignWgEndpointBody,
+  ICreateWgEndpointBody,
+  IUpdateWgEndpointBody,
+} from "./dto";
 import { WgEndpointDto, WgEndpointOptionDto } from "./dto";
 import { IWgEndpointUsage, WG_ENDPOINT_USAGE } from "./endpoint-usage";
 import {
@@ -23,8 +33,10 @@ import {
   WgEndpointUpdatedEvent,
 } from "./events";
 import { relayTunnelCapacity } from "./relay-tunnel";
+import { WgEndpointAccess } from "./wg-endpoint.access";
 import { WgEndpoint } from "./wg-endpoint.entity";
 import { WgEndpointError } from "./wg-endpoint.errors";
+import { WgEndpointPermissions } from "./wg-endpoint.permissions";
 import { WgEndpointRepository } from "./wg-endpoint.repository";
 import {
   EWgEndpointMode,
@@ -36,7 +48,12 @@ import { WgRelayLinkRepository } from "./wg-relay-link.repository";
 
 const LINK_INSERT_ATTEMPTS = 3;
 
-/** Точки подключения клиентов и линки релеев (адресация IPIP-туннелей). */
+/**
+ * Точки подключения клиентов с областью прав «все / свои» (владелец или
+ * создатель) и линки релеев (адресация IPIP-туннелей). Чужая точка без права
+ * на все не раскрывается (404); видимая без права на действие — 403. Методы
+ * без актора — внутренние (агент, интерфейсы, статистика).
+ */
 @Injectable()
 export class WgEndpointService {
   constructor(
@@ -51,11 +68,25 @@ export class WgEndpointService {
     private readonly _usage: IWgEndpointUsage[] | undefined = [],
   ) {}
 
-  async create(body: ICreateWgEndpointBody): Promise<WgEndpointDto> {
-    await this._assertRelayNode(body.mode, body.relayNodeId ?? null);
+  async create(
+    actor: AuthContext,
+    body: ICreateWgEndpointBody,
+  ): Promise<WgEndpointDto> {
+    const ownerId = body.ownerId ?? null;
+
+    if (
+      ownerId !== null &&
+      ownerId !== actor.userId &&
+      !WgEndpointAccess.scope(actor, WgEndpointPermissions.ENDPOINT_ASSIGN)
+    ) {
+      throw WgEndpointError.FORBIDDEN();
+    }
+    await this._assertRelayNode(actor, body.mode, body.relayNodeId ?? null);
 
     try {
       const endpoint = await this._endpoints.createAndSave({
+        ownerId,
+        createdById: actor.userId,
         name: body.name,
         description: body.description ?? null,
         host: body.host,
@@ -72,36 +103,57 @@ export class WgEndpointService {
       return dto;
     } catch (err) {
       if (isUniqueViolation(err)) throw WgEndpointError.NAME_TAKEN();
+      if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION && ownerId) {
+        throw WgEndpointError.USER_NOT_FOUND();
+      }
       throw err;
     }
   }
 
   async list(
+    actor: AuthContext,
     query: string | undefined,
     pagination: Pagination,
   ): Promise<IPaginatedDto<WgEndpointDto>> {
-    const [items, total] = await this._endpoints.findPage(query, pagination);
+    const [items, total] = await this._endpoints.findPage(
+      { query, ...this.viewFilter(actor) },
+      pagination,
+    );
 
     return toPage(await this._toDtos(items), total, pagination);
   }
 
-  async options(): Promise<WgEndpointOptionDto[]> {
-    const items = await this._endpoints.find({ order: { name: "ASC" } });
+  async options(actor: AuthContext): Promise<WgEndpointOptionDto[]> {
+    const { ownedBy } = this.viewFilter(actor);
+    const items = await this._endpoints.find({
+      where: ownedBy ? WgEndpointAccess.ownedWhere(ownedBy) : {},
+      order: { name: "ASC" },
+    });
 
     return items.map(WgEndpointOptionDto.fromEntity);
   }
 
-  async get(id: string): Promise<WgEndpointDto> {
-    const [dto] = await this._toDtos([await this._findOrFail(id)]);
+  async get(actor: AuthContext, id: string): Promise<WgEndpointDto> {
+    const endpoint = await this.findFor(
+      actor,
+      id,
+      WgEndpointPermissions.ENDPOINT_VIEW,
+    );
+    const [dto] = await this._toDtos([endpoint]);
 
     return dto;
   }
 
   async update(
+    actor: AuthContext,
     id: string,
     body: IUpdateWgEndpointBody,
   ): Promise<WgEndpointDto> {
-    const endpoint = await this._findOrFail(id);
+    const endpoint = await this.findFor(
+      actor,
+      id,
+      WgEndpointPermissions.ENDPOINT_UPDATE,
+    );
     const previous: IWgEndpointConfigSnapshot = {
       host: endpoint.host,
       mode: endpoint.mode,
@@ -119,7 +171,13 @@ export class WgEndpointService {
     if (body.route !== undefined) endpoint.route = body.route;
 
     if (endpoint.mode === EWgEndpointMode.Direct) endpoint.relayNodeId = null;
-    await this._assertRelayNode(endpoint.mode, endpoint.relayNodeId);
+    // Видимость релея проверяется при его выборе: прежний мог назначить другой.
+    if (
+      !endpoint.relayNodeId ||
+      endpoint.relayNodeId !== previous.relayNodeId
+    ) {
+      await this._assertRelayNode(actor, endpoint.mode, endpoint.relayNodeId);
+    }
     if (endpoint.relayNodeId && endpoint.relayNodeId !== previous.relayNodeId) {
       await this._assertRelayNotTarget(endpoint.id, endpoint.relayNodeId);
       await this._assertRelayPortsFree(endpoint.id, endpoint.relayNodeId);
@@ -180,8 +238,12 @@ export class WgEndpointService {
   }
 
   /** Удалить точку подключения; используемая интерфейсами — 409. */
-  async delete(id: string): Promise<void> {
-    const endpoint = await this._findOrFail(id);
+  async delete(actor: AuthContext, id: string): Promise<void> {
+    const endpoint = await this.findFor(
+      actor,
+      id,
+      WgEndpointPermissions.ENDPOINT_DELETE,
+    );
 
     try {
       await this._endpoints.delete({ id: endpoint.id });
@@ -192,7 +254,89 @@ export class WgEndpointService {
       throw err;
     }
 
-    this._eventBus.emit(new WgEndpointDeletedEvent(endpoint.id));
+    this._eventBus.emit(
+      new WgEndpointDeletedEvent(
+        endpoint.id,
+        endpoint.ownerId,
+        endpoint.createdById,
+      ),
+    );
+  }
+
+  /** Назначить владельца точки. */
+  async assign(
+    actor: AuthContext,
+    id: string,
+    body: IAssignWgEndpointBody,
+  ): Promise<WgEndpointDto> {
+    const endpoint = await this.findFor(
+      actor,
+      id,
+      WgEndpointPermissions.ENDPOINT_ASSIGN,
+    );
+
+    try {
+      await this._endpoints.update({ id }, { ownerId: body.userId });
+    } catch (err) {
+      if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+        throw WgEndpointError.USER_NOT_FOUND();
+      }
+      throw err;
+    }
+
+    return this._emitOwnerChanged(endpoint, body.userId);
+  }
+
+  /** Снять владельца точки. */
+  async revoke(actor: AuthContext, id: string): Promise<WgEndpointDto> {
+    const endpoint = await this.findFor(
+      actor,
+      id,
+      WgEndpointPermissions.ENDPOINT_ASSIGN,
+    );
+
+    await this._endpoints.update({ id }, { ownerId: null });
+
+    return this._emitOwnerChanged(endpoint, null);
+  }
+
+  /**
+   * Точка для действия актора: невидимая — 404, видимая без права на
+   * действие — 403. Проверка доступа и для других модулей домена.
+   */
+  async findFor(
+    actor: AuthContext,
+    id: string,
+    permission: string,
+  ): Promise<WgEndpoint> {
+    const endpoint = await this._findOrFail(id);
+
+    if (
+      !WgEndpointAccess.can(
+        actor,
+        WgEndpointPermissions.ENDPOINT_VIEW,
+        endpoint,
+      )
+    ) {
+      throw WgEndpointError.NOT_FOUND();
+    }
+    if (!WgEndpointAccess.can(actor, permission, endpoint)) {
+      throw WgEndpointError.FORBIDDEN();
+    }
+
+    return endpoint;
+  }
+
+  /** Ограничение списков точек областью просмотра; права нет — 403. */
+  viewFilter(actor: AuthContext): { ownedBy?: string } {
+    const filter = WgEndpointAccess.filter(
+      actor,
+      WgEndpointPermissions.ENDPOINT_VIEW,
+    );
+
+    if (!filter) throw WgEndpointError.FORBIDDEN();
+
+    return filter;
   }
 
   async findEntity(id: string): Promise<WgEndpoint> {
@@ -279,7 +423,25 @@ export class WgEndpointService {
     }
   }
 
+  private async _emitOwnerChanged(
+    endpoint: WgEndpoint,
+    ownerId: string | null,
+  ): Promise<WgEndpointDto> {
+    const [dto] = await this._toDtos([await this._findOrFail(endpoint.id)]);
+
+    this._eventBus.emit(
+      new WgEndpointChangedEvent(
+        dto,
+        endpoint.ownerId !== ownerId ? endpoint.ownerId : null,
+      ),
+    );
+
+    return dto;
+  }
+
+  /** Релей-нода обязательна для relay и должна быть видна актору. */
   private async _assertRelayNode(
+    actor: AuthContext,
     mode: EWgEndpointMode,
     relayNodeId: string | null,
   ): Promise<void> {
@@ -287,7 +449,11 @@ export class WgEndpointService {
     if (!relayNodeId) throw WgEndpointError.RELAY_NODE_REQUIRED();
 
     try {
-      await this._nodes.findEntity(relayNodeId);
+      await this._nodes.findFor(
+        actor,
+        relayNodeId,
+        WgNodePermissions.NODE_VIEW,
+      );
     } catch (err) {
       if (
         err instanceof Error &&
