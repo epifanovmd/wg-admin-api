@@ -78,18 +78,68 @@ scripts/go-agent.sh test | vet | tidy | build [amd64|arm64]
 
 ## Команды
 
-```sh
-yarn generate        # tsoa: src/routing/routes.ts + swagger.json (коммитятся)
-yarn lint            # eslint (yarn lint:fix, yarn prettier:fix)
-yarn typecheck       # tsc --noEmit (watch: yarn dev:types)
-yarn test            # юнит-тесты (один файл: yarn test:file <path>)
-yarn test:e2e        # интеграционный набор, нужен docker-compose.dev.yml
-yarn build           # генерация + tsc: src/ → build/
-yarn server          # запуск сборки (node build/main.js)
-yarn gen:module <name> [--dry-run]              # каркас модуля по конвенциям
-yarn migration:generate src/migrations/<Name>   # миграция из изменений сущностей
-yarn migration:run | migration:revert
-```
+Все команды — из корня репозитория.
+
+**Разработка**
+
+| Команда                             | Что делает                                                                                   |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| `yarn dev`                          | генерация маршрутов + сервер с перезапуском при изменениях (роль `all`, миграции при старте) |
+| `yarn dev:types`                    | проверка типов в режиме watch                                                                |
+| `yarn gen:module <имя> [--dry-run]` | каркас нового модуля по конвенциям (`--dry-run` — только список файлов)                      |
+
+**Проверки**
+
+| Команда                  | Что делает                                                              |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `yarn lint` / `lint:fix` | ESLint (`src`, `test`) / с автоисправлением                             |
+| `yarn prettier:fix`      | форматирование `src/**/*.ts`                                            |
+| `yarn typecheck`         | проверка типов (`tsc --noEmit`)                                         |
+| `yarn test`              | юнит-тесты (`src/**/*.test.ts`)                                         |
+| `yarn test:file <путь>`  | один файл тестов                                                        |
+| `yarn test:e2e`          | интеграционные тесты: настоящий сервер поверх Postgres, Redis и Mailpit |
+
+**Сборка, кодогенерация, база**
+
+| Команда                                        | Что делает                                                    |
+| ---------------------------------------------- | ------------------------------------------------------------- |
+| `yarn generate`                                | маршруты и OpenAPI из декораторов (`src/routing`, коммитятся) |
+| `yarn build`                                   | генерация + компиляция `src/` → `build/`                      |
+| `yarn server`                                  | запуск production-сборки                                      |
+| `yarn migration:generate src/migrations/<Имя>` | миграция из разницы сущностей и схемы БД                      |
+| `yarn migration:run` / `migration:revert`      | применить ожидающие миграции / откатить последнюю             |
+
+**Агент нод (Go в контейнере, версия из `agent/go.mod`)**
+
+| Команда                                    | Что делает                                        |
+| ------------------------------------------ | ------------------------------------------------- |
+| `scripts/go-agent.sh test`                 | тесты агента                                      |
+| `scripts/go-agent.sh vet`                  | статический анализ `go vet`                       |
+| `scripts/go-agent.sh tidy`                 | привести `go.mod` / `go.sum` в порядок            |
+| `scripts/go-agent.sh build [amd64\|arm64]` | собрать бинарь агента под архитектуру             |
+| `bash test/smoke/wg-smoke.sh`              | smoke WG-домена в Linux-контейнерах (см. «Тесты») |
+
+**Makefile — сервер по SSH** (настройки — `.env.deploy`, образец `.env.deploy.example`;
+любое значение переопределяется в команде: `make deploy SSH_HOST=…`)
+
+| Команда                            | Что делает                                                              |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `make deploy`                      | исходники на хост, сборка образа там же, миграции, запуск               |
+| `make release TAG=v1.2.3`          | готовый образ из GHCR: compose-файлы, `pull`, миграции, запуск          |
+| `make env`                         | секреты (`.env.production`) на хост                                     |
+| `make sync` / `compose`            | исходники (rsync, кроме `.deployignore`) / только compose-файлы на хост |
+| `make build` / `pull`              | собрать образ на хосте / скачать из registry                            |
+| `make migrate`                     | применить миграции на хосте (одноразовый `migrate`)                     |
+| `make up` / `down`                 | запустить / остановить стек на хосте                                    |
+| `make status` / `logs` / `restart` | состояние сервисов / журнал `api` и `worker` / их перезапуск            |
+| `make db-dump` / `db-restore`      | дамп базы с хоста в файл / восстановление из файла (`scripts/db`)       |
+
+**Makefile — на этой машине** (без `.env.deploy`)
+
+| Команда                                       | Что делает                                                |
+| --------------------------------------------- | --------------------------------------------------------- |
+| `make image`                                  | собрать образ локально                                    |
+| `make local-up` / `local-down` / `local-logs` | production-стек в Docker: запустить / остановить / журнал |
 
 pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, юнит-тесты.
 
