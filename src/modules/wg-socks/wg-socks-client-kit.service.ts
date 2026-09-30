@@ -1,8 +1,11 @@
 import { inject } from "inversify";
 
 import { Injectable } from "../../core";
+import type { AuthContext } from "../../types/koa";
 import { WgSecretBox } from "../wg-node";
 import { WgSocksError } from "./wg-socks.errors";
+import { findSocksFor } from "./wg-socks.lookup";
+import { WgSocksPermissions } from "./wg-socks.permissions";
 import { WgSocksServiceRepository } from "./wg-socks.repository";
 import { buildMacClient } from "./wg-socks-mac-client";
 import { certMatchesHost } from "./wg-socks-pki";
@@ -20,16 +23,21 @@ export class WgSocksClientKitService {
    * Клиент для macOS (zip): сертификаты клиента, логин и пароль
    * пользователя; без `userId` — первый включённый пользователь. Адрес —
    * `clientHost:clientPort`, иначе publicHost ноды и порт прокси; имя
-   * сервера проверяется, если оно есть в серверном сертификате.
+   * сервера проверяется, если оно есть в серверном сертификате. Право —
+   * клиенты прокси (все или свой).
    */
   async macClient(
+    actor: AuthContext,
     serviceId: string,
     clientId: string,
     userId?: string,
   ): Promise<{ fileName: string; content: Buffer }> {
-    const service = await this._services.findWithRelations(serviceId);
-
-    if (!service) throw WgSocksError.NOT_FOUND();
+    const service = await findSocksFor(
+      this._services,
+      actor,
+      serviceId,
+      WgSocksPermissions.SOCKS_CLIENTS,
+    );
 
     const client = service.clients?.find(item => item.id === clientId);
 

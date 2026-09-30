@@ -6,7 +6,7 @@ import { WgSocksPermissions } from "./wg-socks.permissions";
 
 export const WG_SOCKS_ROOM = "wg-socks";
 
-/** Комната списка прокси: право `wg:socks:view`. */
+/** Комната списка прокси: право `wg:socks:view` на все прокси. */
 @Injectable()
 export class WgSocksRoomPolicy implements ISocketRoomPolicy {
   readonly type = WG_SOCKS_ROOM;

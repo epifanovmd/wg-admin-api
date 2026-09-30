@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 
+import { User } from "../user/user.entity";
 import { WgNode } from "../wg-node";
 import {
   WG_SOCKS_NAME_MAX,
@@ -24,9 +25,27 @@ import {
 @Entity("wg_socks_services")
 @Index("IDX_WG_SOCKS_NAME", ["name"], { unique: true })
 @Index("IDX_WG_SOCKS_NODE_PORT", ["nodeId", "listenPort"], { unique: true })
+@Index("IDX_WG_SOCKS_OWNER", ["ownerId"])
+@Index("IDX_WG_SOCKS_CREATED_BY", ["createdById"])
 export class WgSocksService {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
+
+  /** Назначенный владелец; пользователь удалён — владельца нет. */
+  @Column({ name: "owner_id", type: "uuid", nullable: true })
+  ownerId!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "owner_id" })
+  owner?: User | null;
+
+  /** Кто создал прокси; пользователь удалён — создателя нет. */
+  @Column({ name: "created_by_id", type: "uuid", nullable: true })
+  createdById!: string | null;
+
+  @ManyToOne(() => User, { onDelete: "SET NULL" })
+  @JoinColumn({ name: "created_by_id" })
+  createdBy?: User | null;
 
   @Column({ type: "varchar", length: WG_SOCKS_NAME_MAX })
   name!: string;

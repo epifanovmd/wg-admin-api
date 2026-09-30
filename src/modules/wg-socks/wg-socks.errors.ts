@@ -6,6 +6,14 @@ export const WgSocksError = defineErrors("WG_SOCKS", {
     status: HttpStatus.NOT_FOUND,
     message: "Прокси-сервис не найден",
   },
+  FORBIDDEN: {
+    status: HttpStatus.FORBIDDEN,
+    message: "Недостаточно прав для работы с прокси",
+  },
+  OWNER_NOT_FOUND: {
+    status: HttpStatus.NOT_FOUND,
+    message: "Пользователь не найден",
+  },
   NAME_TAKEN: {
     status: HttpStatus.CONFLICT,
     message: "Прокси-сервис с таким названием уже есть",

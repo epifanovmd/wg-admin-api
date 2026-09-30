@@ -4,9 +4,26 @@ SOCKS5-прокси через mTLS на нодах: агент ноды
 принимает TLS только с клиентским сертификатом, выданным CA сервиса и не
 отозванным, затем SOCKS5 с логином и паролем (RFC 1929) и CONNECT.
 
+## Доступ
+
+Действия над прокси — с областью (`scoped`): право на все прокси или `…:own` —
+только на свои. Свой прокси — где пользователь назначенный владелец
+(`ownerId`) или создатель (`createdById`); проверки — `WgSocksAccess`
+(`OwnedAccess` ядра) и `findSocksFor` (`wg-socks.lookup.ts`, общий для
+сервиса и клиента устройства). Невидимый прокси по id — 404, видимый без права
+на действие — 403 `WG_SOCKS_FORBIDDEN`; список ограничен областью
+`wg:socks:view`.
+
+- `wg:socks:create` — без области; создатель — автор запроса, владелец
+  (`ownerId`), отличный от себя, — только с правом назначения (несуществующий
+  пользователь — 404 `WG_SOCKS_OWNER_NOT_FOUND`). Нода прокси должна быть видна
+  автору (`wg:node:view[:own]`), иначе 404 `WG_NODE_NOT_FOUND`.
+- `agentConfigs`, `recordStats` — внутренние (агент), без проверки прав.
+
 ## Модель
 
-**WgSocksService** (`wg_socks_services`): name (unique), nodeId (FK RESTRICT),
+**WgSocksService** (`wg_socks_services`): ownerId (владелец), createdById
+(создатель; оба FK users SET NULL), name (unique), nodeId (FK RESTRICT),
 listenPort (unique на ноде), clientHost/clientPort — адрес для клиентов, если
 прокси доступен через TCP-проброс на другой ноде (null — publicHost ноды и
 listenPort), serverName — имя из серверного сертификата, CA (сертификат и
@@ -41,10 +58,11 @@ live-хранилище (TTL 60 с), поле `live` DTO.
 
 ## Эндпоинты (`/api/v1/wg/socks`, тег WgSocks)
 
-Чтение — `wg:socks:view`.
+Чтение — `wg:socks:view[:own]`. Все права, кроме создания, — с областью `[:own]`.
 
 - CRUD сервиса — `wg:socks:create`, `wg:socks:update` (изменение и включение),
-  `wg:socks:delete`.
+  `wg:socks:delete`; `POST /{id}/assign` `{ userId }` / `POST /{id}/revoke` —
+  владелец, `wg:socks:assign`.
 - `/{id}/users` — добавление (пароль генерируется, если не задан), изменение,
   удаление — `wg:socks:users`; `GET …/secret` — логин и пароль,
   `wg:socks:secrets`.
@@ -55,5 +73,10 @@ live-хранилище (TTL 60 с), поле `live` DTO.
 
 ## Сокет
 
-Комната `wg-socks` (право `wg:socks:view`): `wg:socks:updated` (сервис,
-пользователи, сертификаты), `wg:socks:deleted`, `wg:socks:stats { id, live }` (только при изменении соединений или трафика).
+Комната `wg-socks` (право `wg:socks:view` — на все прокси): `wg:socks:updated`
+(сервис, пользователи, сертификаты), `wg:socks:deleted`, `wg:socks:stats { id,
+live }` (только при изменении соединений или трафика). Те же события — своим
+(владельцу и создателю с областью `own`, `OwnedEntityEmitter.toOwners`;
+владелец и создатель есть в `WgSocksStatsEvent`); при смене владельца
+(`WgSocksUpdatedEvent.previousOwnerId`) прежний, если он не создатель, получает
+`wg:socks:deleted` (`detach`). Комнаты отдельного прокси нет.

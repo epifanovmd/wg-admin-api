@@ -2658,6 +2658,16 @@
 					"id": {
 						"type": "string"
 					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец прокси."
+					},
+					"createdById": {
+						"type": "string",
+						"nullable": true,
+						"description": "Создатель прокси."
+					},
 					"name": {
 						"type": "string"
 					},
@@ -2727,6 +2737,8 @@
 				},
 				"required": [
 					"id",
+					"ownerId",
+					"createdById",
 					"name",
 					"description",
 					"nodeId",
@@ -2775,6 +2787,11 @@
 					"serverName": {
 						"type": "string",
 						"description": "CN/SNI серверного сертификата (по умолчанию publicHost ноды)."
+					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Назначенный владелец; другой пользователь — только с правом назначения."
 					}
 				},
 				"required": [
@@ -2812,6 +2829,19 @@
 						"type": "boolean"
 					}
 				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAssignWgSocksBody": {
+				"description": "Назначение владельца прокси.",
+				"properties": {
+					"userId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"userId"
+				],
 				"type": "object",
 				"additionalProperties": false
 			},
@@ -9046,7 +9076,7 @@
 						}
 					}
 				},
-				"description": "Новый прокси на ноде со своим CA и серверным сертификатом.",
+				"description": "Новый прокси на ноде (видимой автору) со своим CA и серверным\nсертификатом. Создатель — автор запроса; владелец, отличный от себя, —\nтолько с правом `wg:socks:assign`.",
 				"summary": "Создание прокси",
 				"tags": [
 					"WgSocks"
@@ -9097,7 +9127,7 @@
 						}
 					}
 				},
-				"description": "Прокси с пользователями, клиентами и live-показателями.",
+				"description": "Прокси с пользователями, клиентами и live-показателями. С правом\n`wg:socks:view:own` — только свои (владелец или создатель).",
 				"summary": "Список прокси",
 				"tags": [
 					"WgSocks"
@@ -9105,7 +9135,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:view"
+							"permission:wg:socks:view:own"
 						]
 					}
 				],
@@ -9137,6 +9167,7 @@
 						}
 					}
 				},
+				"description": "Прокси по id; чужой без права на все прокси — 404.",
 				"summary": "Прокси",
 				"tags": [
 					"WgSocks"
@@ -9144,7 +9175,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:view"
+							"permission:wg:socks:view:own"
 						]
 					}
 				],
@@ -9190,7 +9221,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:update"
+							"permission:wg:socks:update:own"
 						]
 					}
 				],
@@ -9239,7 +9270,115 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:delete"
+							"permission:wg:socks:delete:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/wg/socks/{id}/assign": {
+			"post": {
+				"operationId": "AssignWgSocks",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgSocksServiceDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Назначить владельца прокси (он станет для него своим).",
+				"summary": "Назначение владельца прокси",
+				"tags": [
+					"WgSocks"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:socks:assign:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IAssignWgSocksBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/socks/{id}/revoke": {
+			"post": {
+				"operationId": "RevokeWgSocks",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WgSocksServiceDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Снять владельца прокси.",
+				"summary": "Снятие владельца прокси",
+				"tags": [
+					"WgSocks"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:socks:assign:own"
 						]
 					}
 				],
@@ -9288,7 +9427,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:users"
+							"permission:wg:socks:users:own"
 						]
 					}
 				],
@@ -9347,7 +9486,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:users"
+							"permission:wg:socks:users:own"
 						]
 					}
 				],
@@ -9404,7 +9543,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:users"
+							"permission:wg:socks:users:own"
 						]
 					}
 				],
@@ -9461,7 +9600,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:secrets"
+							"permission:wg:socks:secrets:own"
 						]
 					}
 				],
@@ -9518,7 +9657,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:clients"
+							"permission:wg:socks:clients:own"
 						]
 					}
 				],
@@ -9577,7 +9716,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:clients"
+							"permission:wg:socks:clients:own"
 						]
 					}
 				],
@@ -9635,7 +9774,7 @@
 				"security": [
 					{
 						"jwt": [
-							"permission:wg:socks:clients"
+							"permission:wg:socks:clients:own"
 						]
 					}
 				],

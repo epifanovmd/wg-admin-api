@@ -8,6 +8,8 @@ export interface ICreateWgSocksBody {
   clientPort?: number | null;
   /** CN/SNI серверного сертификата (по умолчанию publicHost ноды). */
   serverName?: string;
+  /** Назначенный владелец; другой пользователь — только с правом назначения. */
+  ownerId?: string | null;
 }
 
 export interface IUpdateWgSocksBody {
@@ -34,4 +36,9 @@ export interface IUpdateWgSocksUserBody {
 
 export interface ICreateWgSocksClientBody {
   name: string;
+}
+
+/** Назначение владельца прокси. */
+export interface IAssignWgSocksBody {
+  userId: string;
 }

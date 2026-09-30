@@ -1,5 +1,6 @@
 export * from "./dto";
 export * from "./events";
+export * from "./wg-socks.access";
 export * from "./wg-socks.controller";
 export * from "./wg-socks.entity";
 export * from "./wg-socks.errors";

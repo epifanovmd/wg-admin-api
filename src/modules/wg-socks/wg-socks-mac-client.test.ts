@@ -130,11 +130,18 @@ describe("WgSocksClientKitService", () => {
     };
   };
 
-  const kit = (service: unknown) =>
-    new WgSocksClientKitService(
+  const admin = { userId: "a1", roles: ["admin"], permissions: ["*"] } as any;
+  const kit = (service: unknown) => {
+    const instance = new WgSocksClientKitService(
       { findWithRelations: async () => service } as any,
       secrets as any,
     );
+
+    return {
+      macClient: (serviceId: string, clientId: string, userId?: string) =>
+        instance.macClient(admin, serviceId, clientId, userId),
+    };
+  };
 
   it("адрес ноды и проверка IP из серверного сертификата; первый включённый пользователь", async () => {
     const { content } = await kit(await makeService()).macClient("s1", "c1");
@@ -174,6 +181,34 @@ describe("WgSocksClientKitService", () => {
       .then(
         () => expect.fail("без адреса выдан"),
         err => expect(err.code).to.equal("WG_SOCKS_NO_CLIENT_HOST"),
+      );
+  });
+
+  it("чужой прокси с областью own — 404, свой без права клиентов — 403", async () => {
+    const service = await makeService({ ownerId: "u9", createdById: null });
+    const instance = new WgSocksClientKitService(
+      { findWithRelations: async () => service } as any,
+      secrets as any,
+    );
+    const own = (permissions: string[]) =>
+      ({ userId: "u1", roles: [], permissions }) as any;
+
+    await instance
+      .macClient(own(["wg:socks:view:own", "wg:socks:clients:own"]), "s1", "c1")
+      .then(
+        () => expect.fail("чужой прокси выдан"),
+        err => expect(err.code).to.equal("WG_SOCKS_NOT_FOUND"),
+      );
+    await new WgSocksClientKitService(
+      {
+        findWithRelations: async () => ({ ...service, ownerId: "u1" }),
+      } as any,
+      secrets as any,
+    )
+      .macClient(own(["wg:socks:view:own"]), "s1", "c1")
+      .then(
+        () => expect.fail("выдан без права клиентов"),
+        err => expect(err.code).to.equal("WG_SOCKS_FORBIDDEN"),
       );
   });
 });

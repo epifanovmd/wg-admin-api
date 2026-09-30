@@ -1,4 +1,5 @@
 import { BaseRepository, InjectableRepository } from "../../core";
+import { WgSocksAccess } from "./wg-socks.access";
 import { WgSocksClient, WgSocksService, WgSocksUser } from "./wg-socks.entity";
 
 @InjectableRepository(WgSocksService)
@@ -10,8 +11,10 @@ export class WgSocksServiceRepository extends BaseRepository<WgSocksService> {
     });
   }
 
-  findAllWithRelations(): Promise<WgSocksService[]> {
+  /** Все прокси; `ownedBy` — только свои (владелец или создатель). */
+  findAllWithRelations(ownedBy?: string): Promise<WgSocksService[]> {
     return this.find({
+      where: ownedBy ? WgSocksAccess.ownedWhere(ownedBy) : {},
       relations: { node: true, users: true, clients: true },
       order: { createdAt: "DESC" },
     });

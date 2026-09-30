@@ -7,13 +7,22 @@ import {
   EventBus,
   Injectable,
   isUniqueViolation,
+  PG_ERROR,
   pgConstraint,
+  pgErrorCode,
 } from "../../core";
+import type { AuthContext } from "../../types/koa";
 import type { IWgRelayConsumer } from "../wg-interface";
 import { WG_RELAY_CONSUMER } from "../wg-interface";
-import { WgNode, WgNodeService, WgSecretBox } from "../wg-node";
+import {
+  WgNode,
+  WgNodePermissions,
+  WgNodeService,
+  WgSecretBox,
+} from "../wg-node";
 import { WgLiveStore } from "../wg-stats";
 import type {
+  IAssignWgSocksBody,
   ICreateWgSocksBody,
   ICreateWgSocksClientBody,
   ICreateWgSocksUserBody,
@@ -28,8 +37,11 @@ import {
   WgSocksStatsEvent,
   WgSocksUpdatedEvent,
 } from "./events";
+import { WgSocksAccess } from "./wg-socks.access";
 import { WgSocksService as WgSocksServiceEntity } from "./wg-socks.entity";
 import { WgSocksError } from "./wg-socks.errors";
+import { findSocksFor } from "./wg-socks.lookup";
+import { WgSocksPermissions } from "./wg-socks.permissions";
 import {
   WgSocksClientRepository,
   WgSocksServiceRepository,
@@ -59,8 +71,11 @@ export interface IWgSocksAgentConfig {
 
 /**
  * Прокси-сервисы: SOCKS5 через mTLS на нодах — сервис, пользователи,
- * клиентские сертификаты. Любое изменение поднимает версию ноды — агент
- * перенастраивает сервер сам. Клиент для устройства — `WgSocksClientKitService`.
+ * клиентские сертификаты — с областью прав «все / свои» (владелец или
+ * создатель): чужой прокси без права на все не раскрывается (404), видимый
+ * без права на действие — 403; нода прокси — только видимая автору. Любое
+ * изменение поднимает версию ноды — агент перенастраивает сервер сам. Клиент
+ * для устройства — `WgSocksClientKitService`.
  */
 @Injectable()
 export class WgSocksAppService {
@@ -82,8 +97,25 @@ export class WgSocksAppService {
   ) {}
 
   /** Новый прокси со своим CA и серверным сертификатом. */
-  async create(body: ICreateWgSocksBody): Promise<WgSocksServiceDto> {
-    const node = await this._nodes.findEntity(body.nodeId);
+  async create(
+    actor: AuthContext,
+    body: ICreateWgSocksBody,
+  ): Promise<WgSocksServiceDto> {
+    const ownerId = body.ownerId ?? null;
+
+    if (
+      ownerId !== null &&
+      ownerId !== actor.userId &&
+      !WgSocksAccess.scope(actor, WgSocksPermissions.SOCKS_ASSIGN)
+    ) {
+      throw WgSocksError.FORBIDDEN();
+    }
+
+    const node = await this._nodes.findFor(
+      actor,
+      body.nodeId,
+      WgNodePermissions.NODE_VIEW,
+    );
 
     await this._assertPortFree(node, body.listenPort, undefined, true);
 
@@ -92,6 +124,8 @@ export class WgSocksAppService {
     const server = await issueCertificate(ca, serverName, "server");
 
     return this._saveNew({
+      ownerId,
+      createdById: actor.userId,
       name: body.name,
       description: body.description ?? null,
       nodeId: node.id,
@@ -106,23 +140,34 @@ export class WgSocksAppService {
     });
   }
 
-  async list(): Promise<WgSocksServiceDto[]> {
+  async list(actor: AuthContext): Promise<WgSocksServiceDto[]> {
+    const filter = WgSocksAccess.filter(actor, WgSocksPermissions.SOCKS_VIEW);
+
+    if (!filter) throw WgSocksError.FORBIDDEN();
+
     return Promise.all(
-      (await this._services.findAllWithRelations()).map(service =>
+      (await this._services.findAllWithRelations(filter.ownedBy)).map(service =>
         this._toDto(service),
       ),
     );
   }
 
-  async get(id: string): Promise<WgSocksServiceDto> {
-    return this._toDto(await this._findOrFail(id));
+  async get(actor: AuthContext, id: string): Promise<WgSocksServiceDto> {
+    return this._toDto(
+      await this._findFor(actor, id, WgSocksPermissions.SOCKS_VIEW),
+    );
   }
 
   async update(
+    actor: AuthContext,
     id: string,
     body: IUpdateWgSocksBody,
   ): Promise<WgSocksServiceDto> {
-    const service = await this._findOrFail(id);
+    const service = await this._findFor(
+      actor,
+      id,
+      WgSocksPermissions.SOCKS_UPDATE,
+    );
 
     if (
       body.listenPort !== undefined &&
@@ -151,21 +196,69 @@ export class WgSocksAppService {
     return this._changed(id);
   }
 
-  async delete(id: string): Promise<void> {
-    const service = await this._findOrFail(id);
+  async delete(actor: AuthContext, id: string): Promise<void> {
+    const service = await this._findFor(
+      actor,
+      id,
+      WgSocksPermissions.SOCKS_DELETE,
+    );
 
     await this._inTxDirty(service.nodeId, manager =>
       manager.getRepository(this._services.target).delete({ id }),
     );
-    this._eventBus.emit(new WgSocksDeletedEvent(id));
+    this._eventBus.emit(
+      new WgSocksDeletedEvent(id, service.ownerId, service.createdById),
+    );
+  }
+
+  /** Назначить владельца прокси. */
+  async assign(
+    actor: AuthContext,
+    id: string,
+    body: IAssignWgSocksBody,
+  ): Promise<WgSocksServiceDto> {
+    const service = await this._findFor(
+      actor,
+      id,
+      WgSocksPermissions.SOCKS_ASSIGN,
+    );
+
+    try {
+      await this._services.update({ id }, { ownerId: body.userId });
+    } catch (err) {
+      if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION) {
+        throw WgSocksError.OWNER_NOT_FOUND();
+      }
+      throw err;
+    }
+
+    return this._changed(id, this._previousOwner(service, body.userId));
+  }
+
+  /** Снять владельца прокси. */
+  async revoke(actor: AuthContext, id: string): Promise<WgSocksServiceDto> {
+    const service = await this._findFor(
+      actor,
+      id,
+      WgSocksPermissions.SOCKS_ASSIGN,
+    );
+
+    await this._services.update({ id }, { ownerId: null });
+
+    return this._changed(id, this._previousOwner(service, null));
   }
 
   /** Пользователь SOCKS5; без пароля — сгенерированный. */
   async addUser(
+    actor: AuthContext,
     serviceId: string,
     body: ICreateWgSocksUserBody,
   ): Promise<IWgSocksUserSecretDto> {
-    const service = await this._findOrFail(serviceId);
+    const service = await this._findFor(
+      actor,
+      serviceId,
+      WgSocksPermissions.SOCKS_USERS,
+    );
 
     if (service.users?.some(user => user.username === body.username)) {
       throw WgSocksError.USERNAME_TAKEN();
@@ -189,11 +282,16 @@ export class WgSocksAppService {
   }
 
   async updateUser(
+    actor: AuthContext,
     serviceId: string,
     userId: string,
     body: IUpdateWgSocksUserBody,
   ): Promise<IWgSocksUserSecretDto> {
-    const service = await this._findOrFail(serviceId);
+    const service = await this._findFor(
+      actor,
+      serviceId,
+      WgSocksPermissions.SOCKS_USERS,
+    );
     const user = service.users?.find(item => item.id === userId);
 
     if (!user) throw WgSocksError.USER_NOT_FOUND();
@@ -219,8 +317,16 @@ export class WgSocksAppService {
     };
   }
 
-  async removeUser(serviceId: string, userId: string): Promise<void> {
-    const service = await this._findOrFail(serviceId);
+  async removeUser(
+    actor: AuthContext,
+    serviceId: string,
+    userId: string,
+  ): Promise<void> {
+    const service = await this._findFor(
+      actor,
+      serviceId,
+      WgSocksPermissions.SOCKS_USERS,
+    );
 
     if (!service.users?.some(user => user.id === userId)) {
       throw WgSocksError.USER_NOT_FOUND();
@@ -232,12 +338,17 @@ export class WgSocksAppService {
     await this._changed(serviceId);
   }
 
-  /** Пароль пользователя для ссылки Telegram (только manage). */
+  /** Пароль пользователя для ссылки Telegram (право secrets). */
   async userSecret(
+    actor: AuthContext,
     serviceId: string,
     userId: string,
   ): Promise<IWgSocksUserSecretDto> {
-    const service = await this._findOrFail(serviceId);
+    const service = await this._findFor(
+      actor,
+      serviceId,
+      WgSocksPermissions.SOCKS_SECRETS,
+    );
     const user = service.users?.find(item => item.id === userId);
 
     if (!user) throw WgSocksError.USER_NOT_FOUND();
@@ -250,10 +361,15 @@ export class WgSocksAppService {
 
   /** Новый клиентский сертификат, подписанный CA прокси. */
   async issueClient(
+    actor: AuthContext,
     serviceId: string,
     body: ICreateWgSocksClientBody,
   ): Promise<WgSocksClientDto> {
-    const service = await this._findOrFail(serviceId);
+    const service = await this._findFor(
+      actor,
+      serviceId,
+      WgSocksPermissions.SOCKS_CLIENTS,
+    );
 
     const issued = await issueCertificate(
       {
@@ -280,10 +396,15 @@ export class WgSocksAppService {
 
   /** Отзыв: агент сразу перестаёт пускать сертификат. */
   async revokeClient(
+    actor: AuthContext,
     serviceId: string,
     clientId: string,
   ): Promise<WgSocksClientDto> {
-    const service = await this._findOrFail(serviceId);
+    const service = await this._findFor(
+      actor,
+      serviceId,
+      WgSocksPermissions.SOCKS_CLIENTS,
+    );
     const client = service.clients?.find(item => item.id === clientId);
 
     if (!client) throw WgSocksError.CLIENT_NOT_FOUND();
@@ -333,14 +454,19 @@ export class WgSocksAppService {
   ): Promise<void> {
     if (stats.length === 0) return;
 
-    const own = new Set(
+    const onNode = new Map(
       (
-        await this._services.find({ where: { nodeId }, select: { id: true } })
-      ).map(service => service.id),
+        await this._services.find({
+          where: { nodeId },
+          select: { id: true, ownerId: true, createdById: true },
+        })
+      ).map(service => [service.id, service]),
     );
 
     for (const stat of stats) {
-      if (!own.has(stat.id)) continue;
+      const service = onNode.get(stat.id);
+
+      if (!service) continue;
 
       const previous = await this._live.getJson<IWgSocksLive>(liveKey(stat.id));
       const live: IWgSocksLive = {
@@ -357,18 +483,43 @@ export class WgSocksAppService {
         previous.rxBytes !== live.rxBytes ||
         previous.txBytes !== live.txBytes
       ) {
-        this._eventBus.emit(new WgSocksStatsEvent(stat.id, live));
+        this._eventBus.emit(
+          new WgSocksStatsEvent(
+            stat.id,
+            live,
+            service.ownerId,
+            service.createdById,
+          ),
+        );
       }
     }
   }
 
   /** Свежая карточка прокси после изменения — в событие и в ответ. */
-  private async _changed(id: string): Promise<WgSocksServiceDto> {
-    const dto = await this.get(id);
+  private async _changed(
+    id: string,
+    previousOwnerId: string | null = null,
+  ): Promise<WgSocksServiceDto> {
+    const dto = await this._toDto(await this._findOrFail(id));
 
-    this._eventBus.emit(new WgSocksUpdatedEvent(dto));
+    this._eventBus.emit(new WgSocksUpdatedEvent(dto, previousOwnerId));
 
     return dto;
+  }
+
+  private _previousOwner(
+    service: WgSocksServiceEntity,
+    ownerId: string | null,
+  ): string | null {
+    return service.ownerId !== ownerId ? service.ownerId : null;
+  }
+
+  private _findFor(
+    actor: AuthContext,
+    id: string,
+    permission: string,
+  ): Promise<WgSocksServiceEntity> {
+    return findSocksFor(this._services, actor, id, permission);
   }
 
   private async _toDto(
@@ -390,6 +541,9 @@ export class WgSocksAppService {
 
       return await this._changed(saved.id);
     } catch (err) {
+      if (pgErrorCode(err) === PG_ERROR.FOREIGN_KEY_VIOLATION && data.ownerId) {
+        throw WgSocksError.OWNER_NOT_FOUND();
+      }
       if (!isUniqueViolation(err)) throw err;
       throw pgConstraint(err) === "IDX_WG_SOCKS_NAME"
         ? WgSocksError.NAME_TAKEN()

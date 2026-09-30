@@ -1,6 +1,13 @@
 import { expect } from "chai";
 
-import { Actor, call, expectStatus, signInAdmin, signUp } from "./client";
+import {
+  Actor,
+  call,
+  expectStatus,
+  signIn,
+  signInAdmin,
+  signUp,
+} from "./client";
 
 const agentState = async (key: string) =>
   expectStatus(
@@ -286,6 +293,77 @@ describe("wireguard: прокси SOCKS5 через mTLS", () => {
 
   it("без права — 403", async () => {
     expectStatus(await call(user, "GET", "/api/v1/wg/socks"), 403);
+  });
+
+  it("область «свои»: прокси только на видимой ноде; чужой — 404, назначенный — свой", async () => {
+    const tenant = await signUp("wg-socks-tenant");
+
+    expectStatus(
+      await call(admin, "PATCH", `/api/v1/user/setPrivileges/${tenant.id}`, {
+        roles: ["user"],
+        permissions: [
+          "wg:node:view:own",
+          "wg:socks:create",
+          "wg:socks:view:own",
+          "wg:socks:users:own",
+        ],
+      }),
+      200,
+    );
+
+    const actor = await signIn(tenant.email, tenant.password);
+
+    expectStatus(
+      await call(actor, "POST", "/api/v1/wg/socks", {
+        name: "tenant-proxy",
+        nodeId: node.id,
+        listenPort: 8450,
+      }),
+      404,
+      "WG_NODE_NOT_FOUND",
+    );
+    expectStatus(await call(actor, "GET", "/api/v1/wg/socks"), 200);
+    expectStatus(
+      await call(actor, "GET", `/api/v1/wg/socks/${service.id}`),
+      404,
+      "WG_SOCKS_NOT_FOUND",
+    );
+
+    const assigned = expectStatus(
+      await call(admin, "POST", `/api/v1/wg/socks/${service.id}/assign`, {
+        userId: tenant.id,
+      }),
+      200,
+    );
+
+    expect(assigned.data.ownerId).to.equal(tenant.id);
+
+    const list = expectStatus(
+      await call(actor, "GET", "/api/v1/wg/socks"),
+      200,
+    );
+
+    expect(list.data.map((s: any) => s.id)).to.deep.equal([service.id]);
+    // Свой, но без права на пароли — 403.
+    expectStatus(
+      await call(
+        actor,
+        "GET",
+        `/api/v1/wg/socks/${service.id}/users/${socksUser.id}/secret`,
+      ),
+      403,
+    );
+
+    const revoked = expectStatus(
+      await call(admin, "POST", `/api/v1/wg/socks/${service.id}/revoke`),
+      200,
+    );
+
+    expect(revoked.data.ownerId).to.equal(null);
+    expectStatus(
+      await call(actor, "GET", `/api/v1/wg/socks/${service.id}`),
+      404,
+    );
   });
 
   it("удаление пользователя и прокси; нода освобождается", async () => {

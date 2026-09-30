@@ -994,6 +994,8 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "id": {"dataType":"string","required":true},
+            "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
+            "createdById": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "name": {"dataType":"string","required":true},
             "description": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},
             "nodeId": {"dataType":"string","required":true},
@@ -1023,6 +1025,7 @@ const models: TsoaRoute.Models = {
             "clientHost": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
             "clientPort": {"dataType":"union","subSchemas":[{"dataType":"double"},{"dataType":"enum","enums":[null]}]},
             "serverName": {"dataType":"string"},
+            "ownerId": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
         },
         "additionalProperties": false,
     },
@@ -1036,6 +1039,14 @@ const models: TsoaRoute.Models = {
             "clientHost": {"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}]},
             "clientPort": {"dataType":"union","subSchemas":[{"dataType":"double"},{"dataType":"enum","enums":[null]}]},
             "enabled": {"dataType":"boolean"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "IAssignWgSocksBody": {
+        "dataType": "refObject",
+        "properties": {
+            "userId": {"dataType":"string","required":true},
         },
         "additionalProperties": false,
     },
@@ -4503,6 +4514,7 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_createWgSocks: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 body: {"in":"body","name":"body","required":true,"ref":"ICreateWgSocksBody"},
         };
         router.post('/api/v1/wg/socks',
@@ -4539,9 +4551,10 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_listWgSocks: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
         };
         router.get('/api/v1/wg/socks',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.listWgSocks)),
 
@@ -4574,10 +4587,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_getWgSocks: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/socks/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:view"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:view:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.getWgSocks)),
 
@@ -4610,11 +4624,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_updateWgSocks: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"IUpdateWgSocksBody"},
         };
         router.patch('/api/v1/wg/socks/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:update"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:update:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.updateWgSocks)),
 
@@ -4647,10 +4662,11 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_deleteWgSocks: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
         };
         router.delete('/api/v1/wg/socks/:id',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:delete"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:delete:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.deleteWgSocks)),
 
@@ -4682,12 +4698,88 @@ export function RegisterRoutes(router: KoaRouter) {
             });
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWgSocksController_assignWgSocks: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                id: {"in":"path","name":"id","required":true,"ref":"UUID"},
+                body: {"in":"body","name":"body","required":true,"ref":"IAssignWgSocksBody"},
+        };
+        router.post('/api/v1/wg/socks/:id/assign',
+            authenticateMiddleware([{"jwt":["permission:wg:socks:assign:own"]}]),
+            ...(fetchMiddlewares<Middleware>(WgSocksController)),
+            ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.assignWgSocks)),
+
+            async function WgSocksController_assignWgSocks(context: Context, next: Next) {
+
+            let validatedArgs: any[] = [];
+            try {
+              validatedArgs = templateService.getValidatedArgs({ args: argsWgSocksController_assignWgSocks, context, next });
+            } catch (err) {
+              const error = err as any;
+              error.message ||= JSON.stringify({ fields: error.fields });
+              context.status = error.status;
+              context.throw(context.status, error.message, error);
+            }
+
+            const container: IocContainer = typeof iocContainer === 'function' ? (iocContainer as IocContainerFactory)(context.request) : iocContainer;
+
+            const controller: any = await container.get<WgSocksController>(WgSocksController);
+            if (typeof controller['setStatus'] === 'function') {
+                controller.setStatus(undefined);
+            }
+
+            return templateService.apiHandler({
+              methodName: 'assignWgSocks',
+              controller,
+              context,
+              validatedArgs,
+              successStatus: undefined,
+            });
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWgSocksController_revokeWgSocks: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
+                id: {"in":"path","name":"id","required":true,"ref":"UUID"},
+        };
+        router.post('/api/v1/wg/socks/:id/revoke',
+            authenticateMiddleware([{"jwt":["permission:wg:socks:assign:own"]}]),
+            ...(fetchMiddlewares<Middleware>(WgSocksController)),
+            ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.revokeWgSocks)),
+
+            async function WgSocksController_revokeWgSocks(context: Context, next: Next) {
+
+            let validatedArgs: any[] = [];
+            try {
+              validatedArgs = templateService.getValidatedArgs({ args: argsWgSocksController_revokeWgSocks, context, next });
+            } catch (err) {
+              const error = err as any;
+              error.message ||= JSON.stringify({ fields: error.fields });
+              context.status = error.status;
+              context.throw(context.status, error.message, error);
+            }
+
+            const container: IocContainer = typeof iocContainer === 'function' ? (iocContainer as IocContainerFactory)(context.request) : iocContainer;
+
+            const controller: any = await container.get<WgSocksController>(WgSocksController);
+            if (typeof controller['setStatus'] === 'function') {
+                controller.setStatus(undefined);
+            }
+
+            return templateService.apiHandler({
+              methodName: 'revokeWgSocks',
+              controller,
+              context,
+              validatedArgs,
+              successStatus: undefined,
+            });
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_addWgSocksUser: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"ICreateWgSocksUserBody"},
         };
         router.post('/api/v1/wg/socks/:id/users',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:users"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:users:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.addWgSocksUser)),
 
@@ -4720,12 +4812,13 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_updateWgSocksUser: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 userId: {"in":"path","name":"userId","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"IUpdateWgSocksUserBody"},
         };
         router.patch('/api/v1/wg/socks/:id/users/:userId',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:users"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:users:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.updateWgSocksUser)),
 
@@ -4758,11 +4851,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_removeWgSocksUser: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 userId: {"in":"path","name":"userId","required":true,"ref":"UUID"},
         };
         router.delete('/api/v1/wg/socks/:id/users/:userId',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:users"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:users:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.removeWgSocksUser)),
 
@@ -4795,11 +4889,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_getWgSocksUserSecret: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 userId: {"in":"path","name":"userId","required":true,"ref":"UUID"},
         };
         router.get('/api/v1/wg/socks/:id/users/:userId/secret',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:secrets"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:secrets:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.getWgSocksUserSecret)),
 
@@ -4832,11 +4927,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_issueWgSocksClient: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 body: {"in":"body","name":"body","required":true,"ref":"ICreateWgSocksClientBody"},
         };
         router.post('/api/v1/wg/socks/:id/clients',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:clients"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:clients:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.issueWgSocksClient)),
 
@@ -4869,11 +4965,12 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_revokeWgSocksClient: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 clientId: {"in":"path","name":"clientId","required":true,"ref":"UUID"},
         };
         router.post('/api/v1/wg/socks/:id/clients/:clientId/revoke',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:clients"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:clients:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.revokeWgSocksClient)),
 
@@ -4906,12 +5003,13 @@ export function RegisterRoutes(router: KoaRouter) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsWgSocksController_getWgSocksMacClient: Record<string, TsoaRoute.ParameterSchema> = {
+                req: {"in":"request","name":"req","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"ref":"UUID"},
                 clientId: {"in":"path","name":"clientId","required":true,"ref":"UUID"},
                 userId: {"in":"query","name":"userId","ref":"UUID"},
         };
         router.get('/api/v1/wg/socks/:id/clients/:clientId/mac',
-            authenticateMiddleware([{"jwt":["permission:wg:socks:clients"]}]),
+            authenticateMiddleware([{"jwt":["permission:wg:socks:clients:own"]}]),
             ...(fetchMiddlewares<Middleware>(WgSocksController)),
             ...(fetchMiddlewares<Middleware>(WgSocksController.prototype.getWgSocksMacClient)),
 

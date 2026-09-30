@@ -55,6 +55,10 @@ export class WgSocksClientDto extends BaseDto {
 
 export class WgSocksServiceDto extends BaseDto {
   id: string;
+  /** Назначенный владелец прокси. */
+  ownerId: string | null;
+  /** Создатель прокси. */
+  createdById: string | null;
   name: string;
   description: string | null;
   nodeId: string;
@@ -75,6 +79,8 @@ export class WgSocksServiceDto extends BaseDto {
   constructor(entity: WgSocksService, live: IWgSocksLive | null = null) {
     super(entity);
     this.id = entity.id;
+    this.ownerId = entity.ownerId;
+    this.createdById = entity.createdById;
     this.name = entity.name;
     this.description = entity.description;
     this.nodeId = entity.nodeId;

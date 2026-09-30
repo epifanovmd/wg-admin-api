@@ -37,6 +37,7 @@ export const CreateWgSocksSchema = z.object({
   clientHost,
   clientPort,
   serverName: wgHostSchema.optional(),
+  ownerId: z.uuid().nullable().optional(),
 });
 
 export const UpdateWgSocksSchema = z
@@ -64,3 +65,7 @@ export const UpdateWgSocksUserSchema = z
   });
 
 export const CreateWgSocksClientSchema = z.object({ name });
+
+export const AssignWgSocksSchema = z.object({
+  userId: z.uuid(),
+});
