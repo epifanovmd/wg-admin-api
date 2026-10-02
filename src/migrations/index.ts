@@ -23,6 +23,7 @@ import { InterfaceOwnership1790761119419 } from "./1790761119419-InterfaceOwners
 import { EndpointOwnership1790761514632 } from "./1790761514632-EndpointOwnership";
 import { ForwardOwnership1790761799602 } from "./1790761799602-ForwardOwnership";
 import { SocksOwnership1790762066727 } from "./1790762066727-SocksOwnership";
+import { AddBiometric1790934167120 } from "./1790934167120-AddBiometric";
 
 /**
  * Миграции в порядке применения. Новая миграция: `yarn migration:generate
@@ -55,4 +56,5 @@ export const migrations: Function[] = [
   EndpointOwnership1790761514632,
   ForwardOwnership1790761799602,
   SocksOwnership1790762066727,
+  AddBiometric1790934167120,
 ];

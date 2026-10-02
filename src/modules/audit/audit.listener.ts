@@ -10,6 +10,7 @@ import {
   UserLoggedInEvent,
   UserSignedOutEvent,
 } from "../auth";
+import { BiometricAddedEvent, BiometricRemovedEvent } from "../biometric";
 import { PasskeyAddedEvent, PasskeyRemovedEvent } from "../passkeys";
 import { SessionTerminatedEvent, TSessionEndReason } from "../session";
 import { ISocketEventListener } from "../socket";
@@ -129,6 +130,23 @@ export class AuditListener implements ISocketEventListener {
         type: AuditEventType.PASSKEY_REMOVED,
         actorId: e.userId,
         subjectId: e.passkeyId,
+      }),
+    );
+
+    on(BiometricAddedEvent, e =>
+      this._audit.record({
+        type: AuditEventType.BIOMETRIC_ADDED,
+        actorId: e.userId,
+        subjectId: e.deviceId,
+        meta: { deviceName: e.deviceName },
+      }),
+    );
+
+    on(BiometricRemovedEvent, e =>
+      this._audit.record({
+        type: AuditEventType.BIOMETRIC_REMOVED,
+        actorId: e.userId,
+        subjectId: e.deviceId,
       }),
     );
 

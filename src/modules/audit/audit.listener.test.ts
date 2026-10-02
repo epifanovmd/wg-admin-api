@@ -11,6 +11,7 @@ import {
   UserLoggedInEvent,
   UserSignedOutEvent,
 } from "../auth";
+import { BiometricRemovedEvent } from "../biometric";
 import { PasskeyAddedEvent } from "../passkeys";
 import { SessionTerminatedEvent } from "../session";
 import { PasswordChangedEvent } from "../user";
@@ -72,12 +73,13 @@ describe("AuditListener", () => {
     });
   });
 
-  it("records 2FA, password, sign-out and passkey changes", async () => {
+  it("records 2FA, password, sign-out, passkey and biometric changes", async () => {
     await fire(new TwoFactorEnabledEvent("u1"));
     await fire(new PasswordChangedEvent("u1", "reset"));
     await fire(new PasswordChangedEvent("u1", "change", "s1"));
     await fire(new UserSignedOutEvent("u1", "s1", "all"));
     await fire(new PasskeyAddedEvent("u1", "cred"));
+    await fire(new BiometricRemovedEvent("u1", "dev"));
 
     expect(record.args.map(([entry]) => entry.type)).to.deep.equal([
       "auth.2fa.enabled",
@@ -85,6 +87,7 @@ describe("AuditListener", () => {
       "auth.password.changed",
       "auth.signed-out-all",
       "passkey.added",
+      "biometric.removed",
     ]);
   });
 

@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { generateKeyPairSync, sign } from "crypto";
 
 import {
   Actor,
@@ -112,6 +113,85 @@ describe("платформа", () => {
           return ["failed", "cancelled"].includes(res.data?.status);
         },
         { what: "задача завершена" },
+      );
+    });
+  });
+
+  describe("биометрия", () => {
+    it("биометрия: вход по подписи, nonce одноразовый", async () => {
+      const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+      });
+      const spki = publicKey
+        .export({ type: "spki", format: "der" })
+        .toString("base64");
+      const signNonce = (nonce: string) =>
+        sign("sha256", Buffer.from(nonce), privateKey).toString("base64");
+
+      expectStatus(
+        await call(bob, "POST", "/api/v1/biometric/register", {
+          deviceId: "iphone-15",
+          deviceName: "iPhone Bob",
+          publicKey: spki,
+        }),
+        200,
+      );
+      expectStatus(
+        await call(bob, "POST", "/api/v1/biometric/register", {
+          deviceId: "",
+          deviceName: "x".repeat(200),
+          publicKey: "",
+        }),
+        400,
+      );
+      expectStatus(await call(bob, "GET", "/api/v1/biometric/devices"), 200);
+
+      const nonce = (
+        await call(null, "POST", "/api/v1/biometric/generate-nonce", {
+          userId: bob.id,
+          deviceId: "iphone-15",
+        })
+      ).data.nonce;
+
+      expectStatus(
+        await call(null, "POST", "/api/v1/biometric/verify-signature", {
+          userId: bob.id,
+          deviceId: "iphone-15",
+          nonce,
+          signature: "AAAA",
+        }),
+        401,
+      );
+
+      const fresh = (
+        await call(null, "POST", "/api/v1/biometric/generate-nonce", {
+          userId: bob.id,
+          deviceId: "iphone-15",
+        })
+      ).data.nonce;
+      const login = expectStatus(
+        await call(null, "POST", "/api/v1/biometric/verify-signature", {
+          userId: bob.id,
+          deviceId: "iphone-15",
+          nonce: fresh,
+          signature: signNonce(fresh),
+        }),
+        200,
+      );
+
+      expect((login.data.tokens ?? login.data).accessToken).to.be.a("string");
+      expectStatus(
+        await call(null, "POST", "/api/v1/biometric/verify-signature", {
+          userId: bob.id,
+          deviceId: "iphone-15",
+          nonce: fresh,
+          signature: signNonce(fresh),
+        }),
+        401,
+      );
+      expectStatus(
+        await call(bob, "DELETE", "/api/v1/biometric/iphone-15"),
+        204,
       );
     });
   });

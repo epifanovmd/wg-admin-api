@@ -5,6 +5,7 @@ import { ApiKeyModule } from "./modules/api-key";
 import { AppInfoModule } from "./modules/app-info";
 import { AuditModule } from "./modules/audit";
 import { AuthModule } from "./modules/auth";
+import { BiometricModule } from "./modules/biometric";
 import { JobsModule } from "./modules/jobs";
 import { MailerModule } from "./modules/mailer";
 import { OtpModule } from "./modules/otp";
@@ -47,6 +48,7 @@ import { WgStatsModule } from "./modules/wg-stats";
     ApiKeyModule,
     AuditModule,
     PasskeysModule,
+    BiometricModule,
 
     // Модули проекта
     WgNodeModule,

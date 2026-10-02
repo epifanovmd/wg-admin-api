@@ -1,7 +1,7 @@
 # Модуль Audit
 
 Журнал событий безопасности: входы (успешные и неудачные), блокировки, 2FA, смена
-и сброс пароля, завершение сессий, выход, passkeys, выпуск и отзыв API-ключей. Пользователь видит
+и сброс пароля, завершение сессий, выход, passkeys и биометрия, выпуск и отзыв API-ключей. Пользователь видит
 свой журнал, администратор с правом `audit:view` — все события.
 
 ## Структура файлов
@@ -33,7 +33,7 @@ src/modules/audit/
 | `id`        | `uuid` (PK)              |                                                      |
 | `type`      | `varchar(64)`            | `AuditEventType`, например `auth.login.failed`       |
 | `actorId`   | `uuid`, nullable         | Чей журнал: кто действовал или чей аккаунт атакован  |
-| `subjectId` | `varchar(255)`, nullable | Объект: сессия, passkey, API-ключ                    |
+| `subjectId` | `varchar(255)`, nullable | Объект: сессия, passkey, устройство, API-ключ        |
 | `ip`        | `varchar(45)`, nullable  |                                                      |
 | `userAgent` | `varchar(500)`, nullable |                                                      |
 | `meta`      | `jsonb`                  | Подробности: `method`, `reason`, `login`, `until`, … |
@@ -54,18 +54,19 @@ src/modules/audit/
 
 ## События → записи (`AuditListener`)
 
-| Событие (модуль)                        | Тип записи                                                      |
-| --------------------------------------- | --------------------------------------------------------------- |
-| `UserLoggedInEvent` (auth)              | `auth.login.succeeded` (`meta.method`)                          |
-| `LoginFailedEvent` (auth)               | `auth.login.failed` (`meta.login`, `reason`)                    |
-| `AccountLockedEvent` (auth)             | `auth.account.locked` (`meta.until`)                            |
-| `TwoFactorEnabled/DisabledEvent` (auth) | `auth.2fa.enabled` / `auth.2fa.disabled`                        |
-| `PasswordChangedEvent` (user)           | `auth.password.changed` / `auth.password.reset`                 |
-| `UserSignedOutEvent` (auth)             | `auth.signed-out` / `auth.signed-out-all`                       |
-| `SessionTerminatedEvent` (session)      | `session.terminated` (`meta.reason`; кроме завершений выходом)  |
-| `PasskeyAdded/RemovedEvent` (passkeys)  | `passkey.added` / `passkey.removed`                             |
-| `ApiKeyCreatedEvent` (api-key)          | `api-key.created` (`actorId` — владелец, `meta.name`, `scopes`) |
-| `ApiKeyRevokedEvent` (api-key)          | `api-key.revoked` (`actorId` — кто отозвал)                     |
+| Событие (модуль)                          | Тип записи                                                      |
+| ----------------------------------------- | --------------------------------------------------------------- |
+| `UserLoggedInEvent` (auth)                | `auth.login.succeeded` (`meta.method`)                          |
+| `LoginFailedEvent` (auth)                 | `auth.login.failed` (`meta.login`, `reason`)                    |
+| `AccountLockedEvent` (auth)               | `auth.account.locked` (`meta.until`)                            |
+| `TwoFactorEnabled/DisabledEvent` (auth)   | `auth.2fa.enabled` / `auth.2fa.disabled`                        |
+| `PasswordChangedEvent` (user)             | `auth.password.changed` / `auth.password.reset`                 |
+| `UserSignedOutEvent` (auth)               | `auth.signed-out` / `auth.signed-out-all`                       |
+| `SessionTerminatedEvent` (session)        | `session.terminated` (`meta.reason`; кроме завершений выходом)  |
+| `PasskeyAdded/RemovedEvent` (passkeys)    | `passkey.added` / `passkey.removed`                             |
+| `BiometricAdded/RemovedEvent` (biometric) | `biometric.added` / `biometric.removed`                         |
+| `ApiKeyCreatedEvent` (api-key)            | `api-key.created` (`actorId` — владелец, `meta.name`, `scopes`) |
+| `ApiKeyRevokedEvent` (api-key)            | `api-key.revoked` (`actorId` — кто отозвал)                     |
 
 **Запись напрямую, не через очередь.** `EventBus.emit` не ждёт асинхронных
 обработчиков, поэтому запрос не тормозит; запись — один `INSERT`, а постановка в

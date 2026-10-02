@@ -1,6 +1,6 @@
 # Модуль авторизации (Auth)
 
-Регистрация, вход (пароль, 2FA; passkey — через `completeLogin`),
+Регистрация, вход (пароль, 2FA; passkey и биометрия — через `completeLogin`),
 защита входа (блокировка аккаунта, политика пароля), сброс пароля, обновление
 токенов, выход и refresh-cookie. Собственных сущностей нет: пользователи — через
 `UserService`, сессии — через `SessionService`, токены сброса — через
@@ -92,7 +92,7 @@ IP: 429 `AUTH_ACCOUNT_LOCKED`, `details.retryAfter` (с) и заголовок `
 пользователя, включая текущую. Оба чистят cookie и публикуют `UserSignedOutEvent`.
 
 **Refresh-cookie** (`AUTH_REFRESH_COOKIE=true`): `sign-up`, `sign-in`, `verify-2fa`,
-`refresh`, вход по passkey ставят `refresh_token` — `HttpOnly`,
+`refresh`, вход по passkey и биометрии ставят `refresh_token` — `HttpOnly`,
 `Secure` в production, `SameSite=Strict`, `Path=/api/v1/auth`, срок —
 `JWT_REFRESH_TTL_DAYS`. Токен остаётся и в теле ответа. В production за прокси нужен
 `TRUST_PROXY`, иначе Koa не отправит Secure-cookie.
@@ -104,15 +104,15 @@ IP: 429 `AUTH_ACCOUNT_LOCKED`, `details.retryAfter` (с) и заголовок `
 
 ## События
 
-| Событие                  | Когда                                                                                        | Слушатели                                    |
-| ------------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `UserLoggedInEvent`      | вход любым способом (`method`: password, 2fa, passkey, sign-up), `request` { ip, userAgent } | `session:new` (socket), аудит                |
-| `LoginFailedEvent`       | неверный пароль / 2FA, попытка при блокировке                                                | аудит                                        |
-| `AccountLockedEvent`     | аккаунт заблокирован                                                                         | аудит                                        |
-| `UserSignedOutEvent`     | `sign-out` (`scope: current`) / `sign-out-all` (`all`)                                       | аудит                                        |
-| `TwoFactorEnabledEvent`  | включение 2FA                                                                                | `auth:2fa-changed { enabled: true }`, аудит  |
-| `TwoFactorDisabledEvent` | отключение 2FA                                                                               | `auth:2fa-changed { enabled: false }`, аудит |
-| `PasswordChangedEvent`   | сброс пароля (класс модуля user)                                                             | session, user, аудит                         |
+| Событие                  | Когда                                                                                                   | Слушатели                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `UserLoggedInEvent`      | вход любым способом (`method`: password, 2fa, passkey, biometric, sign-up), `request` { ip, userAgent } | `session:new` (socket), аудит                |
+| `LoginFailedEvent`       | неверный пароль / 2FA, попытка при блокировке                                                           | аудит                                        |
+| `AccountLockedEvent`     | аккаунт заблокирован                                                                                    | аудит                                        |
+| `UserSignedOutEvent`     | `sign-out` (`scope: current`) / `sign-out-all` (`all`)                                                  | аудит                                        |
+| `TwoFactorEnabledEvent`  | включение 2FA                                                                                           | `auth:2fa-changed { enabled: true }`, аудит  |
+| `TwoFactorDisabledEvent` | отключение 2FA                                                                                          | `auth:2fa-changed { enabled: false }`, аудит |
+| `PasswordChangedEvent`   | сброс пароля (класс модуля user)                                                                        | session, user, аудит                         |
 
 ## Ошибки (`AUTH_*`)
 

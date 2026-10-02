@@ -12,6 +12,8 @@ export const AuditEventType = {
   SESSION_TERMINATED: "session.terminated",
   PASSKEY_ADDED: "passkey.added",
   PASSKEY_REMOVED: "passkey.removed",
+  BIOMETRIC_ADDED: "biometric.added",
+  BIOMETRIC_REMOVED: "biometric.removed",
   API_KEY_CREATED: "api-key.created",
   API_KEY_REVOKED: "api-key.revoked",
 } as const;

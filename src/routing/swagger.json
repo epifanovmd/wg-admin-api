@@ -5497,6 +5497,156 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"IRegisterBiometricResponseDto": {
+				"properties": {
+					"registered": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"registered"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IRegisterBiometricRequestDto": {
+				"properties": {
+					"deviceId": {
+						"type": "string"
+					},
+					"deviceName": {
+						"type": "string"
+					},
+					"publicKey": {
+						"type": "string",
+						"description": "Публичный ключ устройства (SPKI DER в base64)"
+					}
+				},
+				"required": [
+					"deviceId",
+					"deviceName",
+					"publicKey"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IGenerateNonceResponseDto": {
+				"properties": {
+					"nonce": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"nonce"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IGenerateNonceRequestDto": {
+				"properties": {
+					"userId": {
+						"type": "string"
+					},
+					"deviceId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"userId",
+					"deviceId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IVerifyBiometricSignatureResponseDto": {
+				"properties": {
+					"verified": {
+						"type": "boolean"
+					},
+					"tokens": {
+						"$ref": "#/components/schemas/ITokensDto"
+					}
+				},
+				"required": [
+					"verified",
+					"tokens"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IVerifyBiometricSignatureRequestDto": {
+				"properties": {
+					"userId": {
+						"type": "string"
+					},
+					"deviceId": {
+						"type": "string"
+					},
+					"nonce": {
+						"type": "string",
+						"description": "Nonce, выданный generate-nonce"
+					},
+					"signature": {
+						"type": "string",
+						"description": "Подпись nonce приватным ключом устройства (RSA-SHA256, base64)"
+					}
+				},
+				"required": [
+					"userId",
+					"deviceId",
+					"nonce",
+					"signature"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IBiometricDeviceDto": {
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"deviceId": {
+						"type": "string"
+					},
+					"deviceName": {
+						"type": "string",
+						"nullable": true
+					},
+					"lastUsedAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"deviceId",
+					"deviceName",
+					"lastUsedAt",
+					"createdAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IBiometricDevicesResponseDto": {
+				"properties": {
+					"devices": {
+						"items": {
+							"$ref": "#/components/schemas/IBiometricDeviceDto"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"devices"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"Record_string.unknown_": {
 				"properties": {},
 				"additionalProperties": {},
@@ -12956,6 +13106,220 @@
 						}
 					}
 				}
+			}
+		},
+		"/api/v1/biometric/register": {
+			"post": {
+				"operationId": "RegisterBiometric",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IRegisterBiometricResponseDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Регистрирует публичный ключ устройства для входа по биометрии.",
+				"summary": "Регистрация биометрии",
+				"tags": [
+					"Biometric"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IRegisterBiometricRequestDto"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/biometric/generate-nonce": {
+			"post": {
+				"operationId": "GenerateNonce",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IGenerateNonceResponseDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Выдаёт одноразовый nonce (5 минут), который устройство подписывает своим\nключом. Публичный: вызывается до входа.",
+				"summary": "Nonce для биометрического входа",
+				"tags": [
+					"Biometric"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IGenerateNonceRequestDto"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/biometric/verify-signature": {
+			"post": {
+				"operationId": "VerifySignature",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IVerifyBiometricSignatureResponseDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Проверяет подпись nonce и открывает новую сессию. Публичный; nonce\nодноразовый — одна попытка на nonce.",
+				"summary": "Вход по биометрии",
+				"tags": [
+					"Biometric"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IVerifyBiometricSignatureRequestDto"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/biometric/devices": {
+			"get": {
+				"operationId": "GetDevices",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IBiometricDevicesResponseDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Список зарегистрированных устройств пользователя.",
+				"summary": "Мои биометрические устройства",
+				"tags": [
+					"Biometric"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			}
+		},
+		"/api/v1/biometric/{deviceId}": {
+			"delete": {
+				"operationId": "DeleteDevice",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Удаляет зарегистрированное устройство.",
+				"summary": "Удаление биометрического устройства",
+				"tags": [
+					"Biometric"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "deviceId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
 			}
 		},
 		"/api/v1/audit/my": {
