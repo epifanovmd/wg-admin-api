@@ -23,3 +23,17 @@ rtt min/avg/max/mdev = 41.120/42.515/43.910/1.395 ms
 		t.Fatal("нет статистики — nil")
 	}
 }
+
+func TestPingArgs(t *testing.T) {
+	// Связность нод — 10 пакетов: одна потеря в пробе — 10%, а не 33%.
+	nodes := pingArgs(nodePackets, "198.51.100.10")
+	if nodes[3] != "10" || nodes[len(nodes)-1] != "198.51.100.10" {
+		t.Fatalf("nodes: %v", nodes)
+	}
+
+	// Туннели и реплики — по-прежнему 3: проба каждые 10 с.
+	tunnel := pingArgs(quickPackets, "-I", "wgt1", "10.255.0.2")
+	if tunnel[3] != "3" || tunnel[len(tunnel)-3] != "-I" {
+		t.Fatalf("tunnel: %v", tunnel)
+	}
+}

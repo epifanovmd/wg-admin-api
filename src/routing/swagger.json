@@ -2320,14 +2320,22 @@
 					"rttMs": {
 						"type": "number",
 						"format": "double",
-						"nullable": true
+						"nullable": true,
+						"description": "RTT последней пробы, мс; null — последняя проба без ответа."
 					},
 					"lossPercent": {
 						"type": "number",
-						"format": "double"
+						"format": "double",
+						"description": "Потери, %: среднее за окно проб (5 минут)."
+					},
+					"samples": {
+						"type": "number",
+						"format": "double",
+						"description": "Сколько проб в окне легло в среднее."
 					},
 					"ts": {
-						"type": "string"
+						"type": "string",
+						"description": "Время последней пробы."
 					}
 				},
 				"required": [
@@ -2335,6 +2343,7 @@
 					"toNodeId",
 					"rttMs",
 					"lossPercent",
+					"samples",
 					"ts"
 				],
 				"type": "object",

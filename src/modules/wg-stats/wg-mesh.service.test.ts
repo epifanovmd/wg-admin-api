@@ -61,6 +61,70 @@ describe("WgMeshService", () => {
     });
   });
 
+  /**
+   * Проба — несколько пакетов раз в минуту: одна потеря в ней — десятки
+   * процентов. По одной пробе пара мигала «потерями» на каждом случайном
+   * пакете, поэтому потери — среднее за окно.
+   */
+  it("потери — среднее за окно проб, RTT — по последней", async () => {
+    const clock = sinon.useFakeTimers(new Date("2026-10-04T12:00:00Z"));
+
+    try {
+      for (const lossPercent of [0, 0, 0, 30]) {
+        await service.recordProbes(a, [
+          { nodeId: b, rttMs: 50 + lossPercent, lossPercent },
+        ]);
+        clock.tick(60_000);
+      }
+
+      const [cell] = (await service.matrix()).cells;
+
+      expect(cell).to.include({ rttMs: 80, lossPercent: 7.5, samples: 4 });
+    } finally {
+      clock.restore();
+    }
+  });
+
+  it("пробы старше окна в среднее не идут", async () => {
+    const clock = sinon.useFakeTimers(new Date("2026-10-04T12:00:00Z"));
+
+    try {
+      await service.recordProbes(a, [
+        { nodeId: b, rttMs: 50, lossPercent: 100 },
+      ]);
+      clock.tick(6 * 60_000);
+      await service.recordProbes(a, [{ nodeId: b, rttMs: 50, lossPercent: 0 }]);
+
+      const [cell] = (await service.matrix()).cells;
+
+      expect(cell).to.include({ lossPercent: 0, samples: 1 });
+    } finally {
+      clock.restore();
+    }
+  });
+
+  it("недоступность видна сразу: RTT последней пробы нет — нет и у ячейки", async () => {
+    await service.recordProbes(a, [{ nodeId: b, rttMs: 50, lossPercent: 0 }]);
+    await service.recordProbes(a, [
+      { nodeId: b, rttMs: null, lossPercent: 100 },
+    ]);
+
+    const [cell] = (await service.matrix()).cells;
+
+    expect(cell).to.include({ rttMs: null, lossPercent: 50, samples: 2 });
+  });
+
+  it("читает запись прежнего формата — одна проба без истории", async () => {
+    store.set(`mesh:${a}`, {
+      ts: "2026-10-04T12:00:00.000Z",
+      probes: { [b]: { rttMs: 40, lossPercent: 33.3 } },
+    });
+
+    const [cell] = (await service.matrix()).cells;
+
+    expect(cell).to.include({ rttMs: 40, lossPercent: 33.3, samples: 1 });
+  });
+
   it("цели проверки для ноды — остальные ноды с publicHost", async () => {
     expect(await service.probeTargetsFor(a)).to.deep.equal([
       { nodeId: b, host: "198.51.100.10" },

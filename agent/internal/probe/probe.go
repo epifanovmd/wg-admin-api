@@ -15,6 +15,14 @@ import (
 
 const pingTimeout = 8 * time.Second
 
+const (
+	// quickPackets — туннели и реплики: проба каждые 10 с, важен быстрый ответ.
+	quickPackets = 3
+	// nodePackets — связность нод: проба раз в минуту, и одна потеря из трёх
+	// пакетов давала 33% — пара мигала «потерями» на каждом случайном пакете.
+	nodePackets = 10
+)
+
 var (
 	lossPattern = regexp.MustCompile(`([\d.]+)% packet loss`)
 	rttPattern  = regexp.MustCompile(`= [\d.]+/([\d.]+)/`)
@@ -47,9 +55,15 @@ func ParsePing(output string) *Ping {
 	return result
 }
 
-func ping(args ...string) *Ping {
-	base := []string{"-n", "-q", "-c", "3", "-i", "0.2", "-W", "1"}
-	result := shell.Exec(pingTimeout, "ping", append(base, args...)...)
+// pingArgs — аргументы `ping`: count пакетов с шагом 0,2 с, ожидание ответа 1 с.
+func pingArgs(count int, args ...string) []string {
+	base := []string{"-n", "-q", "-c", strconv.Itoa(count), "-i", "0.2", "-W", "1"}
+
+	return append(base, args...)
+}
+
+func ping(count int, args ...string) *Ping {
+	result := shell.Exec(pingTimeout, "ping", pingArgs(count, args...)...)
 
 	return ParsePing(result.Stdout + "\n" + result.Stderr)
 }
@@ -67,7 +81,7 @@ func Tunnels(tunnels []protocol.Tunnel) []protocol.TunnelProbe {
 		go func(i int, tunnel protocol.Tunnel) {
 			defer wg.Done()
 
-			parsed := ping("-I", tunnel.Name, tunnel.RemoteTunnelIP)
+			parsed := ping(quickPackets, "-I", tunnel.Name, tunnel.RemoteTunnelIP)
 			if parsed == nil {
 				return
 			}
@@ -75,7 +89,7 @@ func Tunnels(tunnels []protocol.Tunnel) []protocol.TunnelProbe {
 			probe := &protocol.TunnelProbe{Name: tunnel.Name, RttMs: parsed.RttMs, LossPercent: parsed.LossPercent}
 
 			if parsed.LossPercent < 100 {
-				mtu := ping("-M", "do", "-s", strconv.Itoa(tunnel.MTU-28), "-I", tunnel.Name, tunnel.RemoteTunnelIP)
+				mtu := ping(quickPackets, "-M", "do", "-s", strconv.Itoa(tunnel.MTU-28), "-I", tunnel.Name, tunnel.RemoteTunnelIP)
 				ok := mtu != nil && mtu.LossPercent < 100
 				probe.MtuOk = &ok
 			}
@@ -95,8 +109,13 @@ func Tunnels(tunnels []protocol.Tunnel) []protocol.TunnelProbe {
 	return out
 }
 
-// Nodes — 3 пакета до publicHost; закрытый ICMP — 100% потерь, тоже результат.
+// Nodes — связность нод: nodePackets пакетов до publicHost; закрытый ICMP —
+// 100% потерь, тоже результат.
 func Nodes(targets []protocol.ProbeTarget) []protocol.NodeProbe {
+	return pingTargets(targets, nodePackets)
+}
+
+func pingTargets(targets []protocol.ProbeTarget, count int) []protocol.NodeProbe {
 	results := make([]*protocol.NodeProbe, len(targets))
 
 	var wg sync.WaitGroup
@@ -107,7 +126,7 @@ func Nodes(targets []protocol.ProbeTarget) []protocol.NodeProbe {
 		go func(i int, target protocol.ProbeTarget) {
 			defer wg.Done()
 
-			if parsed := ping(target.Host); parsed != nil {
+			if parsed := ping(count, target.Host); parsed != nil {
 				results[i] = &protocol.NodeProbe{NodeID: target.NodeID, RttMs: parsed.RttMs, LossPercent: parsed.LossPercent}
 			}
 		}(i, target)
@@ -132,7 +151,7 @@ func IPs(ips []string) map[string]bool {
 	}
 
 	result := map[string]bool{}
-	for _, probe := range Nodes(targets) {
+	for _, probe := range pingTargets(targets, quickPackets) {
 		result[probe.NodeID] = probe.LossPercent < 100
 	}
 

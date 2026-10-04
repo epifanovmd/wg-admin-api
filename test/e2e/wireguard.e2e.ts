@@ -1242,6 +1242,7 @@ describe("wireguard", () => {
         toNodeId: relayNode.id,
         rttMs: 61.2,
         lossPercent: 0,
+        samples: 1,
         ts: mesh.cells.find((c: any) => c.fromNodeId === nodeA.id).ts,
       });
       expectStatus(await call(user, "GET", "/api/v1/wg/stats/mesh"), 403);

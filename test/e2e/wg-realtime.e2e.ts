@@ -661,6 +661,7 @@ describe("wireguard: обновления по сокетам", () => {
         toNodeId: target.id,
         rttMs: 33.3,
         lossPercent: 0,
+        samples: 1,
         ts: (await mesh).cells.find((c: any) => c.fromNodeId === relay.id).ts,
       },
     ]);

@@ -852,6 +852,7 @@ const models: TsoaRoute.Models = {
             "toNodeId": {"dataType":"string","required":true},
             "rttMs": {"dataType":"union","subSchemas":[{"dataType":"double"},{"dataType":"enum","enums":[null]}],"required":true},
             "lossPercent": {"dataType":"double","required":true},
+            "samples": {"dataType":"double","required":true},
             "ts": {"dataType":"string","required":true},
         },
         "additionalProperties": false,
