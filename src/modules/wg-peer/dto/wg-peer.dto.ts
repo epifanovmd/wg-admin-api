@@ -21,7 +21,7 @@ export class WgPeerDto extends BaseDto {
   name: string;
   description: string | null;
   publicKey: string;
-  /** Можно ли выпустить конфиг/QR (приватный ключ хранится). */
+  /** Можно ли получить конфиг/QR (приватный ключ хранится). */
   hasPrivateKey: boolean;
   hasPresharedKey: boolean;
   addressV4: string;

@@ -14,19 +14,19 @@ import { resolveFromRoot } from "../../core";
 export const AGENT_INSTANCE_DEFAULT = "wg";
 
 /**
- * Каталог выпуска, если `AGENT_RELEASES_DIR` не задан: его собирает
+ * Каталог сборок, если `AGENT_RELEASES_DIR` не задан: его собирает
  * `agent/release.sh`, в образе он лежит там же.
  */
 export const AGENT_RELEASES_DIR_DEFAULT = "agent/release";
 
-/** Репозиторий выпусков агента, если `AGENT_RELEASES_GITHUB` не задан. */
+/** Репозиторий релизов агента, если `AGENT_RELEASES_GITHUB` не задан. */
 export const AGENT_RELEASES_GITHUB_DEFAULT = "epifanovmd/agent";
 
 /** Диапазон версий агента, если `AGENT_RELEASES_RANGE` не задан. */
 export const AGENT_RELEASES_RANGE_DEFAULT = "^1";
 
 /**
- * Открытый ключ автора агента: им подписаны агент и netprobe в выпусках
+ * Открытый ключ автора агента: им подписаны агент и netprobe в релизах
  * GitHub; `install.sh` передаёт его узлу вместе с ключом проекта.
  */
 export const AGENT_RELEASES_PUBLIC_KEY_DEFAULT =
@@ -38,7 +38,7 @@ export const agentConfig = defineModuleConfig(
   z.object({
     /**
      * Общий токен регистрации из окружения (многоразовый, без записи в БД):
-     * агенты в compose и dev регистрируются без выпуска токена. Не короче 32
+     * агенты в compose и dev регистрируются без создания токена. Не короче 32
      * символов; без него — только токены из БД.
      */
     bootstrapToken: z
@@ -87,23 +87,23 @@ export const agentConfig = defineModuleConfig(
      * Каталог воркеров проекта (wg и socks): `manifest.json` от
      * `agent-release` и их сборки — его собирает `agent/release.sh`.
      * Относительный путь — от корня проекта; каталога нет — воркеров
-     * проекта в выпуске нет.
+     * проекта на сервере нет.
      */
     releasesDir: optionalString.transform(dir =>
       dir ? resolveFromRoot(dir) : undefined,
     ),
     /**
      * Откуда брать агента и netprobe: репозиторий GitHub `owner/repo` (его
-     * выпуски) или база выпуска `releasesUrl` (она важнее). Пусто и без
+     * релизы) или адрес сборок `releasesUrl` (он важнее). Пусто и без
      * `releasesUrl` — агент только из `releasesDir`.
      */
     releasesGithub: optionalString,
-    /** Диапазон версий агента из выпусков GitHub (semver). */
+    /** Диапазон версий агента из релизов GitHub (semver). */
     releasesRange: z.string().min(1).default(AGENT_RELEASES_RANGE_DEFAULT),
-    /** Токен GitHub для запросов к API выпусков (лимиты запросов). */
+    /** Токен GitHub для запросов к API релизов (лимиты запросов). */
     releasesToken: optionalString,
     /**
-     * База одного выпуска агента (`<url>/manifest.json`, `<url>/<файл>`,
+     * Адрес сборок одной версии агента (`<url>/manifest.json`, `<url>/<файл>`,
      * `<url>/install.sh`): своё зеркало или закреплённая версия.
      */
     releasesUrl: optionalString,
@@ -112,7 +112,7 @@ export const agentConfig = defineModuleConfig(
      * GitHub); иначе узел получает перенаправление на GitHub.
      */
     releasesProxy: bool(false),
-    /** Как часто проверять новый выпуск агента, мс (первая проверка — при старте). */
+    /** Как часто проверять новую версию агента, мс (первая проверка — при старте). */
     releasesCheckIntervalMs: positiveInt.default(3_600_000),
     /** Открытый ключ автора агента (base64) для `install.sh`. */
     releasesPublicKey: optionalString,

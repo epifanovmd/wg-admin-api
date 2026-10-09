@@ -23,7 +23,7 @@ src/modules/reset-password-tokens/
 | `userId`                  | `uuid` (PK)   | Один токен на пользователя                       |
 | `tokenHash`               | `varchar(64)` | sha256 токена (сам токен в БД не хранится)       |
 | `expiresAt`               | `timestamptz` | Срок (`config.auth.resetPassword.expireMinutes`) |
-| `issuedAt`                | `timestamptz` | Время выпуска — для cooldown                     |
+| `issuedAt`                | `timestamptz` | Время создания — для cooldown                    |
 | `createdAt` / `updatedAt` | `timestamptz` |                                                  |
 
 Индекс `IDX_RESET_TOKENS_TOKEN_HASH` (unique). `OneToOne → User` (`CASCADE`).
@@ -32,7 +32,7 @@ src/modules/reset-password-tokens/
 
 | Метод            | Описание                                                                                                                                   |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `create(userId)` | Выпускает opaque-токен (32 случайных байта, base64url), upsert хеша. `null`, если прошлый выпущен < 60 с назад.                            |
+| `create(userId)` | Создаёт opaque-токен (32 случайных байта, base64url), upsert хеша. `null`, если прошлый создан < 60 с назад.                               |
 | `peek(token)`    | Проверяет токен без погашения → `{ userId }`: auth проверяет новый пароль до того, как токен израсходован.                                 |
 | `check(token)`   | Ищет по хешу, удаляет по условию `{ userId, tokenHash }`; `affected !== 1`, неизвестный или истёкший токен → 400. Возвращает `{ userId }`. |
 

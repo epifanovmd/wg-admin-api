@@ -2,9 +2,9 @@ import { hasPermission } from "../../core";
 
 /**
  * Scopes ключа покрывают требуемый: точное совпадение, wildcard
- * (`worker:*`, `*`) или — для требования без действия (`worker`) — любой
- * scope этого домена (`worker:demo.echo`). Конкретную очередь проверяет
- * сервис по `worker:<queue>`.
+ * (`integration:*`, `*`) или — для требования без действия (`integration`) —
+ * любой scope этого домена (`integration:sync`). Более точную проверку делает
+ * вызывающий модуль.
  */
 export const scopeSatisfied = (granted: string[], required: string): boolean =>
   hasPermission(granted, required) ||

@@ -48,7 +48,7 @@ export class AgentEnrollmentToken {
   @Column({ name: "revoked_at", type: "timestamptz", nullable: true })
   revokedAt!: Date | null;
 
-  /** Кто выпустил (без внешнего ключа: токен переживает удаление пользователя). */
+  /** Кто создал (без внешнего ключа: токен переживает удаление пользователя). */
   @Column({ name: "created_by", type: "uuid", nullable: true })
   createdBy!: string | null;
 

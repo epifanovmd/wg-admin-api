@@ -71,8 +71,8 @@ permission)` и `viewFilter(actor)`; методы без актора (`findEnti
 | POST   | `/{id}/revoke`                   | `wg:node:assign[:own]` — снять владельца                                 |
 | POST   | `/{id}/install-command`          | `wg:node:agent[:own]` — токен и команда установки агента                 |
 | POST   | `/{id}/agent`                    | `wg:node:agent[:own]` — `{ agentId }`, привязка агента                   |
-| POST   | `/{id}/agent/update`             | `wg:node:agent[:own]` — обновить агента до выпуска                       |
-| POST   | `/{id}/workers/{worker}/update`  | `wg:node:agent[:own]` — обновить воркер из выпуска                       |
+| POST   | `/{id}/agent/update`             | `wg:node:agent[:own]` — обновить агента до новой версии                  |
+| POST   | `/{id}/workers/{worker}/update`  | `wg:node:agent[:own]` — обновить воркер с сервера                        |
 | POST   | `/{id}/workers/{worker}/restart` | `wg:node:agent[:own]` — перезапустить воркер                             |
 | GET    | `/{id}/logs?lines&worker`        | `wg:node:logs[:own]` — журнал агента или воркера с узла                  |
 

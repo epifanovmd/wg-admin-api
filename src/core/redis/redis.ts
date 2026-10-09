@@ -30,7 +30,7 @@ export const createRedisClient = (purpose: string): Redis => {
   return client;
 };
 
-/** Общий клиент для обычных команд (лимиты, presence); `undefined` без Redis. */
+/** Общий клиент для обычных команд (лимиты, кэши); `undefined` без Redis. */
 export const getRedis = (): Redis | undefined => {
   if (!isRedisConfigured()) return undefined;
 

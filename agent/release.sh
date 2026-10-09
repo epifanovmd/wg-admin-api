@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Воркеры проекта для узлов — каталог agent/release (другой — RELEASE_OUT=…): бэкенд раздаёт его
-# (AGENT_RELEASES_DIR) вместе с агентом и netprobe из выпусков GitHub (AGENT_RELEASES_GITHUB).
+# (AGENT_RELEASES_DIR) вместе с агентом и netprobe из релизов GitHub (AGENT_RELEASES_GITHUB).
 # Агента здесь нет: его берёт бэкенд, пересобирать проект ради новой версии агента не нужно.
 #
 #   1. Воркеры wg и socks (agent/workers/<имя>, версия — его файл VERSION) под linux и darwin ×

@@ -80,8 +80,8 @@ export class JobsService {
   }
 
   /**
-   * Поставить демо-задачу внешнему воркеру: проверка, что воркеры подключены
-   * и забирают задачи (эксплуатация, e2e). Задача видимая — статус в `/jobs/{id}`.
+   * Отменить задачу, доступную пользователю; завершённую отменить нельзя
+   * (`NOT_CANCELLABLE`).
    */
   async cancel(viewer: IJobViewer, id: string): Promise<void> {
     const run = await this.findAccessible(viewer, id, "cancel");

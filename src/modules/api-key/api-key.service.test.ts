@@ -56,7 +56,7 @@ describe("ApiKeyService", () => {
       id: "k1",
       prefix,
       hash: hashToken(secret),
-      scopes: ["worker:*"],
+      scopes: ["integration:*"],
       ownerId: uuid(),
       lastUsedAt: null,
       expiresAt: null,
@@ -67,8 +67,8 @@ describe("ApiKeyService", () => {
 
   it("create: ключ <prefix 8>.<secret>, в БД только хеш секрета", async () => {
     const { key, apiKey } = await service.create(uuid(), {
-      name: "worker",
-      scopes: ["worker:demo.echo", "worker:demo.echo"],
+      name: "integration",
+      scopes: ["integration:sync", "integration:sync"],
     });
 
     expect(key).to.match(/^[\w-]{8}\.[\w-]{43}$/);
@@ -78,7 +78,7 @@ describe("ApiKeyService", () => {
     expect(saved.prefix).to.equal(key.slice(0, 8));
     expect(saved.hash).to.equal(hashToken(key.slice(9)));
     expect(saved.hash).to.not.contain(key.slice(9));
-    expect(saved.scopes).to.deep.equal(["worker:demo.echo"]);
+    expect(saved.scopes).to.deep.equal(["integration:sync"]);
     expect(apiKey).to.not.have.property("hash");
   });
 
@@ -90,14 +90,14 @@ describe("ApiKeyService", () => {
 
     repo.createAndSave.onFirstCall().rejects(unique);
 
-    await service.create(uuid(), { name: "w", scopes: ["worker:*"] });
+    await service.create(uuid(), { name: "w", scopes: ["integration:*"] });
     expect(repo.createAndSave.callCount).to.equal(2);
   });
 
   it("verify: верный ключ", async () => {
     const { key } = await service.create(uuid(), {
       name: "w",
-      scopes: ["worker:*"],
+      scopes: ["integration:*"],
     });
 
     repo.findByPrefix.resolves(stored(key));
@@ -111,7 +111,7 @@ describe("ApiKeyService", () => {
   it("verify: неверный секрет, отозванный, просроченный, чужой формат — 401", async () => {
     const { key } = await service.create(uuid(), {
       name: "w",
-      scopes: ["worker:*"],
+      scopes: ["integration:*"],
     });
 
     repo.findByPrefix.resolves(stored(key, { hash: hashToken("other") }));
@@ -135,7 +135,7 @@ describe("ApiKeyService", () => {
   it("verify: lastUsedAt — не чаще раза в минуту", async () => {
     const { key } = await service.create(uuid(), {
       name: "w",
-      scopes: ["worker:*"],
+      scopes: ["integration:*"],
     });
 
     repo.findByPrefix.resolves(stored(key, { lastUsedAt: new Date() }));
@@ -150,7 +150,7 @@ describe("ApiKeyService", () => {
   });
 
   it("create и revoke публикуют события для журнала аудита", async () => {
-    await service.create("owner-1", { name: "w", scopes: ["worker:*"] });
+    await service.create("owner-1", { name: "w", scopes: ["integration:*"] });
     repo.findById.resolves({ id: "k1", name: "w", revokedAt: null });
     await service.revoke("k1", "admin-1");
 

@@ -17,8 +17,8 @@ const base = {
   releasesPublicKey: AGENT_RELEASES_PUBLIC_KEY_DEFAULT,
 };
 
-describe("источник выпуска агента (agentReleases)", () => {
-  it("по умолчанию — выпуски GitHub epifanovmd/agent в диапазоне ^1 с ключом автора", () => {
+describe("источник сборок агента (agentReleases)", () => {
+  it("по умолчанию — релизы GitHub epifanovmd/agent в диапазоне ^1 с ключом автора", () => {
     expect(agentReleasesOptions(base)).to.deep.equal({
       github: "epifanovmd/agent",
       range: "^1",
@@ -43,7 +43,7 @@ describe("источник выпуска агента (agentReleases)", () => {
     });
   });
 
-  it("база выпуска (AGENT_RELEASES_URL) важнее GitHub", () => {
+  it("адрес сборок (AGENT_RELEASES_URL) важнее GitHub", () => {
     const options = agentReleasesOptions({
       ...base,
       releasesUrl: "https://example.com/agent/v1.1.0",
@@ -53,7 +53,7 @@ describe("источник выпуска агента (agentReleases)", () => {
     expect(options).to.not.have.property("github");
   });
 
-  it("ни GitHub, ни базы — агент только из каталога выпуска", () => {
+  it("ни GitHub, ни адреса сборок — агент только из каталога сборок", () => {
     expect(
       agentReleasesOptions({ ...base, releasesGithub: undefined }),
     ).to.equal(undefined);

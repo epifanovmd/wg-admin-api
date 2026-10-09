@@ -13,7 +13,7 @@ WG Admin — админка WireGuard: бэкенд (модульный моно
 Inversify (DI), TypeORM + PostgreSQL, pg-boss (очередь задач на Postgres), Redis
 (между процессами), Socket.IO, Zod, pino, prom-client, Sentry; тесты —
 Mocha, Chai, Sinon; сборка `tsc`. Node >= 24. Роль процесса — `APP_ROLE=api|worker|all`.
-Устройство системы — `docs/WIREGUARD.md`, воркеры, выпуск и установка —
+Устройство системы — `docs/WIREGUARD.md`, воркеры, их сборки и установка —
 `agent/README.md`, связь с агентами — `src/modules/agent/README.md`.
 
 ## Команды
@@ -31,7 +31,7 @@ yarn test:e2e             # интеграционный набор test/e2e/*.e
 yarn gen:module <name>    # каркас модуля по конвенциям (--dry-run — список файлов)
 yarn migration:generate src/migrations/<Name> | migration:run | migration:revert
 yarn agent:release        # воркеры wg, socks в agent/release (агента бэкенд берёт с GitHub сам)
-yarn agent:fetch [версия] # выпуск агента с GitHub в agent/dist (локальный агент, e2e)
+yarn agent:fetch [версия] # скачать сборки агента с GitHub в agent/dist (локальный агент, e2e)
 yarn agent                # локальный агент (agent/dev.sh run; agent:start|stop|status|logs)
 scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]   # воркеры: Go в контейнере
 ```
@@ -60,7 +60,7 @@ scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]   # воркер
   `definePermissions` и т. п.).
 - Регистрация в IoC — только через `@Module.providers`; `@Injectable()` — маркер.
   Контроллеры тоже в `providers`. Сущности модуля — в `@Module.entities`.
-- Состояние, общее для процессов (лимиты, presence, отзыв токенов, кэши), — в
+- Состояние, общее для процессов (лимиты, отзыв токенов, кэши), — в
   Redis/БД, не в памяти процесса.
 - Фоновая работа — задачи очереди (`IJobHandler` + `asJobHandler`), постановка с
   `manager` транзакции; периодическая — только `cron` в `definition` (не setInterval и
@@ -129,12 +129,12 @@ scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]   # воркер
 
 Общие принципы (без проектной конкретики):
 
-| Вопрос                                                                                                     | Документ                                                                     |
-| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Жизненный цикл, роли процесса, модули, DI, точки расширения, доступ, события, задачи, файлы, наблюдаемость | [ARCHITECTURE.md](ARCHITECTURE.md)                                           |
-| Куда положить новый код, чек-лист нового модуля                                                            | [MODULE-CHEATSHEET.md](MODULE-CHEATSHEET.md)                                 |
-| Именование, контроллеры, ошибки, пагинация, задачи, файлы, тесты, проверки                                 | [CONVENTIONS.md](CONVENTIONS.md)                                             |
-| Clean code, SOLID, паттерны                                                                                | [CLEAN-CODE.md](CLEAN-CODE.md), [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md) |
+| Вопрос                                                                                              | Документ                                                                     |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Жизненный цикл, роли процесса, модули, DI, точки расширения, доступ, события, задачи, наблюдаемость | [ARCHITECTURE.md](ARCHITECTURE.md)                                           |
+| Куда положить новый код, чек-лист нового модуля                                                     | [MODULE-CHEATSHEET.md](MODULE-CHEATSHEET.md)                                 |
+| Именование, контроллеры, ошибки, пагинация, задачи, тесты, проверки                                 | [CONVENTIONS.md](CONVENTIONS.md)                                             |
+| Clean code, SOLID, паттерны                                                                         | [CLEAN-CODE.md](CLEAN-CODE.md), [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md) |
 
 Конкретика проекта (проверенные факты, gotcha, точные файловые карты) — в
 [.claude/memory/MEMORY.md](.claude/memory/MEMORY.md): architecture, access control,

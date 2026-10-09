@@ -5,7 +5,7 @@ import type { TokenProvider } from "../decorators";
 
 /**
  * Токен multi-inject схем аутентификации для `@Security("<name>")`.
- * Ядро регистрирует `jwt`; модули добавляют свои (`bot`, `api-key`).
+ * Ядро регистрирует `jwt`; модули добавляют свои (например, `apiKey`).
  */
 export const SECURITY_SCHEME = Symbol("SecurityScheme");
 

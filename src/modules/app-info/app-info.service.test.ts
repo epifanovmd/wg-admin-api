@@ -7,7 +7,7 @@ const agent = (version: string | null) => ({
 });
 
 describe("AppInfoService", () => {
-  it("версия, коммит и время сборки — из конфига, запуск — время старта процесса, агент — из выпуска", async () => {
+  it("версия, коммит и время сборки — из конфига, запуск — время старта процесса, агент — из сборок", async () => {
     const service = new AppInfoService(agent("1.0.0"), {
       name: "wg-admin",
       role: "all",
@@ -29,7 +29,7 @@ describe("AppInfoService", () => {
     expect(started).to.be.at.least(Date.now() - process.uptime() * 1000 - 1000);
   });
 
-  it("вне сборки образа — коммит и время сборки null; выпуска нет — null", async () => {
+  it("вне сборки образа — коммит и время сборки null; сборок агента нет — null", async () => {
     const info = await new AppInfoService(agent(null), {
       name: "wg-admin",
       role: "all",

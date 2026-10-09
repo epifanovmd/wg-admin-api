@@ -2,13 +2,13 @@
 # Один образ на все роли процесса (APP_ROLE=api|worker|all) и миграции.
 # Воркеры проекта для узлов (agent/release: wg, socks и их manifest.json)
 # собираются здесь же — бэкенд раздаёт их (AGENT_RELEASES_DIR) вместе с
-# агентом и netprobe, которые берёт из выпусков GitHub (AGENT_RELEASES_GITHUB).
+# агентом и netprobe, которые берёт из релизов GitHub (AGENT_RELEASES_GITHUB).
 # Стадии сборки идут на платформе сборщика (кросс-компиляция, без эмуляции);
 # платформа образа влияет только на production-зависимости и runtime.
 ARG NODE_VERSION=24-alpine
 ARG GO_VERSION=1.26.9-bookworm
 
-# ── Воркеры узла (linux и darwin × amd64 и arm64) и утилита выпуска ─────────
+# ── Воркеры узла (linux и darwin × amd64 и arm64) и утилита сборки ──────────
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS agent-workers
 WORKDIR /agent
 COPY agent/go.mod agent/go.sum ./

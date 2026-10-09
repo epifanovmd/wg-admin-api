@@ -49,7 +49,7 @@ describe("AgentEnrollmentService", () => {
     expect(parseEnrollmentToken("x.")).to.equal(null);
   });
 
-  it("выпуск: токен показывается один раз, в БД — префикс и хеш", async () => {
+  it("создание: токен показывается один раз, в БД — префикс и хеш", async () => {
     const created = await service.createToken("u1", {
       name: "парк",
       labels: { zone: "eu" },

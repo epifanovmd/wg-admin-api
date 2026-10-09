@@ -44,7 +44,7 @@ export const WG_WORKER = "wg";
 /** Воркер SOCKS5-прокси на агенте ноды. */
 export const SOCKS_WORKER = "socks";
 
-/** Воркеры агента ноды — ставятся из выпуска при установке. */
+/** Воркеры агента ноды — ставятся с сервера при установке. */
 export const WG_NODE_WORKERS = [WG_WORKER, SOCKS_WORKER] as const;
 
 /** Ключи настроек воркеров: желаемое состояние, цели проб, прокси. */

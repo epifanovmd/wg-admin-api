@@ -55,7 +55,7 @@ export class ApiKeyService {
     @inject(EventBus) private readonly _eventBus: EventBus,
   ) {}
 
-  /** Выпустить ключ; секрет возвращается только здесь. */
+  /** Создать ключ; секрет возвращается только здесь. */
   async create(
     ownerId: string,
     body: ICreateApiKeyBody,

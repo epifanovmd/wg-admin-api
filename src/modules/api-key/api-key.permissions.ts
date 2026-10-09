@@ -6,7 +6,7 @@ export const ApiKeyPermissions = definePermissions(
   { key: "apikey", label: "API-ключи" },
   {
     VIEW: { name: "apikey:view", label: "Просмотр" },
-    CREATE: { name: "apikey:create", label: "Выпуск" },
+    CREATE: { name: "apikey:create", label: "Создание" },
     REVOKE: { name: "apikey:revoke", label: "Отзыв" },
   },
 );

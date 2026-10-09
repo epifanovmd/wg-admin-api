@@ -31,7 +31,8 @@ export const AgentError = defineErrors("AGENT", {
   },
   WORKER_NOT_RELEASED: {
     status: HttpStatus.CONFLICT,
-    message: "Воркер не из выпуска: обновить его с сервера нельзя",
+    message:
+      "Воркер прописан командой, а не поставлен с сервера: обновить его нельзя",
   },
   CONFIG_NOT_FOUND: {
     status: HttpStatus.NOT_FOUND,
@@ -43,7 +44,7 @@ export const AgentError = defineErrors("AGENT", {
   },
   UPDATE_NOT_AVAILABLE: {
     status: HttpStatus.CONFLICT,
-    message: "Обновление недоступно: нет выпуска или сборки под агента",
+    message: "Обновление недоступно: нет новой версии или сборки под агента",
   },
   STORE_CONFLICT: {
     status: HttpStatus.CONFLICT,

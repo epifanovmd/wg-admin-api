@@ -91,7 +91,7 @@ export class WgSocksService {
   @Column({ name: "ca_cert_pem", type: "text" })
   caCertPem!: string;
 
-  /** Ключ CA (зашифрован): выпуск клиентских сертификатов. */
+  /** Ключ CA (зашифрован): подпись клиентских сертификатов. */
   @Column({ name: "ca_key_enc", type: "text" })
   caKeyEnc!: string;
 

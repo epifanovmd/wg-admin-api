@@ -59,7 +59,7 @@ export interface IAgentLogsQuery {
 /**
  * Агенты: список и карточка (`hello`, `status` с воркерами, последняя точка
  * метрик, проблемы), отзыв, удаление, смена ключа, обновление, журнал,
- * выпуск и команда установки. Доступ — право модуля или политика
+ * сборки агента и команда установки. Доступ — право модуля или политика
  * (`AgentAccessService`); вызовы SDK — от имени пользователя (`by`), чтобы
  * действие попало в аудит.
  */
@@ -158,7 +158,7 @@ export class AgentService {
     await callAgents(() => this._runtime.agents.by(actor.userId).rotateKey(id));
   }
 
-  /** Обновить агента до версии выпуска; итог — после запуска новой версии. */
+  /** Обновить агента до доступной версии; итог — после запуска новой версии. */
   async update(actor: IAgentActor, id: string): Promise<IAgentUpdateResultDto> {
     await this._access.require(actor, id, "manage");
 
@@ -183,8 +183,8 @@ export class AgentService {
   }
 
   /**
-   * Итоговый выпуск (агент и netprobe — из удалённого источника, воркеры
-   * проекта — из `AGENT_RELEASES_DIR`) и кого можно обновить до него.
+   * Итоговый манифест сборок (агент и netprobe — из удалённого источника, воркеры
+   * проекта — из `AGENT_RELEASES_DIR`) и кого можно обновить.
    */
   async release(actor: IAgentActor): Promise<IAgentReleaseDto> {
     const scope = await this._access.scope(actor, "view");
@@ -250,14 +250,14 @@ export class AgentService {
     );
   }
 
-  /** Агенты, которых можно обновить до версии выпуска. */
+  /** Агенты, которых можно обновить до новой версии. */
   async updateCandidateIds(): Promise<Set<string>> {
     const candidates = await this._runtime.agents.updateCandidates();
 
     return new Set(candidates.map(c => c.agentId));
   }
 
-  /** Обновить агента до версии выпуска от имени пользователя (без проверки прав). */
+  /** Обновить агента до новой версии от имени пользователя (без проверки прав). */
   updateAs(actorId: string, id: string): Promise<IAgentUpdateResultDto> {
     return callAgents(() => this._runtime.agents.by(actorId).updateAgent(id));
   }
@@ -267,7 +267,7 @@ export class AgentService {
     return callAgents(() => this._runtime.agents.logs(id, query));
   }
 
-  /** Версия агента в выпуске; в выпуске нет сборок агента — `null`. */
+  /** Версия агента в сборках; сборок агента нет — `null`. */
   async releaseVersion(): Promise<string | null> {
     const release = await this._runtime.agents.release();
 

@@ -22,7 +22,7 @@ import {
 import { BASE_URL } from "./harness";
 
 /**
- * Настоящий агент (github.com/epifanovmd/agent, выпуск с GitHub из
+ * Настоящий агент (github.com/epifanovmd/agent, сборки с GitHub из
  * `agent/dist`, см. `agent-release.ts`) с воркерами проекта wg (в режиме
  * `WG_DRY_RUN` — система не меняется) и socks из каталога воркеров стенда.
  * Агент работает в своём временном каталоге со своей копией программы (её
@@ -36,7 +36,7 @@ export interface IRealAgentOptions {
   name: string;
   /** Версия программы агента (по умолчанию — версия agent-sdk). */
   version?: string;
-  /** Версия воркеров wg и socks на узле (по умолчанию — как в выпуске). */
+  /** Версия воркеров wg и socks на узле (по умолчанию — как в каталоге сборок). */
   workerVersion?: string;
   /** Обновления агента и воркеров (`update.mode: self`); без — `disabled`. */
   update?: boolean;

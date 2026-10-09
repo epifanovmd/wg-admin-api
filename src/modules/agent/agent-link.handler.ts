@@ -12,7 +12,7 @@ const isLinkPath = (path: string): boolean =>
   path === LINK_PATH || path.startsWith(`${LINK_PATH}/`);
 
 /**
- * HTTP-маршруты агентов `/api/v1/agent-link/*` (регистрация, выпуск,
+ * HTTP-маршруты агентов `/api/v1/agent-link/*` (регистрация, сборки агента,
  * `install.sh`) — до разбора тела, CORS и лимита запросов: тело и ответ
  * ведёт SDK. WebSocket пути агентов подключает `AgentBootstrap`; пересылку
  * между копиями — внутренний сервер `AgentRelayServer`.

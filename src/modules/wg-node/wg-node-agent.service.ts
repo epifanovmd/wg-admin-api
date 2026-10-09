@@ -171,7 +171,7 @@ export class WgNodeAgentService {
 
   /**
    * Команда установки агента ноды: экземпляр проекта (`--instance`),
-   * воркеры wg и socks из выпуска, права root (воркер настраивает сеть),
+   * воркеры wg и socks с сервера, права root (воркер настраивает сеть),
    * пакеты и параметры ядра для WireGuard, пробросов и NAT.
    */
   commandFor(
@@ -336,7 +336,7 @@ export class WgNodeAgentService {
     return { content: entries.map(formatEntry).join("\n"), entries };
   }
 
-  /** Обновить агента ноды до версии выпуска. */
+  /** Обновить агента ноды до новой версии. */
   async updateAgent(
     actor: AuthContext,
     id: string,
@@ -346,7 +346,7 @@ export class WgNodeAgentService {
     return this._agents.updateAs(actor.userId, await this._requireAgent(id));
   }
 
-  /** Обновить воркер агента ноды из выпуска. */
+  /** Обновить воркер агента ноды с сервера. */
   async updateWorker(
     actor: AuthContext,
     id: string,

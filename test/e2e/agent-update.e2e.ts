@@ -16,13 +16,13 @@ import { BASE_URL, E2E_BOOTSTRAP_TOKEN } from "./harness";
 import { RealAgent } from "./real-agent";
 
 /**
- * Выпуск агента: агент и netprobe — из удалённого источника (сервер стенда
+ * Сборки агента: агент и netprobe — из удалённого источника (сервер стенда
  * вместо GitHub, `AGENT_RELEASES_URL`), воркеры проекта wg и socks — из
  * каталога проекта с подписью ключом проекта. Установщик знает оба ключа,
  * воркеры проекта обновляются, прежний агент видит обновление и
  * обновляется до версии источника.
  */
-describe("выпуск агента: источник агента и воркеры проекта", function () {
+describe("сборки агента: источник агента и воркеры проекта", function () {
   this.timeout(120_000);
 
   let admin: Actor;
@@ -43,7 +43,7 @@ describe("выпуск агента: источник агента и ворке
     await Promise.all(agents.map(agent => agent.stop()));
   });
 
-  it("итоговый выпуск: агент и netprobe из источника, wg и socks — из каталога проекта", async () => {
+  it("итоговый манифест: агент и netprobe из источника, wg и socks — из каталога проекта", async () => {
     const { manifest } = await release();
 
     expect(manifest.version).to.equal(AGENT_VERSION);

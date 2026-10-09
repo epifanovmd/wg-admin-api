@@ -14,7 +14,7 @@
 
 Как устроена система (агенты и воркеры, версии состояния, релей, реплики,
 пробросы, прокси, статистика, доступ, задачи, диагностика) —
-[docs/WIREGUARD.md](docs/WIREGUARD.md). Воркеры, выпуск, установка на узел и
+[docs/WIREGUARD.md](docs/WIREGUARD.md). Воркеры, их сборки, установка на узел и
 локальный запуск агента — [agent/README.md](agent/README.md). Модули бэкенда
 описаны в `README.md` внутри каждого `src/modules/<модуль>`; связь с агентами —
 `src/modules/agent/README.md`.
@@ -44,7 +44,7 @@ src/
   routing/           ← сгенерированные маршруты и спецификация (не править вручную)
   migrations/        ← миграции и их упорядоченный список (index.ts)
   modules/           ← платформа (auth, user, role, jobs, …) и домен WireGuard (wg-*)
-agent/               ← воркеры узла wg и socks (Go), сборка выпуска, локальный агент
+agent/               ← воркеры узла wg и socks (Go), сборки для узлов, локальный агент
 templates/           ← шаблоны писем
 test/e2e/            ← интеграционный набор (настоящий сервер + Postgres, Redis, Mailpit)
 test/smoke/          ← образ узла для smoke-стенда
@@ -131,7 +131,7 @@ yarn agent              # агент на переднем плане (agent/dev
 | Команда                                                           | Что делает                                                                       |
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `yarn agent:release`                                              | воркеры проекта в `agent/release`: сборки wg и socks, `manifest.json`            |
-| `yarn agent:fetch [версия…]`                                      | выпуск агента с GitHub в `agent/dist/agent-<версия>` (разработка и e2e)          |
+| `yarn agent:fetch [версия…]`                                      | скачать сборки агента с GitHub в `agent/dist/agent-<версия>` (разработка и e2e)  |
 | `yarn agent`                                                      | локальный агент на переднем плане (воркер wg — в имитации)                       |
 | `yarn agent:start` / `agent:stop` / `agent:status` / `agent:logs` | локальный агент в фоне: запуск, остановка, состояние, журнал                     |
 | `scripts/go-agent.sh test` / `vet` / `tidy` / `fmt`               | тесты, `go vet`, `go mod tidy`, `gofmt` воркеров (Go в контейнере)               |
@@ -179,8 +179,8 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
   пересоздаёт базу (только с `e2e`/`test` в имени) и чистит отдельную базу
   Redis. Параметры — `E2E_*`. Сценарии домена идут с фейковым агентом на
   WebSocket (`test/e2e/fake-agent.ts`, `node-agent.ts`); `agents.e2e.ts` и
-  `agent-update.e2e.ts` — настоящий агент и воркеры. Агент — выпуск с GitHub,
-  скачанный заранее (`yarn agent:fetch` и `yarn agent:fetch 1.0.1` — для
+  `agent-update.e2e.ts` — настоящий агент и воркеры. Агент — сборки с GitHub,
+  скачанные заранее (`yarn agent:fetch` и `yarn agent:fetch 1.0.1` — для
   обновления агента): стенд раздаёт его бэкенду со своего сервера, в GitHub
   тесты не ходят. Воркеры — сборки из `agent/release` или `agent/dist`, стенд
   подписывает их своим ключом проекта. Чего нет — сценарии пропускаются.
@@ -203,7 +203,7 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
 `Dockerfile` — один образ для ролей `api`, `worker` и миграций; в нём же
 собираются воркеры проекта для узлов (`/app/agent/release`, стадии
 `agent-workers` и `agent-release`): wg, socks и их `manifest.json`. Агента в
-образе нет: бэкенд берёт его и `install.sh` из выпусков GitHub
+образе нет: бэкенд берёт его и `install.sh` из релизов GitHub
 (`AGENT_RELEASES_GITHUB`, диапазон `^1`) и сам замечает новые версии — ради
 новой версии агента образ не пересобирают. Подписать воркеры ключом проекта —
 необязательный секрет BuildKit `agent_signing_key`

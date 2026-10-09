@@ -2,7 +2,7 @@
 **/node_modules
 build
 agent/dist
-# Выпуск для узлов образ собирает сам (стадия agent-release).
+# Сборки для узлов образ собирает сам (стадия agent-release).
 agent/release
 agent/release.new
 .agent

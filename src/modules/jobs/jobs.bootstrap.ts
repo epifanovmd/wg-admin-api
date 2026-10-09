@@ -67,7 +67,7 @@ export class JobsBootstrap implements IBootstrap {
       await this.ensureQueue(boss, definition);
     }
 
-    // Сигналы нужны и API: ожидание `request` и long-poll внешних воркеров.
+    // Сигналы нужны и API: ожидание результата `request`.
     await this._signals.start();
 
     if (!isJobsWorkerRole()) {

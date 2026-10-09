@@ -248,14 +248,14 @@ errors }`. Новые прокси начинают слушать, удалён
 
 Прокси живут в процессе воркера: SIGTERM закрывает их. Работает на любой ОС, имитации нет.
 
-## Выпуск
+## Сборки для узлов
 
-Узел получает от бэкенда две части выпуска:
+Узел получает от бэкенда сборки из двух мест:
 
-| Что                                    | Откуда                                                                          |
-| -------------------------------------- | ------------------------------------------------------------------------------- |
-| агент, `install.sh`, воркер `netprobe` | выпуски агента на GitHub (`epifanovmd/agent`): бэкенд сам берёт новейший в `^1` |
-| воркеры `wg` и `socks`                 | каталог `agent/release` проекта (`AGENT_RELEASES_DIR`)                          |
+| Что                                    | Откуда                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------ |
+| агент, `install.sh`, воркер `netprobe` | релизы агента на GitHub (`epifanovmd/agent`): бэкенд сам берёт новейший в `^1` |
+| воркеры `wg` и `socks`                 | каталог `agent/release` проекта (`AGENT_RELEASES_DIR`)                         |
 
 **Агент.** Бэкенд при запуске и потом раз в час (`AGENT_RELEASES_CHECK_INTERVAL_MS`) спрашивает
 GitHub, есть ли новая версия агента в диапазоне `AGENT_RELEASES_RANGE` (по умолчанию `^1`).
@@ -292,7 +292,7 @@ docker build --secret id=agent_signing_key,env=AGENT_SIGNING_KEY .   # то же
 
 - **ключ автора агента** — им подписаны агент и `netprobe` на GitHub; он вшит в программу агента,
   а бэкенд дополнительно передаёт его узлу (`AGENT_RELEASES_PUBLIC_KEY`, по умолчанию — ключ из
-  выпусков `epifanovmd/agent`);
+  релизов `epifanovmd/agent`);
 - **ключ проекта** — им `agent/release.sh` подписывает воркеры `wg` и `socks`
   (`AGENT_SIGNING_KEY` — закрытый ключ из `agent-release keygen`). Бэкенду нужен открытый ключ
   этой пары (`AGENT_UPDATE_PUBLIC_KEY`): он вписывает его в `install.sh`, и узлы проверяют им
@@ -322,7 +322,7 @@ curl -fsSL https://<бэкенд>/api/v1/agent-link/install.sh | sudo sh -s -- \
   --sysctl net.ipv4.ip_forward=1 --sysctl net.ipv6.conf.all.forwarding=1
 ```
 
-- `--worker wg --worker socks` — сборки воркеров из выпуска (sha256 сверяется) и запись о них в
+- `--worker wg --worker socks` — сборки воркеров с сервера (sha256 сверяется) и запись о них в
   `/etc/agent-wg/agent.yaml` с `release: true` и `stopTimeout: 30s`;
 - `--privileged` — агент и воркеры от root без ограничений systemd: воркер wg настраивает сеть,
   iptables и пишет в `/etc/wireguard`;
@@ -356,7 +356,7 @@ agent/dev.sh start | stop [--force] | status | logs | check
 - Воркер wg на macOS — всегда в имитации; на Linux — тоже, пока не задано `WG_DRY_RUN=0` (тогда
   нужен root). Конфиги имитации — `.agent/wg/wireguard`.
 - Программа агента — `AGENT_BIN` или `agent/dist/agent-<версия>/agent-<os>-<arch>` той же версии,
-  что `agent-sdk` в `package.json`; её нет — `dev.sh` скачивает выпуск с GitHub
+  что `agent-sdk` в `package.json`; её нет — `dev.sh` скачивает сборки с GitHub
   (`agent/fetch-agent.sh`). Воркеры — `WG_WORKER_BIN`, `SOCKS_WORKER_BIN` или сборки под эту
   машину из `agent/release` и `agent/dist` (нет — собираются).
 - Данные агента — `.agent/data`: удалите их, и агент зарегистрируется заново. Настройки агента —

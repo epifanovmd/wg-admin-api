@@ -23,7 +23,7 @@ const expectCode = async (promise: Promise<unknown>, code: string) => {
 describe("ApiKeySecurityScheme", () => {
   const keys = { verify: sinon.stub() };
   const scheme = new ApiKeySecurityScheme(keys as any);
-  const apiKey = { id: "k1", ownerId: "u1", scopes: ["worker:demo.echo"] };
+  const apiKey = { id: "k1", ownerId: "u1", scopes: ["integration:sync"] };
 
   beforeEach(() => {
     keys.verify.reset();
@@ -40,7 +40,7 @@ describe("ApiKeySecurityScheme", () => {
   it("ключ из X-Api-Key — контекст сервиса со scopes ключа", async () => {
     const ctx = await scheme.authenticate(
       request({ "x-api-key": "abcdefgh.secret" }),
-      ["worker"],
+      ["integration"],
     );
 
     expect(keys.verify.calledWith("abcdefgh.secret")).to.be.true;
@@ -49,7 +49,7 @@ describe("ApiKeySecurityScheme", () => {
       userId: "u1",
       sessionId: "apikey:k1",
       roles: [],
-      permissions: ["worker:demo.echo"],
+      permissions: ["integration:sync"],
       emailVerified: true,
     });
   });
@@ -87,16 +87,17 @@ describe("ApiKeySecurityScheme", () => {
 
 describe("scopeSatisfied", () => {
   it("точное совпадение и wildcard", () => {
-    expect(scopeSatisfied(["worker:demo.echo"], "worker:demo.echo")).to.be.true;
-    expect(scopeSatisfied(["worker:*"], "worker:demo.echo")).to.be.true;
-    expect(scopeSatisfied(["*"], "worker:demo.echo")).to.be.true;
-    expect(scopeSatisfied(["worker:other"], "worker:demo.echo")).to.be.false;
+    expect(scopeSatisfied(["integration:sync"], "integration:sync")).to.be.true;
+    expect(scopeSatisfied(["integration:*"], "integration:sync")).to.be.true;
+    expect(scopeSatisfied(["*"], "integration:sync")).to.be.true;
+    expect(scopeSatisfied(["integration:other"], "integration:sync")).to.be
+      .false;
   });
 
   it("требование без действия — любой scope домена", () => {
-    expect(scopeSatisfied(["worker:demo.echo"], "worker")).to.be.true;
-    expect(scopeSatisfied(["worker:*"], "worker")).to.be.true;
-    expect(scopeSatisfied(["workers:x"], "worker")).to.be.false;
-    expect(scopeSatisfied([], "worker")).to.be.false;
+    expect(scopeSatisfied(["integration:sync"], "integration")).to.be.true;
+    expect(scopeSatisfied(["integration:*"], "integration")).to.be.true;
+    expect(scopeSatisfied(["integrations:x"], "integration")).to.be.false;
+    expect(scopeSatisfied([], "integration")).to.be.false;
   });
 });

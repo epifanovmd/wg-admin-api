@@ -13,12 +13,12 @@ import { tmpdir } from "os";
 import { join, resolve } from "path";
 
 /**
- * Выпуск для сценариев с настоящим агентом — без GitHub:
+ * Сборки для сценариев с настоящим агентом — без GitHub:
  *
- * - **агент и netprobe** — каталог выпуска с GitHub, скачанный заранее
+ * - **агент и netprobe** — каталог сборок с GitHub, скачанный заранее
  *   (`agent/fetch-agent.sh` → `agent/dist/agent-<версия>`; другой корень —
  *   `E2E_AGENT_DIST`). Стенд раздаёт его своим HTTP-сервером, бэкенд берёт
- *   его как базу выпуска (`AGENT_RELEASES_URL`);
+ *   его как адрес сборок (`AGENT_RELEASES_URL`);
  * - **воркеры проекта** wg и socks — сборки под эту машину из `agent/release`
  *   или `agent/dist` (`yarn agent:release`, `scripts/go-agent.sh build`;
  *   другой каталог — `E2E_WORKERS_DIR`). Стенд подписывает их своим ключом
@@ -42,7 +42,7 @@ export const AGENT_PREVIOUS_VERSION = env.E2E_AGENT_PREVIOUS_VERSION ?? "1.0.1";
 
 const distRoot = resolve(env.E2E_AGENT_DIST ?? "agent/dist");
 
-/** Каталог выпуска агента версии `version` (с GitHub). */
+/** Каталог сборок агента версии `version` (с GitHub). */
 export const agentDist = (version: string): string =>
   join(distRoot, `agent-${version}`);
 
@@ -101,7 +101,7 @@ const signBuild = (
     projectKey.privateKey,
   ).toString("base64");
 
-/** Ключ автора агента из manifest.json выпуска с GitHub. */
+/** Ключ автора агента из manifest.json сборок с GitHub. */
 export const authorPublicKey = (): string | undefined =>
   (
     JSON.parse(
@@ -112,10 +112,10 @@ export const authorPublicKey = (): string | undefined =>
 /** Каталог воркеров проекта стенда; создаёт `prepare`. */
 export let PROJECT_RELEASES_DIR = "";
 
-/** База выпуска агента на сервере стенда (`AGENT_RELEASES_URL`). */
+/** Адрес сборок агента на сервере стенда (`AGENT_RELEASES_URL`). */
 export let AGENT_RELEASES_URL = "";
 
-/** Запросы к серверу выпуска агента (пути). */
+/** Запросы к серверу сборок агента (пути). */
 export const mirrorRequests: string[] = [];
 
 let mirror: Server | undefined;
@@ -159,7 +159,7 @@ const writeProjectRelease = (): string => {
   return dir;
 };
 
-/** Статический сервер каталога выпуска агента: `<url>/<файл>`. */
+/** Статический сервер каталога сборок агента: `<url>/<файл>`. */
 const serve = async (dir: string): Promise<string> => {
   mirror = createServer((req, res) => {
     const path = req.url ?? "";
@@ -188,8 +188,8 @@ const serve = async (dir: string): Promise<string> => {
 };
 
 /**
- * Выпуск стенда до запуска сервера: окружение бэкенда. Без скачанного
- * выпуска агента удалённого источника нет (бэкенд не ходит в GitHub).
+ * Сборки стенда до запуска сервера: окружение бэкенда. Без скачанных
+ * сборок агента удалённого источника нет (бэкенд не ходит в GitHub).
  */
 export const prepareAgentReleases = async (): Promise<
   Record<string, string>

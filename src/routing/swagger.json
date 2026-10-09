@@ -396,7 +396,7 @@
 					},
 					"release": {
 						"type": "boolean",
-						"description": "Ставится и обновляется из выпуска."
+						"description": "Ставится и обновляется с сервера (`release: true`)."
 					},
 					"builtin": {
 						"type": "boolean",
@@ -938,10 +938,10 @@
 					"remote",
 					"local"
 				],
-				"description": "Откуда сборка: `remote` — удалённый источник выпуска агента (GitHub или\n`AGENT_RELEASES_URL`), `local` — каталог воркеров проекта\n(`AGENT_RELEASES_DIR`)."
+				"description": "Откуда сборка: `remote` — удалённый источник сборок агента (GitHub или\n`AGENT_RELEASES_URL`), `local` — каталог воркеров проекта\n(`AGENT_RELEASES_DIR`)."
 			},
 			"IAgentReleaseArtifactDto": {
-				"description": "Сборка агента в выпуске.",
+				"description": "Сборка агента.",
 				"properties": {
 					"os": {
 						"type": "string"
@@ -979,7 +979,7 @@
 				"additionalProperties": false
 			},
 			"IAgentWorkerArtifactDto": {
-				"description": "Сборка воркера в выпуске.",
+				"description": "Сборка воркера.",
 				"properties": {
 					"os": {
 						"type": "string"
@@ -1032,14 +1032,14 @@
 				"additionalProperties": false
 			},
 			"IAgentRemoteReleaseDto": {
-				"description": "Удалённый выпуск агента: версия, источник, когда проверен.",
+				"description": "Версия агента в удалённом источнике: какая, откуда, когда проверена.",
 				"properties": {
 					"version": {
 						"type": "string"
 					},
 					"from": {
 						"type": "string",
-						"description": "`github:owner/repo` или база выпуска (url)."
+						"description": "`github:owner/repo` или адрес сборок (url)."
 					},
 					"checkedAt": {
 						"type": "number",
@@ -1048,7 +1048,7 @@
 					},
 					"publicKey": {
 						"type": "string",
-						"description": "Ключ подписи удалённого выпуска (base64)."
+						"description": "Ключ подписи сборок агента (base64)."
 					}
 				},
 				"required": [
@@ -1060,7 +1060,7 @@
 				"additionalProperties": false
 			},
 			"IAgentReleaseManifestDto": {
-				"description": "Итоговый выпуск: агент и netprobe — из удалённого источника, воркеры\nпроекта (wg, socks) — из `AGENT_RELEASES_DIR`.",
+				"description": "Итоговый манифест сборок: агент и netprobe — из удалённого источника, воркеры\nпроекта (wg, socks) — из `AGENT_RELEASES_DIR`.",
 				"properties": {
 					"version": {
 						"type": "string"
@@ -1082,7 +1082,7 @@
 					},
 					"remote": {
 						"$ref": "#/components/schemas/IAgentRemoteReleaseDto",
-						"description": "Нет — удалённый выпуск ещё не получен (или источник не задан)."
+						"description": "Нет — сборки агента ещё не получены (или источник не задан)."
 					}
 				},
 				"required": [
@@ -1093,7 +1093,7 @@
 				"additionalProperties": false
 			},
 			"IAgentUpdateCandidateDto": {
-				"description": "Агент, которого можно обновить до версии выпуска.",
+				"description": "Агент, которого можно обновить до новой версии.",
 				"properties": {
 					"agentId": {
 						"type": "string"
@@ -1130,7 +1130,7 @@
 				"additionalProperties": false
 			},
 			"IAgentWorkerUpdateCandidateDto": {
-				"description": "Воркер из выпуска, которого можно обновить.",
+				"description": "Воркер со сборкой с сервера, которого можно обновить.",
 				"properties": {
 					"agentId": {
 						"type": "string"
@@ -1171,7 +1171,7 @@
 				"additionalProperties": false
 			},
 			"IAgentReleaseDto": {
-				"description": "Выпуск агента и кого можно обновить.",
+				"description": "Сборки агента и кого можно обновить.",
 				"properties": {
 					"manifest": {
 						"allOf": [
@@ -1180,7 +1180,7 @@
 							}
 						],
 						"nullable": true,
-						"description": "`null` — каталог выпуска не задан или пуст."
+						"description": "`null` — каталог сборок не задан или пуст."
 					},
 					"candidates": {
 						"items": {
@@ -1316,7 +1316,7 @@
 							"type": "string"
 						},
 						"type": "array",
-						"description": "Воркеры из выпуска."
+						"description": "Воркеры с сервера."
 					},
 					"stopTimeout": {
 						"type": "string",
@@ -1916,7 +1916,7 @@
 				"pattern": "^[a-z][a-z0-9-]{0,31}$"
 			},
 			"IUpdateWgNodeWorkerBody": {
-				"description": "Обновить воркер агента ноды из выпуска.",
+				"description": "Обновить воркер агента ноды с сервера.",
 				"properties": {
 					"force": {
 						"type": "boolean",
@@ -2816,7 +2816,7 @@
 					},
 					"hasPrivateKey": {
 						"type": "boolean",
-						"description": "Можно ли выпустить конфиг/QR (приватный ключ хранится)."
+						"description": "Можно ли получить конфиг/QR (приватный ключ хранится)."
 					},
 					"hasPresharedKey": {
 						"type": "boolean"
@@ -2945,7 +2945,7 @@
 					"publicKey": {
 						"type": "string",
 						"nullable": true,
-						"description": "Импорт существующего клиента: его публичный ключ. Приватный ключ тогда\nне хранится, конфиг/QR не выпускаются."
+						"description": "Импорт существующего клиента: его публичный ключ. Приватный ключ тогда\nне хранится, конфиг/QR не создаются."
 					},
 					"withPresharedKey": {
 						"type": "boolean",
@@ -6285,7 +6285,7 @@
 					"agentVersion": {
 						"type": "string",
 						"nullable": true,
-						"description": "Версия агента в выпуске, который бэкенд раздаёт узлам (установка и\nобновление); null — выпуска нет. Установленная на ноде — `agentVersion`\nноды."
+						"description": "Версия агента в сборках, которые бэкенд раздаёт узлам (установка и\nобновление); null — сборок нет. Установленная на ноде — `agentVersion`\nноды."
 					}
 				},
 				"required": [
@@ -6383,7 +6383,7 @@
 							"type": "string"
 						},
 						"type": "array",
-						"description": "Разрешения: `worker:demo.echo`, `worker:*`."
+						"description": "Разрешения: `integration:sync`, `integration:*`."
 					},
 					"expiresAt": {
 						"type": "string",
@@ -6880,7 +6880,7 @@
 						}
 					}
 				},
-				"description": "Обновить агента до версии выпуска (`AGENT_RELEASES_DIR`): итог — после\nзапуска новой версии. Агент в контейнере себя не обновляет.",
+				"description": "Обновить агента до новой версии (`AGENT_RELEASES_DIR`): итог — после\nзапуска новой версии. Агент в контейнере себя не обновляет.",
 				"summary": "Обновление агента",
 				"tags": [
 					"Agent"
@@ -6991,8 +6991,8 @@
 						}
 					}
 				},
-				"description": "Выпустить токен регистрации агентов. Полный токен (`token`) — только в\nэтом ответе: он кладётся в настройки агента (`enroll.token`) или в\nкоманду установки. `maxUses` не задан — многоразовый (парк машин).",
-				"summary": "Выпуск токена регистрации",
+				"description": "Создать токен регистрации агентов. Полный токен (`token`) — только в\nэтом ответе: он кладётся в настройки агента (`enroll.token`) или в\nкоманду установки. `maxUses` не задан — многоразовый (парк машин).",
+				"summary": "Создание токена регистрации",
 				"tags": [
 					"Agent"
 				],
@@ -7140,8 +7140,8 @@
 						}
 					}
 				},
-				"description": "Выпуск агента и кого из доступных агентов можно обновить до него:\nагент и netprobe — из выпусков GitHub (`AGENT_RELEASES_GITHUB`) или\nбазы выпуска (`AGENT_RELEASES_URL`), воркеры проекта wg и socks — из\n`AGENT_RELEASES_DIR`. Новую версию агента в источнике бэкенд замечает\nсам (сокет `agent:release`).",
-				"summary": "Выпуск агента",
+				"description": "Сборки агента и кого из доступных агентов можно обновить до их версии:\nагент и netprobe — из релизов GitHub (`AGENT_RELEASES_GITHUB`) или\nадреса сборок (`AGENT_RELEASES_URL`), воркеры проекта wg и socks — из\n`AGENT_RELEASES_DIR`. Новую версию агента в источнике бэкенд замечает\nсам (сокет `agent:release`).",
+				"summary": "Сборки агента",
 				"tags": [
 					"Agent"
 				],
@@ -7178,7 +7178,7 @@
 						}
 					}
 				},
-				"description": "Команда установки агента на новый узел одной строкой:\n`curl …/api/v1/agent-link/install.sh | sudo sh -s -- --token … [флаги]`\n(воркеры из выпуска — `workers`, флаг `--worker`).",
+				"description": "Команда установки агента на новый узел одной строкой:\n`curl …/api/v1/agent-link/install.sh | sudo sh -s -- --token … [флаги]`\n(воркеры с сервера — `workers`, флаг `--worker`).",
 				"summary": "Команда установки агента",
 				"tags": [
 					"Agent"
@@ -7293,7 +7293,7 @@
 						}
 					}
 				},
-				"description": "Обновить воркер из выпуска до новейшей сборки под агента. Свободный — сразу\n(версии в ответе); занятый — как у перезапуска: ответ `deferred: true`,\nитог — событие `agent:action`; `force` — сразу. Новая сборка не\nзаработала — агент возвращает прежнюю.",
+				"description": "Обновить воркер (`release: true`) до новейшей сборки под агента. Свободный — сразу\n(версии в ответе); занятый — как у перезапуска: ответ `deferred: true`,\nитог — событие `agent:action`; `force` — сразу. Новая сборка не\nзаработала — агент возвращает прежнюю.",
 				"summary": "Обновление воркера",
 				"tags": [
 					"Agent"
@@ -8220,7 +8220,7 @@
 						}
 					}
 				},
-				"description": "Обновить агента ноды до версии выпуска; итог — после запуска новой\nверсии агента.",
+				"description": "Обновить агента ноды до новой версии; итог — после запуска новой\nверсии агента.",
 				"summary": "Обновление агента ноды",
 				"tags": [
 					"WgNode"
@@ -8269,7 +8269,7 @@
 						}
 					}
 				},
-				"description": "Обновить воркер агента ноды (`wg`, `socks`) из выпуска. Занятый воркер —\n`deferred: true`, итог — событием `agent:action`.",
+				"description": "Обновить воркер агента ноды (`wg`, `socks`) с сервера. Занятый воркер —\n`deferred: true`, итог — событием `agent:action`.",
 				"summary": "Обновление воркера ноды",
 				"tags": [
 					"WgNode"
@@ -8693,7 +8693,7 @@
 						}
 					}
 				},
-				"description": "Изменить точку подключения; смена хоста/релея применяется к нодам\nавтоматически, клиентские конфиги перевыпускать не нужно. Новый релей\nдолжен быть виден автору.",
+				"description": "Изменить точку подключения; смена хоста/релея применяется к нодам\nавтоматически, клиентские конфиги пересоздавать не нужно. Новый релей\nдолжен быть виден автору.",
 				"summary": "Изменение точки подключения",
 				"tags": [
 					"WgEndpoint"
@@ -10155,7 +10155,7 @@
 						}
 					}
 				},
-				"description": "Перевыпустить preshared-ключ; клиенту нужен новый конфиг.",
+				"description": "Создать новый preshared-ключ; клиенту нужен новый конфиг.",
 				"summary": "Ротация PSK",
 				"tags": [
 					"WgPeer"
@@ -14992,7 +14992,7 @@
 						}
 					}
 				},
-				"description": "Выпустить API-ключ сервиса. Полный ключ (`key`) возвращается только в\nэтом ответе — сохраните его: в БД хранится лишь хеш.",
+				"description": "Создать API-ключ сервиса. Полный ключ (`key`) возвращается только в\nэтом ответе — сохраните его: в БД хранится лишь хеш.",
 				"summary": "Создание API-ключа",
 				"tags": [
 					"ApiKey"

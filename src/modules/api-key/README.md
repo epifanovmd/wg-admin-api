@@ -11,8 +11,8 @@ src/modules/api-key/
 ├── api-key.module.ts      # @Module: провайдеры, asSecurityScheme, listener и политика комнаты
 ├── api-key.entity.ts      # ApiKey (таблица api_keys)
 ├── api-key.repository.ts  # Поиск по префиксу, страница, touch lastUsedAt
-├── api-key.service.ts     # Выпуск, список, ключ по id, отзыв, проверка ключа
-├── api-key.listener.ts    # ApiKeyListener: выпуск/отзыв → комната api-keys
+├── api-key.service.ts     # Создание, список, ключ по id, отзыв, проверка ключа
+├── api-key.listener.ts    # ApiKeyListener: создание/отзыв → комната api-keys
 ├── api-key.socket-events.ts # apikey:updated в контракте сокета
 ├── api-key.scheme.ts      # Схема apiKey: X-Api-Key / Authorization: ApiKey
 ├── api-key.scopes.ts      # scopeSatisfied: сопоставление scope с wildcard
@@ -34,7 +34,7 @@ src/modules/api-key/
 | `prefix`     | `varchar(8)`, unique    | Открытая часть ключа для поиска                    |
 | `hash`       | `varchar(64)`           | sha256 секрета (hex)                               |
 | `scopes`     | `varchar(100)[]`        | Разрешения: `<домен>:<действие>`, `<домен>:*`, `*` |
-| `ownerId`    | `uuid` → users, CASCADE | Кто выпустил; от его имени действует сервис        |
+| `ownerId`    | `uuid` → users, CASCADE | Кто создал; от его имени действует сервис          |
 | `lastUsedAt` | `timestamptz`, nullable | Обновляется не чаще раза в минуту                  |
 | `expiresAt`  | `timestamptz`, nullable | Срок действия; `NULL` — бессрочный                 |
 | `revokedAt`  | `timestamptz`, nullable | Отозван                                            |
@@ -71,7 +71,7 @@ src/modules/api-key/
 
 ## Использование другими модулями
 
-`ApiKeyService` экспортируется из `index.ts` (выпуск, проверка, отзыв ключей).
+`ApiKeyService` экспортируется из `index.ts` (создание, проверка, отзыв ключей).
 Агенты нод ключами не пользуются: у них свой ключ из регистрации (модуль
 agent). События `ApiKeyCreatedEvent` / `ApiKeyRevokedEvent` (после записи) пишет
 в журнал модуль audit.

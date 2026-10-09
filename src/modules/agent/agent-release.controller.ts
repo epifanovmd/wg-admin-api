@@ -32,12 +32,12 @@ export class AgentReleaseController extends Controller {
   }
 
   /**
-   * Выпуск агента и кого из доступных агентов можно обновить до него:
-   * агент и netprobe — из выпусков GitHub (`AGENT_RELEASES_GITHUB`) или
-   * базы выпуска (`AGENT_RELEASES_URL`), воркеры проекта wg и socks — из
+   * Сборки агента и кого из доступных агентов можно обновить до их версии:
+   * агент и netprobe — из релизов GitHub (`AGENT_RELEASES_GITHUB`) или
+   * адреса сборок (`AGENT_RELEASES_URL`), воркеры проекта wg и socks — из
    * `AGENT_RELEASES_DIR`. Новую версию агента в источнике бэкенд замечает
    * сам (сокет `agent:release`).
-   * @summary Выпуск агента
+   * @summary Сборки агента
    */
   @Security("jwt")
   @Get()
@@ -48,7 +48,7 @@ export class AgentReleaseController extends Controller {
   /**
    * Команда установки агента на новый узел одной строкой:
    * `curl …/api/v1/agent-link/install.sh | sudo sh -s -- --token … [флаги]`
-   * (воркеры из выпуска — `workers`, флаг `--worker`).
+   * (воркеры с сервера — `workers`, флаг `--worker`).
    * @summary Команда установки агента
    */
   @Security("jwt", ["permission:agent:enroll"])

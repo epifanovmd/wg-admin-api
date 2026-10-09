@@ -1161,7 +1161,7 @@ describe("wireguard", () => {
       );
     });
 
-    it("агент ноды: выпуск, установщик, обновление агента и воркера, журнал", async () => {
+    it("агент ноды: сборки, установщик, обновление агента и воркера, журнал", async () => {
       const release = expectStatus(
         await call(admin, "GET", "/api/v1/agent-releases"),
         200,
@@ -1181,7 +1181,7 @@ describe("wireguard", () => {
         `/api/v1/wg/nodes/${nodeA.id}/agent/update`,
       );
 
-      // В выпуске стенда нет сборки под фейковый агент — обновлять нечем.
+      // Среди сборок стенда нет сборки под фейковый агент — обновлять нечем.
       expect([200, 409]).to.include(updated.status);
       expectStatus(
         await call(user, "POST", `/api/v1/wg/nodes/${nodeA.id}/agent/update`),
@@ -2225,7 +2225,7 @@ describe("wireguard", () => {
     });
   });
 
-  describe("изменение точки подключения без перевыпуска конфигов", () => {
+  describe("изменение точки подключения без пересоздания конфигов", () => {
     it("смена хоста точки меняет endpoint в конфигах и версию нод", async () => {
       const before = expectStatus(
         await call(admin, "GET", `/api/v1/wg/nodes/${nodeA.id}`),

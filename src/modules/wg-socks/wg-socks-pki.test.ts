@@ -12,7 +12,7 @@ import {
 } from "./wg-socks-pki";
 
 describe("wg-socks-pki", () => {
-  it("CA выпускает серверный и клиентский сертификаты: подписаны им, ключи от них", async () => {
+  it("CA подписывает серверный и клиентский сертификаты: подписаны им, ключи от них", async () => {
     const ca = await newCertificateAuthority("proxy-ca");
     const other = await newCertificateAuthority("other-ca");
     const caCert = new X509Certificate(ca.certPem);

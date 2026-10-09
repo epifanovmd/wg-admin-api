@@ -58,7 +58,7 @@ declare module "../socket/socket.types" {
     /** Точка метрик — `agent_<id>`. */
     "agent:metrics": (...args: [IAgentMetricsSocketDto]) => void;
     /**
-     * В источнике выпуска появилась новая версия агента — всем клиентам
+     * Вышла новая версия агента — всем клиентам
      * (от каждой копии бэкенда: может прийти несколько раз).
      */
     "agent:release": (...args: [IAgentReleaseNoticeDto]) => void;

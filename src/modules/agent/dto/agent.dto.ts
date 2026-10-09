@@ -129,7 +129,7 @@ export interface IAgentWorkerDto {
   state?: string;
   message?: string;
   version?: string;
-  /** Ставится и обновляется из выпуска. */
+  /** Ставится и обновляется с сервера (`release: true`). */
   release?: boolean;
   /** Встроенный `sysmetrics`: часть агента. */
   builtin?: boolean;

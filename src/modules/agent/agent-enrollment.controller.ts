@@ -47,10 +47,10 @@ export class AgentEnrollmentController extends Controller {
   }
 
   /**
-   * Выпустить токен регистрации агентов. Полный токен (`token`) — только в
+   * Создать токен регистрации агентов. Полный токен (`token`) — только в
    * этом ответе: он кладётся в настройки агента (`enroll.token`) или в
    * команду установки. `maxUses` не задан — многоразовый (парк машин).
-   * @summary Выпуск токена регистрации
+   * @summary Создание токена регистрации
    */
   @Security("jwt", ["permission:agent:enroll"])
   @ValidateBody(CreateAgentEnrollmentTokenSchema)

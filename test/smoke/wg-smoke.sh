@@ -139,7 +139,7 @@ echo "$CONFIG" | grep -q "Address = 10.77.0.2/32" || fail "адрес в кон�
 ok "конфиг указывает на релей $IP_B:51820"
 QR=$(api GET "/api/v1/wg/peers/$PEER_ID/qr" | json "d['dataUrl'][:22]")
 [ "$QR" = "data:image/png;base64," ] || fail "QR"
-ok "QR выпускается"
+ok "QR создаётся"
 
 log "Релей настроил DNAT до ноды A"
 check_dnat() {

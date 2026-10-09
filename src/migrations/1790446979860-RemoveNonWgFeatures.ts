@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
- * Удаление функций шаблона, не нужных админке WireGuard: файлы и аватары,
+ * Удаление функций, не нужных админке WireGuard: файлы и аватары,
  * биометрия, настройки приватности и presence, внешние воркеры задач.
  * Таблицы удалённых сущностей TypeORM не отслеживает — удаляются явно;
- * CASCADE снимает внешние ключи таблиц других веток шаблона, если они есть.
+ * CASCADE снимает внешние ключи других таблиц, если они есть.
  */
 export class RemoveNonWgFeatures1790446979860 implements MigrationInterface {
     name = 'RemoveNonWgFeatures1790446979860'

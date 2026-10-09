@@ -137,8 +137,8 @@ const relayTo: RelayFunction = (instanceId, request) =>
   });
 
 /**
- * Откуда брать агента и netprobe: база выпуска (`AGENT_RELEASES_URL`) или
- * выпуски GitHub (`AGENT_RELEASES_GITHUB`); ни того ни другого — только
+ * Откуда брать агента и netprobe: адрес сборок (`AGENT_RELEASES_URL`) или
+ * релизы GitHub (`AGENT_RELEASES_GITHUB`); ни того ни другого — только
  * `releasesDir`.
  */
 export const agentReleasesOptions = (
@@ -176,7 +176,7 @@ type TWorkerEventHandler = (event: AgentEvent) => Promise<void>;
 
 /**
  * `Agents` из agent-sdk — один на процесс: регистрация, WebSocket агентов,
- * запросы к воркерам, задачи, настройки, наблюдение, действия, выпуск.
+ * запросы к воркерам, задачи, настройки, наблюдение, действия, раздача сборок агента.
  * Хранилище — Postgres (`AgentStore`). События SDK уходят в EventBus;
  * история (события воркеров, метрики) — в свои таблицы. Изменения в Store,
  * которые должен доставить процесс с соединением агента, — сигналом
@@ -239,7 +239,7 @@ export class AgentRuntime {
   }
 
   /**
-   * HTTP-запрос агента (регистрация, выпуск, `install.sh`): в контексте
+   * HTTP-запрос агента (регистрация, сборки агента, `install.sh`): в контексте
    * регистрации, чтобы новый агент получил событие `AgentEnrolledEvent` с
    * источником.
    */
@@ -414,7 +414,7 @@ export class AgentRuntime {
           previous: release.previous,
           from: release.from,
         },
-        "[Agent] Выпуск агента в источнике",
+        "[Agent] Версия агента в источнике",
       );
       emit(
         new AgentReleaseChangedEvent({

@@ -109,7 +109,7 @@ export type ISocketData = AuthContext & {
   subscriptions?: Record<string, ISocketRoomPayload>;
 };
 
-/** События между инстансами сервера (адаптер Redis и т.п.); шаблон их не задаёт. */
+/** События между инстансами сервера (адаптер Redis и т.п.); проект их не задаёт. */
 export type TInterServerEvents = Record<string, (...args: any[]) => void>;
 
 export type TSocket = SocketIO<

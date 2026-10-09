@@ -1,11 +1,11 @@
 /**
- * Откуда сборка: `remote` — удалённый источник выпуска агента (GitHub или
+ * Откуда сборка: `remote` — удалённый источник сборок агента (GitHub или
  * `AGENT_RELEASES_URL`), `local` — каталог воркеров проекта
  * (`AGENT_RELEASES_DIR`).
  */
 export type TAgentReleaseSource = "remote" | "local";
 
-/** Сборка агента в выпуске. */
+/** Сборка агента. */
 export interface IAgentReleaseArtifactDto {
   os: string;
   arch: string;
@@ -18,7 +18,7 @@ export interface IAgentReleaseArtifactDto {
   url: string;
 }
 
-/** Сборка воркера в выпуске. */
+/** Сборка воркера. */
 export interface IAgentWorkerArtifactDto extends IAgentReleaseArtifactDto {
   name: string;
   version: string;
@@ -27,19 +27,19 @@ export interface IAgentWorkerArtifactDto extends IAgentReleaseArtifactDto {
   stopTimeout?: string;
 }
 
-/** Удалённый выпуск агента: версия, источник, когда проверен. */
+/** Версия агента в удалённом источнике: какая, откуда, когда проверена. */
 export interface IAgentRemoteReleaseDto {
   version: string;
-  /** `github:owner/repo` или база выпуска (url). */
+  /** `github:owner/repo` или адрес сборок (url). */
   from: string;
   /** Когда источник проверен, мс с 1970-01-01. */
   checkedAt: number;
-  /** Ключ подписи удалённого выпуска (base64). */
+  /** Ключ подписи сборок агента (base64). */
   publicKey?: string;
 }
 
 /**
- * Итоговый выпуск: агент и netprobe — из удалённого источника, воркеры
+ * Итоговый манифест сборок: агент и netprobe — из удалённого источника, воркеры
  * проекта (wg, socks) — из `AGENT_RELEASES_DIR`.
  */
 export interface IAgentReleaseManifestDto {
@@ -47,20 +47,20 @@ export interface IAgentReleaseManifestDto {
   publicKey?: string;
   artifacts: IAgentReleaseArtifactDto[];
   workers?: IAgentWorkerArtifactDto[];
-  /** Нет — удалённый выпуск ещё не получен (или источник не задан). */
+  /** Нет — сборки агента ещё не получены (или источник не задан). */
   remote?: IAgentRemoteReleaseDto;
 }
 
 /** В источнике появилась новая версия агента (сокет `agent:release`). */
 export interface IAgentReleaseNoticeDto {
   version: string;
-  /** Прежняя версия; нет — выпуск получен впервые после запуска бэкенда. */
+  /** Прежняя версия; нет — версия получена впервые после запуска бэкенда. */
   previous?: string;
-  /** `github:owner/repo` или база выпуска (url). */
+  /** `github:owner/repo` или адрес сборок (url). */
   from: string;
 }
 
-/** Агент, которого можно обновить до версии выпуска. */
+/** Агент, которого можно обновить до новой версии. */
 export interface IAgentUpdateCandidateDto {
   agentId: string;
   name: string;
@@ -71,7 +71,7 @@ export interface IAgentUpdateCandidateDto {
   arch: string;
 }
 
-/** Воркер из выпуска, которого можно обновить. */
+/** Воркер со сборкой с сервера, которого можно обновить. */
 export interface IAgentWorkerUpdateCandidateDto {
   agentId: string;
   agentName: string;
@@ -83,9 +83,9 @@ export interface IAgentWorkerUpdateCandidateDto {
   arch: string;
 }
 
-/** Выпуск агента и кого можно обновить. */
+/** Сборки агента и кого можно обновить. */
 export interface IAgentReleaseDto {
-  /** `null` — каталог выпуска не задан или пуст. */
+  /** `null` — каталог сборок не задан или пуст. */
   manifest: IAgentReleaseManifestDto | null;
   candidates: IAgentUpdateCandidateDto[];
   workerCandidates: IAgentWorkerUpdateCandidateDto[];
@@ -122,7 +122,7 @@ export interface ICreateAgentInstallCommandBody {
   sysctl?: Record<string, string>;
   rwPaths?: string[];
   caFile?: string;
-  /** Воркеры из выпуска. */
+  /** Воркеры с сервера. */
   workers?: string[];
   /** Например `30s`. */
   stopTimeout?: string;

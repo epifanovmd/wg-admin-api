@@ -158,7 +158,7 @@ describe("wireguard: прокси SOCKS5 через mTLS", () => {
     );
   });
 
-  it("клиенты: выпуск, архив для Mac, allowlist агента", async () => {
+  it("клиенты: создание, архив для Mac, allowlist агента", async () => {
     client = expectStatus(
       await call(admin, "POST", `/api/v1/wg/socks/${service.id}/clients`, {
         name: "macbook",

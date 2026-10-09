@@ -156,7 +156,7 @@ jobs:
         run: yarn test:file src/core/redis/live-store.test.ts
         env:
           TEST_REDIS_URL: redis://localhost:6379/14
-      # Настоящий агент в e2e: воркеры проекта и выпуск агента с GitHub (текущий и
+      # Настоящий агент в e2e: воркеры проекта и сборки агента с GitHub (текущий и
       # прежний — для обновления); сами тесты в GitHub не ходят.
       - id: go
         run: echo "version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' agent/go.mod)" >> "$GITHUB_OUTPUT"

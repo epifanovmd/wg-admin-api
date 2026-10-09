@@ -27,7 +27,7 @@ SOCKS5-прокси через mTLS на нодах: агент ноды
 listenPort (unique на ноде), clientHost/clientPort — адрес для клиентов, если
 прокси доступен через TCP-проброс на другой ноде (null — publicHost ноды и
 listenPort), serverName — имя из серверного сертификата, CA (сертификат и
-ключ), серверный сертификат и ключ, enabled. Вся PKI выпускается сервисом при
+ключ), серверный сертификат и ключ, enabled. Вся PKI создаётся сервисом при
 создании прокси. Ключи зашифрованы `WgSecretBox`.
 
 **WgSocksUser** (`wg_socks_users`): username (unique в сервисе), пароль —
@@ -73,7 +73,7 @@ live-хранилище (TTL 60 с), поле `live` DTO.
 - `/{id}/users` — добавление (пароль генерируется, если не задан), изменение,
   удаление — `wg:socks:users`; `GET …/secret` — логин и пароль,
   `wg:socks:secrets`.
-- `/{id}/clients` (`wg:socks:clients`) — выпуск, `POST …/revoke`, `GET …/mac?userId=` — zip для
+- `/{id}/clients` (`wg:socks:clients`) — создание, `POST …/revoke`, `GET …/mac?userId=` — zip для
   macOS: `install.sh` (stunnel из Homebrew, автозапуск launchd, локальный
   SOCKS5 127.0.0.1:1080), `uninstall.sh`, README с настройками и ссылкой для
   Telegram.

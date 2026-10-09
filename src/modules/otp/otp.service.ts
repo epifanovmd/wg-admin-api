@@ -23,7 +23,7 @@ export const OTP_RESEND_COOLDOWN_MS = 60_000;
 export class OtpService {
   constructor(@inject(OtpRepository) private _otpRepository: OtpRepository) {}
 
-  /** Выпустить новый код (прежний перестаёт действовать); не чаще раза в минуту. */
+  /** Создать новый код (прежний перестаёт действовать); не чаще раза в минуту. */
   async create(userId: string): Promise<{ code: string; expireAt: Date }> {
     const existing = await this._otpRepository.findByUserId(userId);
 

@@ -30,7 +30,7 @@ export interface IAgentEnrollmentGrant {
 }
 
 /**
- * Чем зарегистрирован агент: выпущенный токен (id, кто выпустил, его метки)
+ * Чем зарегистрирован агент: созданный токен (id, кто создал, его метки)
  * или общий токен окружения (`tokenId: null`, без меток).
  */
 export interface IAgentEnrollmentSource {
@@ -61,7 +61,7 @@ const sameSecret = (actual: string, expected: string): boolean =>
   tokenHashMatches(actual, hashToken(expected));
 
 /**
- * Регистрация агентов: токены в БД (выпуск, список, отзыв) и проверка
+ * Регистрация агентов: токены в БД (создание, список, отзыв) и проверка
  * токена для `Agents` (хук `enroll`): общий токен из окружения или
  * выпущенный — с учётом срока, отзыва и лимита использований.
  */
@@ -74,7 +74,7 @@ export class AgentEnrollmentService {
     private readonly _tokens: AgentEnrollmentTokenRepository,
   ) {}
 
-  /** Выпустить токен; полный токен возвращается только здесь. */
+  /** Создать токен; полный токен возвращается только здесь. */
   async createToken(
     createdBy: string,
     body: ICreateAgentEnrollmentTokenBody,

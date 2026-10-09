@@ -8,7 +8,7 @@ import { ApiKeyCreatedEvent, ApiKeyRevokedEvent } from "./events";
 /** Комната списка API-ключей: право `apikey:view`. */
 export const API_KEYS_ROOM = "api-keys";
 
-/** Выпуск и отзыв ключей — в комнату списка ключей (без секрета). */
+/** Создание и отзыв ключей — в комнату списка ключей (без секрета). */
 @Injectable()
 export class ApiKeyListener implements ISocketEventListener {
   constructor(

@@ -12,7 +12,7 @@ import { TOKEN_HASH_LENGTH } from "../../core";
 import { User } from "../user/user.entity";
 
 /**
- * API-ключ сервиса (внешний воркер, интеграция). Ключ `<prefix>.<secret>`
+ * API-ключ сервиса (интеграция). Ключ `<prefix>.<secret>`
  * показывается один раз; в БД — префикс для поиска и sha256 секрета.
  */
 @Entity("api_keys")
@@ -32,11 +32,11 @@ export class ApiKey {
   @Column({ type: "varchar", length: TOKEN_HASH_LENGTH })
   hash!: string;
 
-  /** Разрешения ключа: `worker:demo.echo`, `worker:*`. */
+  /** Разрешения ключа: `integration:sync`, `integration:*`. */
   @Column({ type: "varchar", length: 100, array: true, default: () => "'{}'" })
   scopes!: string[];
 
-  /** Кто выпустил ключ; от его имени действует сервис. */
+  /** Кто создал ключ; от его имени действует сервис. */
   @Column({ name: "owner_id", type: "uuid" })
   ownerId!: string;
 

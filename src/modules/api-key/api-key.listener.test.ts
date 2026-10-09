@@ -9,7 +9,7 @@ import { API_KEYS_ROOM, ApiKeyListener } from "./api-key.listener";
 import { ApiKeyCreatedEvent, ApiKeyRevokedEvent } from "./events";
 
 describe("ApiKeyListener", () => {
-  it("выпуск и отзыв — apikey:updated в комнату ключей", async () => {
+  it("создание и отзыв — apikey:updated в комнату ключей", async () => {
     const eventBus = new EventBus();
     const emitter = createMockEmitter();
     const dto = { id: "k1", name: "ci" };

@@ -176,7 +176,7 @@ export class AgentController extends Controller {
   }
 
   /**
-   * Обновить агента до версии выпуска (`AGENT_RELEASES_DIR`): итог — после
+   * Обновить агента до новой версии (`AGENT_RELEASES_DIR`): итог — после
    * запуска новой версии. Агент в контейнере себя не обновляет.
    * @summary Обновление агента
    */

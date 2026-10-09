@@ -173,7 +173,7 @@ export class WgPeerController extends Controller {
   }
 
   /**
-   * Перевыпустить preshared-ключ; клиенту нужен новый конфиг.
+   * Создать новый preshared-ключ; клиенту нужен новый конфиг.
    * @summary Ротация PSK
    */
   @Security("jwt", ["permission:wg:peer:psk:own"])

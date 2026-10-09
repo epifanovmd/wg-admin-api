@@ -56,7 +56,7 @@ agent_version() {
   node -p "((require('./package.json').dependencies || {})['agent-sdk'] || '').match(/agent-sdk-([^/]+)\\.tgz$/)?.[1] || ''"
 }
 
-# Программа агента: первая найденная; нет — скачать выпуск agent-sdk с GitHub.
+# Программа агента: первая найденная; нет — скачать агента версии agent-sdk с GitHub.
 binary() {
   local file candidate version
   file="agent-$(platform)"
@@ -72,13 +72,13 @@ binary() {
     return
   fi
   cat >&2 <<HINT
-Нет программы агента для $(platform): agent/fetch-agent.sh (выпуск с GitHub в agent/dist)
+Нет программы агента для $(platform): agent/fetch-agent.sh (сборки с GitHub в agent/dist)
 или укажите свою: AGENT_BIN=/путь/к/agent agent/dev.sh run
 HINT
   exit 1
 }
 
-# Сборка воркера $1 под эту машину (абсолютный путь): из выпуска, из agent/dist или собрать.
+# Сборка воркера $1 под эту машину (абсолютный путь): из каталога сборок, из agent/dist или собрать.
 worker_binary() {
   local name="$1" override="$2" version file candidate p
   version="$(tr -d '[:space:]' <"agent/workers/$name/VERSION")"

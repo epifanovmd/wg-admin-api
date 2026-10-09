@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Выпуск агента с GitHub (github.com/epifanovmd/agent) — для разработки и e2e:
+# Сборки агента с GitHub (github.com/epifanovmd/agent) — для разработки и e2e:
 #
 #   agent/fetch-agent.sh [ВЕРСИЯ…]   → agent/dist/agent-<версия>/
 #
@@ -8,9 +8,9 @@
 # Версия по умолчанию — версия agent-sdk из package.json. Контрольные суммы сверяются с
 # manifest.json. Скачанное не перезаписывается: каталог версии уже есть — пропуск.
 #
-# Программу агента отсюда берёт agent/dev.sh, а e2e раздаёт каталог бэкенду как источник выпуска
+# Программу агента отсюда берёт agent/dev.sh, а e2e раздаёт каталог бэкенду как источник сборок
 # агента (AGENT_RELEASES_URL), не обращаясь к GitHub. Бэкенд в работе берёт агента сам — из
-# выпусков GitHub.
+# релизов GitHub.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,7 +29,7 @@ sdk_version() {
   node -p "((require('./package.json').dependencies || {})['agent-sdk'] || '').match(/agent-sdk-([^/]+)\\.tgz$/)?.[1] || ''"
 }
 
-# Файлы выпуска под платформы $2 из manifest.json $1 (агент и его воркеры).
+# Файлы сборок под платформы $2 из manifest.json $1 (агент и его воркеры).
 files_for() {
   # shellcheck disable=SC2016 # шаблон JavaScript, не оболочки
   node -e '

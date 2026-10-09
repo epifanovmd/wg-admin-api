@@ -20,7 +20,7 @@ export default tseslint.config(
       "no-unused-vars": "off",
       "no-redeclare": "off",
 
-      // typescript-eslint: шаблон осознанно использует any в инфраструктуре
+      // typescript-eslint: проект осознанно использует any в инфраструктуре
       // (декораторы, DI, адаптеры библиотек).
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": [

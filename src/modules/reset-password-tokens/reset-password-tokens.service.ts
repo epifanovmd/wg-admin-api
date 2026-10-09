@@ -28,7 +28,7 @@ export class ResetPasswordTokensService {
   ) {}
 
   /**
-   * Выпустить новый токен (прежний перестаёт действовать).
+   * Создать новый токен (прежний перестаёт действовать).
    * `null` — предыдущий выпущен меньше минуты назад, письмо слать не нужно.
    */
   async create(userId: string): Promise<{ token: string } | null> {
