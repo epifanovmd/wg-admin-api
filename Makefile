@@ -1,7 +1,7 @@
 # Деплой по SSH. Настройки — .env.deploy (образец .env.deploy.example); секреты
 # приложения — .env.production (кладёт `make env`).
-#   make deploy   — исходники на хост и сборка там же
-#   make release  — готовый образ из registry (TAG=v1.2.3)
+#   make release  — готовый образ коммита из ghcr (TAG=<sha>; его собирает CI)
+#   make deploy   — запасной путь: исходники на хост и сборка там же
 # Цели image и local-* работают и без .env.deploy.
 -include .env.deploy
 

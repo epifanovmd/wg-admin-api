@@ -140,10 +140,17 @@ yarn agent              # агент на переднем плане (agent/dev
 **Makefile — сервер по SSH** (настройки — `.env.deploy`, образец `.env.deploy.example`;
 любое значение переопределяется в команде: `make deploy SSH_HOST=…`)
 
+Обычная выкладка — push в `main`: CI проверяет код, собирает образ (воркеры wg и socks
+подписаны ключом из секрета `AGENT_SIGNING_KEY`), отправляет его в GHCR с тегом коммита и
+запускает на хосте `make release TAG=<sha>`; после выкладки `latest` указывает на этот
+коммит. Хост только скачивает образ. Откат — `make release TAG=<sha прошлого коммита>` или
+ручной запуск workflow Deploy с этим тегом. `make deploy` (сборка на хосте) — запасной путь
+без CI: воркеры в нём без подписи.
+
 | Команда                            | Что делает                                                              |
 | ---------------------------------- | ----------------------------------------------------------------------- |
 | `make deploy`                      | исходники на хост, сборка образа там же, миграции, запуск               |
-| `make release TAG=v1.2.3`          | готовый образ из GHCR: compose-файлы, `pull`, миграции, запуск          |
+| `make release TAG=<sha>`           | готовый образ из GHCR: compose-файлы, `pull`, миграции, запуск          |
 | `make env`                         | секреты (`.env.production`) на хост                                     |
 | `make sync` / `compose`            | исходники (rsync, кроме `.deployignore`) / только compose-файлы на хост |
 | `make build` / `pull`              | собрать образ на хосте / скачать из registry                            |
@@ -229,9 +236,10 @@ docker compose up -d --scale api=3      # реплики API (API_PORTS=8181-818
 
 `Makefile` (по SSH, настройки — `.env.deploy`, образец `.env.deploy.example`):
 
-- `make deploy` — исходники на хост (rsync, исключения `.deployignore`), сборка
-  там же, миграции, запуск;
-- `make release TAG=v1.2.3` — готовый образ из GHCR;
+- `make release TAG=<sha>` — готовый образ коммита из GHCR (его собирает CI), миграции,
+  запуск — так выкладывает CI;
+- `make deploy` — запасной путь: исходники на хост (rsync, исключения `.deployignore`),
+  сборка там же (воркеры без подписи), миграции, запуск;
 - `make env` — `.env.production` на хост; `status`, `logs`, `restart`, `down`;
 - `make db-dump` / `make db-restore` — дамп базы с хоста и обратно
   (`scripts/db`);
