@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from "crypto";
+import { randomBytes } from "crypto";
 import { inject } from "inversify";
 
 import {
@@ -9,6 +9,7 @@ import {
   isUniqueViolation,
   logger,
   normalizePagination,
+  tokenHashMatches,
   toPage,
 } from "../../core";
 import { ApiKey } from "./api-key.entity";
@@ -45,13 +46,6 @@ export const parseApiKey = (
   const secret = raw.slice(dot + 1);
 
   return secret ? { prefix: raw.slice(0, dot), secret } : null;
-};
-
-const hashMatches = (secret: string, hash: string): boolean => {
-  const actual = Buffer.from(hashToken(secret), "hex");
-  const expected = Buffer.from(hash, "hex");
-
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
 };
 
 @Injectable()
@@ -141,7 +135,7 @@ export class ApiKeyService {
 
     if (
       !apiKey ||
-      !hashMatches(parsed.secret, apiKey.hash) ||
+      !tokenHashMatches(parsed.secret, apiKey.hash) ||
       apiKey.revokedAt ||
       (apiKey.expiresAt && apiKey.expiresAt <= now)
     ) {

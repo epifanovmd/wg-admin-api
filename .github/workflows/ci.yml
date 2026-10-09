@@ -180,8 +180,13 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: yarn
-      - name: yarn audit (только production-зависимости)
-        run: yarn audit --level high --groups dependencies
+      # Код выхода yarn audit — битовая маска уровней (2 low, 4 moderate, 8 high, 16 critical)
+      # и не учитывает --level: падаем только на high и critical.
+      - name: yarn audit (только production-зависимости, high и critical)
+        run: |
+          code=0
+          yarn audit --level high --groups dependencies || code=$?
+          if [ $((code & 24)) -ne 0 ]; then exit "$code"; fi
 
   # Образ: на push в main — с подписью воркеров wg и socks, проверка Trivy и отправка в
   # ghcr с тегом коммита; деплой берёт именно его. В pull request — сборка и проверка.

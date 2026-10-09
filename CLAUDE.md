@@ -7,7 +7,7 @@
 ## Проект
 
 WG Admin — админка WireGuard: бэкенд (модульный монолит на Node.js + TypeScript) и
-воркеры узла на Go (`agent/workers`: `wg`, `socks`), которые запускает агент 1.0.1
+воркеры узла на Go (`agent/workers`: `wg`, `socks`), которые запускает агент 1.1.0
 ([github.com/epifanovmd/agent](https://github.com/epifanovmd/agent)) на нодах; на
 бэкенде связь с агентами — пакет `agent-sdk` в модуле `agent`. Бэкенд: Koa + tsoa (маршруты и OpenAPI из декораторов),
 Inversify (DI), TypeORM + PostgreSQL, pg-boss (очередь задач на Postgres), Redis

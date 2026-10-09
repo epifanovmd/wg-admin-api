@@ -1,4 +1,7 @@
-import { ownPermission } from "../../core/auth/has-permission";
+import {
+  OWN_SCOPE_SUFFIX,
+  ownPermission,
+} from "../../core/auth/has-permission";
 import { ALL_PERMISSIONS } from "../../core/auth/superuser";
 import { defineErrors } from "../../core/http";
 
@@ -89,7 +92,8 @@ const assertValid = (
       !name.startsWith(`${group.key}:`) ||
       !NAME_RE.test(name) ||
       longest.length > MAX_NAME_LENGTH ||
-      (scoped && (name.endsWith(":*") || name.endsWith(":own")))
+      name.endsWith(`:${OWN_SCOPE_SUFFIX}`) ||
+      (scoped && name.endsWith(":*"))
     ) {
       throw PermissionError.INVALID_DEFINITION({ domain, name });
     }
@@ -102,7 +106,8 @@ const assertValid = (
  * собирают все объявленные — общий файл при добавлении модуля не правится.
  *
  * Каждое право — `<group.key>:<действие>`. Право с `scoped: true` объявляет
- * и `<имя>:own` — действие только над своими сущностями. Повторное объявление
+ * и `<имя>:own` — действие только над своими сущностями; сегмент `:own` в конце
+ * имени зарезервирован за областью и напрямую не объявляется. Повторное объявление
  * тех же имён идемпотентно; подпись — последняя объявленная.
  *
  * @example

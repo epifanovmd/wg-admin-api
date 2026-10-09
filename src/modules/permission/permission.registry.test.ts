@@ -116,6 +116,19 @@ describe("permission registry", () => {
     );
   });
 
+  it("имя с сегментом области :own — ошибка объявления", () => {
+    expectInvalid(() =>
+      definePermissions("report", REPORT, {
+        OWN: { name: "report:view:own", label: "Свои" },
+      }),
+    );
+    expectInvalid(() =>
+      definePermissions("report", REPORT, {
+        OWN: { name: "report:view:own", label: "Свои", scoped: true },
+      }),
+    );
+  });
+
   it("платформенные права объявлены", () => {
     expect(getRegisteredPermissions()).to.include.members([
       "apikey:view",
