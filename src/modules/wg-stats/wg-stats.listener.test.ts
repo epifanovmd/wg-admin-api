@@ -47,6 +47,7 @@ describe("WgStatsListener", () => {
         toRoomExcept: record(""),
       } as any,
       {} as any,
+      {} as any,
     );
 
     listener.register();

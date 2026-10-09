@@ -42,3 +42,11 @@ export class WgNodeDeletedEvent {
 export class WgNodeStatusChangedEvent {
   constructor(public readonly node: WgNodeDto) {}
 }
+
+/**
+ * Агент отвязан от ноды (отозван или удалён): фактическое состояние,
+ * которое он сообщал (статусы интерфейсов), больше неизвестно.
+ */
+export class WgNodeAgentUnboundEvent {
+  constructor(public readonly nodeId: string) {}
+}

@@ -99,10 +99,19 @@ export class WgNodeRepository extends BaseRepository<WgNode> {
   async clearAgent(agentId: string): Promise<string | null> {
     const result = await this.createQueryBuilder()
       .update(WgNode)
+      // Всё, что сообщал агент, — вместе с ним: версии, хост, адрес, связь,
+      // применённое состояние (новый агент получит его заново).
       .set({
         agentId: null,
         status: EWgNodeStatus.Created,
         statusMessage: null,
+        appliedVersion: 0,
+        applyError: null,
+        agentVersion: null,
+        wgVersion: null,
+        osInfo: null,
+        agentRemoteIp: null,
+        lastSeenAt: null,
       })
       .where("agent_id = :agentId", { agentId })
       .returning(["id"])

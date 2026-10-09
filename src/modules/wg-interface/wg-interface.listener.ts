@@ -11,7 +11,11 @@ import {
   WgEndpointService,
   WgEndpointUpdatedEvent,
 } from "../wg-endpoint";
-import { WgNodeHostChangedEvent, WgNodeService } from "../wg-node";
+import {
+  WgNodeAgentUnboundEvent,
+  WgNodeHostChangedEvent,
+  WgNodeService,
+} from "../wg-node";
 import { WgInterfaceDto } from "./dto";
 import {
   WgInterfaceCreatedEvent,
@@ -20,6 +24,7 @@ import {
 } from "./events";
 import { WgInterfacePermissions } from "./wg-interface.permissions";
 import { WgInterfaceRepository } from "./wg-interface.repository";
+import { WgInterfaceService } from "./wg-interface.service";
 import { wgInterfaceRoom } from "./wg-interface-room.policy";
 import { WgRelaySyncService } from "./wg-relay-sync.service";
 
@@ -47,6 +52,8 @@ export class WgInterfaceListener implements ISocketEventListener {
     private readonly _relaySync: WgRelaySyncService,
     @inject(WgNodeService) private readonly _nodes: WgNodeService,
     @inject(WgEndpointService) private readonly _endpoints: WgEndpointService,
+    @inject(WgInterfaceService)
+    private readonly _service: WgInterfaceService,
   ) {}
 
   register(): void {
@@ -95,6 +102,21 @@ export class WgInterfaceListener implements ISocketEventListener {
     this._eventBus.on(WgNodeHostChangedEvent, ({ nodeId }) =>
       this._onNodeHostChanged(nodeId),
     );
+    this._eventBus.on(WgNodeAgentUnboundEvent, ({ nodeId }) =>
+      this._onAgentUnbound(nodeId),
+    );
+  }
+
+  /** Агент отвязан: статусы интерфейсов ноды (основных и реплик) — «неизвестно». */
+  private async _onAgentUnbound(nodeId: string): Promise<void> {
+    try {
+      await this._service.updateReportedStatuses(nodeId, []);
+    } catch (err) {
+      logger.error(
+        { err, nodeId },
+        "[WG] interface statuses not reset after agent unbind",
+      );
+    }
   }
 
   /** Новый publicHost ноды — пересобрать конфигурации связанных релеев и целей. */

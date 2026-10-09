@@ -451,6 +451,31 @@ describe("агент ноды: настоящий агент и воркер wg 
     });
 
     expect(detached.status).to.equal("created");
+    // Сообщённое агентом уходит вместе с ним.
+    expect(detached).to.include({
+      agentVersion: null,
+      wgVersion: null,
+      osInfo: null,
+      agentRemoteIp: null,
+      lastSeenAt: null,
+      appliedVersion: 0,
+    });
+
+    const unknown = await eventually(async () => {
+      const res = await call(admin, "GET", `/api/v1/wg/interfaces/${iface.id}`);
+
+      return res.data.status === "unknown" ? res.data : null;
+    });
+
+    expect(unknown.status).to.equal("unknown");
+    const live = await call(
+      admin,
+      "GET",
+      `/api/v1/wg/stats/current/node/${node.id}`,
+    );
+
+    // Снимка скорости нет — 204 без тела.
+    expect(live.status).to.equal(204);
     await agent?.stop();
     agent = null;
     expectStatus(

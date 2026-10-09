@@ -5,6 +5,7 @@ import sinon from "sinon";
 
 import { EventBus } from "../../core";
 import { createMockEmitter } from "../../test/helpers";
+import { WgNodeAgentUnboundEvent } from "../wg-node";
 import {
   WgInterfaceCreatedEvent,
   WgInterfaceDeletedEvent,
@@ -26,6 +27,7 @@ describe("WgInterfaceListener", () => {
   let eventBus: EventBus;
   let emitter: ReturnType<typeof createMockEmitter>;
   let owned: { toOwners: sinon.SinonStub; detach: sinon.SinonStub };
+  let service: { updateReportedStatuses: sinon.SinonStub };
 
   beforeEach(() => {
     eventBus = new EventBus();
@@ -34,6 +36,7 @@ describe("WgInterfaceListener", () => {
       toOwners: sinon.stub().resolves(),
       detach: sinon.stub().resolves(),
     };
+    service = { updateReportedStatuses: sinon.stub().resolves() };
     new WgInterfaceListener(
       eventBus,
       emitter as any,
@@ -42,10 +45,20 @@ describe("WgInterfaceListener", () => {
       {} as any,
       {} as any,
       {} as any,
+      service as any,
     ).register();
   });
 
   const rooms = () => emitter.toRoom.getCalls().map(c => c.args[0]);
+
+  it("агент отвязан от ноды — статусы её интерфейсов сбрасываются", async () => {
+    eventBus.emit(new WgNodeAgentUnboundEvent("n1"));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(service.updateReportedStatuses.calledOnceWith("n1", [])).to.equal(
+      true,
+    );
+  });
 
   it("создание и изменение — в комнату списка интерфейсов и интерфейса", () => {
     eventBus.emit(new WgInterfaceCreatedEvent(iface));

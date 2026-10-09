@@ -18,6 +18,7 @@ import type {
 } from "./dto";
 import { WgNodeDto, WgNodeOptionDto } from "./dto";
 import {
+  WgNodeAgentUnboundEvent,
   WgNodeCreatedEvent,
   WgNodeDeletedEvent,
   WgNodeHostChangedEvent,
@@ -371,6 +372,7 @@ export class WgNodeService {
 
     if (!nodeId) return;
 
+    this._eventBus.emit(new WgNodeAgentUnboundEvent(nodeId));
     this._eventBus.emit(
       new WgNodeStatusChangedEvent(
         WgNodeDto.fromEntity(await this._findOrFail(nodeId)),

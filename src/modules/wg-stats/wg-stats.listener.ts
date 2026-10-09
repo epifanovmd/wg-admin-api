@@ -3,7 +3,11 @@ import { inject } from "inversify";
 import { EventBus, Injectable, logger } from "../../core";
 import { ISocketEventListener, SocketEmitterService } from "../socket";
 import { wgInterfaceRoom } from "../wg-interface";
-import { WG_OVERVIEW_ROOM, wgNodeRoom } from "../wg-node";
+import {
+  WG_OVERVIEW_ROOM,
+  WgNodeAgentUnboundEvent,
+  wgNodeRoom,
+} from "../wg-node";
 import { wgOwnPeersRoom, wgPeerRoom } from "../wg-peer";
 import {
   WgInterfaceLiveStatsEvent,
@@ -14,6 +18,7 @@ import {
   WgPeersLiveStatsEvent,
 } from "./events";
 import { WgLinkHealthService } from "./wg-link-health.service";
+import { WgLiveStore } from "./wg-live-store.service";
 import type { IWgPeerLive } from "./wg-stats.types";
 
 /** Сгруппировать по ключу с сохранением порядка. */
@@ -57,6 +62,7 @@ export class WgStatsListener implements ISocketEventListener {
     private readonly _emitter: SocketEmitterService,
     @inject(WgLinkHealthService)
     private readonly _links: WgLinkHealthService,
+    @inject(WgLiveStore) private readonly _live: WgLiveStore,
   ) {}
 
   register(): void {
@@ -83,6 +89,19 @@ export class WgStatsListener implements ISocketEventListener {
     this._eventBus.on(WgLinksProbedEvent, ({ nodeIds }) =>
       this._sendLinks(nodeIds),
     );
+    // Агент отвязан: последняя скорость ноды больше не текущая.
+    this._eventBus.on(WgNodeAgentUnboundEvent, ({ nodeId }) =>
+      this._forgetNodeLive(nodeId),
+    );
+  }
+
+  private async _forgetNodeLive(nodeId: string): Promise<void> {
+    try {
+      await this._live.delete(`node:${nodeId}`);
+      await this._live.delete(`win:node:${nodeId}`);
+    } catch (err) {
+      logger.error({ err, nodeId }, "[WG] node live stats not cleared");
+    }
   }
 
   /**
