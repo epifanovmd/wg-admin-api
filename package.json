@@ -108,6 +108,7 @@
     "typescript-eslint": "^8"
   },
   "resolutions": {
-    "**/@types/koa": "^3.0.3"
+    "**/@types/koa": "^3.0.3",
+    "**/handlebars": "^4.7.10"
   }
 }

@@ -116,9 +116,12 @@ describe("агент ноды: настоящий агент и воркер wg 
       async () => {
         const current = await nodeById(node.id);
 
-        return current.status === "online" ? current : null;
+        // wgVersion приходит с первым health воркера wg — позже связи агента.
+        return current.status === "online" && current.wgVersion
+          ? current
+          : null;
       },
-      { timeoutMs: 30_000, what: "нода online" },
+      { timeoutMs: 30_000, what: "нода online, воркер wg ответил" },
     );
 
     expect(online.agentId).to.equal(agentId);
