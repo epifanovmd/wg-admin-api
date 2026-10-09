@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"wgadmin/agent/internal/protocol"
+	"wgadmin/agent/internal/desired"
 )
 
-var tunnel = protocol.Tunnel{
+var tunnel = desired.Tunnel{
 	Name: "wgt0", RemoteHost: "203.0.113.20",
 	LocalTunnelIP: "10.99.0.1", RemoteTunnelIP: "10.99.0.2", Prefix: 30, MTU: 1480,
 }
@@ -50,7 +50,7 @@ func TestForwardRules(t *testing.T) {
 		return strings.Join(lines, "\n")
 	}
 
-	udp := joined(ForwardRules([]protocol.Forward{{Proto: "udp", ListenPort: 51820, TargetIP: "10.99.0.2", TargetPort: 51820}}))
+	udp := joined(ForwardRules([]desired.Forward{{Proto: "udp", ListenPort: 51820, TargetIP: "10.99.0.2", TargetPort: 51820}}))
 	for _, want := range []string{
 		"-t nat -A WG_ADMIN_PRE -p udp --dport 51820 -j DNAT --to-destination 10.99.0.2:51820",
 		"-t nat -A WG_ADMIN_POST -d 10.99.0.2 -p udp --dport 51820 -j MASQUERADE",
@@ -62,7 +62,7 @@ func TestForwardRules(t *testing.T) {
 		}
 	}
 
-	tcp := joined(ForwardRules([]protocol.Forward{{Proto: "tcp", ListenPort: 8443, TargetIP: "10.99.0.2", TargetPort: 8444}}))
+	tcp := joined(ForwardRules([]desired.Forward{{Proto: "tcp", ListenPort: 8443, TargetIP: "10.99.0.2", TargetPort: 8444}}))
 	if !strings.Contains(tcp, "-t nat -A WG_ADMIN_PRE -p tcp --dport 8443 -j DNAT --to-destination 10.99.0.2:8444") {
 		t.Fatal(tcp)
 	}
@@ -94,7 +94,7 @@ func TestParseHost(t *testing.T) {
 
 func TestTunnelConflict(t *testing.T) {
 	host := HostNetwork{Addrs: ParseIPv4Addrs(hostAddrs), Tunnels: ParseIpipTunnels(hostLinks)}
-	base := protocol.Tunnel{Name: "wgt0", RemoteHost: "203.0.113.20", LocalTunnelIP: "10.99.0.1", RemoteTunnelIP: "10.99.0.2", Prefix: 30, MTU: 1480}
+	base := desired.Tunnel{Name: "wgt0", RemoteHost: "203.0.113.20", LocalTunnelIP: "10.99.0.1", RemoteTunnelIP: "10.99.0.2", Prefix: 30, MTU: 1480}
 
 	if got := TunnelConflict(base, host); !strings.Contains(got, "tun-server") {
 		t.Fatalf("подсеть: %q", got)
@@ -121,13 +121,13 @@ func TestTunnelConflict(t *testing.T) {
 func TestForwardConflict(t *testing.T) {
 	ports := HostPorts{UDP: []int{53, 51820}, TCP: []int{22, 8443}}
 
-	if ForwardConflict(protocol.Forward{Proto: "udp", ListenPort: 51820}, ports) == "" {
+	if ForwardConflict(desired.Forward{Proto: "udp", ListenPort: 51820}, ports) == "" {
 		t.Fatal("udp 51820 занят")
 	}
-	if ForwardConflict(protocol.Forward{Proto: "tcp", ListenPort: 51820}, ports) != "" {
+	if ForwardConflict(desired.Forward{Proto: "tcp", ListenPort: 51820}, ports) != "" {
 		t.Fatal("tcp 51820 свободен")
 	}
-	if ForwardConflict(protocol.Forward{Proto: "tcp", ListenPort: 8443}, ports) == "" {
+	if ForwardConflict(desired.Forward{Proto: "tcp", ListenPort: 8443}, ports) == "" {
 		t.Fatal("tcp 8443 занят")
 	}
 }

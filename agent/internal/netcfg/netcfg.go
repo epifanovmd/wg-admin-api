@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"wgadmin/agent/internal/desired"
 	"wgadmin/agent/internal/logx"
-	"wgadmin/agent/internal/protocol"
 	"wgadmin/agent/internal/shell"
 )
 
-// Цепочки агента: пересобираются целиком, чужие правила не трогаются.
+// Цепочки воркера: пересобираются целиком, чужие правила не трогаются.
 const (
 	NatChainPre    = "WG_ADMIN_PRE"
 	NatChainPost   = "WG_ADMIN_POST"
@@ -28,7 +28,7 @@ var (
 // TunnelMatches — существующий туннель совпадает с желаемым (тот же remote,
 // адрес, MTU и поднят): пересоздание рвёт трафик через релей.
 // link — `ip -d -o link show`, addr — `ip -o -4 addr show dev`.
-func TunnelMatches(link, addr string, tunnel protocol.Tunnel) bool {
+func TunnelMatches(link, addr string, tunnel desired.Tunnel) bool {
 	flags := []string{}
 	if match := linkFlags.FindStringSubmatch(link); match != nil {
 		flags = strings.Split(match[1], ",")
@@ -63,13 +63,13 @@ func TunnelMatches(link, addr string, tunnel protocol.Tunnel) bool {
 }
 
 // ApplyTunnels приводит IPIP-туннели к желаемому списку.
-func ApplyTunnels(desired []protocol.Tunnel, previous []string) error {
-	if len(desired) > 0 {
+func ApplyTunnels(wanted []desired.Tunnel, previous []string) error {
+	if len(wanted) > 0 {
 		shell.Run("modprobe ipip || true", commandTimeout)
 	}
 
 	want := map[string]bool{}
-	for _, tunnel := range desired {
+	for _, tunnel := range wanted {
 		want[tunnel.Name] = true
 	}
 
@@ -80,7 +80,7 @@ func ApplyTunnels(desired []protocol.Tunnel, previous []string) error {
 		}
 	}
 
-	for _, tunnel := range desired {
+	for _, tunnel := range wanted {
 		link := shell.Exec(commandTimeout, "ip", "-d", "-o", "link", "show", tunnel.Name)
 		addr := shell.Exec(commandTimeout, "ip", "-o", "-4", "addr", "show", "dev", tunnel.Name)
 
@@ -109,7 +109,7 @@ func ApplyTunnels(desired []protocol.Tunnel, previous []string) error {
 // ForwardRules — аргументы iptables пробросов: DNAT входящего порта,
 // masquerade к цели и разрешение пересылки в обе стороны (без него на
 // хосте с Docker — FORWARD policy DROP — проброс молча режется).
-func ForwardRules(forwards []protocol.Forward) [][]string {
+func ForwardRules(forwards []desired.Forward) [][]string {
 	var rules [][]string
 
 	for _, forward := range forwards {
@@ -129,7 +129,7 @@ func ForwardRules(forwards []protocol.Forward) [][]string {
 
 // ApplyForwards пересобирает цепочки пробросов; переход в FORWARD — первым
 // правилом, раньше политики DROP и цепочек Docker.
-func ApplyForwards(forwards []protocol.Forward) error {
+func ApplyForwards(forwards []desired.Forward) error {
 	shell.Run("sysctl -qw net.ipv4.ip_forward=1 || true", commandTimeout)
 
 	for _, hook := range []struct{ table, chain, parent, insert string }{

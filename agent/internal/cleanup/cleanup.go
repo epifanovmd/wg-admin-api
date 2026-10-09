@@ -1,8 +1,9 @@
-// Package cleanup — откат созданного агентом на хосте.
+// Package cleanup — уборка созданного воркером на узле.
 package cleanup
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"time"
@@ -13,8 +14,9 @@ import (
 	"wgadmin/agent/internal/state"
 )
 
-// CommandTimeout — таймаут одной команды отката: wg-quick down и iptables
-// занимают доли секунды, а весь откат должен уложиться в TimeoutStopSec службы.
+// CommandTimeout — срок одной команды уборки: wg-quick down и iptables
+// занимают доли секунды, а вся уборка должна уложиться в срок агента
+// (stopTimeout воркера).
 const CommandTimeout = 15 * time.Second
 
 var (
@@ -22,7 +24,7 @@ var (
 	ifaceName  = regexp.MustCompile(`^[\w.-]{1,15}$`)
 )
 
-// Commands — откат всего, что создал агент: его WG-интерфейсы (PostDown
+// Commands — уборка всего, что создал воркер: его WG-интерфейсы (PostDown
 // снимает их NAT), его IPIP-туннели и цепочки WG_ADMIN_* с переходами.
 // Только по собственному списку — чужое не трогается.
 func Commands(configDir string, owned state.Owned) []string {
@@ -54,11 +56,19 @@ func Commands(configDir string, owned state.Owned) []string {
 	return commands
 }
 
-// Owned откатывает созданное агентом. Файлы (конфиги, кэш) остаются: при
-// следующем старте агент поднимет всё заново.
+// Owned убирает созданное воркером: интерфейсы, туннели, цепочки, затем
+// конфиги его интерфейсов (в них приватные ключи) и файл состояния.
 func Owned(configDir, stateFile string) {
-	for _, command := range Commands(configDir, state.LoadOwned(stateFile)) {
+	owned := state.LoadOwned(stateFile)
+
+	for _, command := range Commands(configDir, owned) {
 		shell.Run(command, CommandTimeout)
 	}
-	logx.Info("Созданное агентом на хосте откачено")
+	for name := range owned.Fingerprints {
+		if ifaceName.MatchString(name) {
+			_ = os.Remove(filepath.Join(configDir, name+".conf"))
+		}
+	}
+	_ = os.Remove(stateFile)
+	logx.Info("Созданное воркером на узле убрано")
 }

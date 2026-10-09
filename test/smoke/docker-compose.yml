@@ -39,6 +39,8 @@ services:
       ADMIN_EMAIL: admin@wg.local
       ADMIN_PASSWORD: wg-local-Admin-2026
       APP_PUBLIC_URL: http://api:8181
+      # Общий токен регистрации агентов стенда (узлы — test/smoke/Dockerfile.agent).
+      AGENT_BOOTSTRAP_TOKEN: wg-smoke-bootstrap-token-0123456789abcdef
       LOG_LEVEL: info
       LOG_PRETTY: "false"
     ports:

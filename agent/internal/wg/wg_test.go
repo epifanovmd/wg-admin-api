@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"wgadmin/agent/internal/protocol"
+	"wgadmin/agent/internal/desired"
 )
 
 func ptr[T any](value T) *T { return &value }
 
-var iface = protocol.Interface{
+var iface = desired.Interface{
 	Name:        "wg0",
 	Enabled:     true,
 	ListenPort:  51820,
@@ -18,7 +18,7 @@ var iface = protocol.Interface{
 	PrivateKey:  "PRIV",
 	MTU:         ptr(1420),
 	NatEnabled:  true,
-	Peers: []protocol.Peer{
+	Peers: []desired.Peer{
 		{PublicKey: "PUB1", PresharedKey: ptr("PSK1"), AllowedIPs: "10.0.0.2/32"},
 		{PublicKey: "PUB2", AllowedIPs: "10.0.0.3/32"},
 	},
@@ -108,5 +108,14 @@ func TestParseDump(t *testing.T) {
 func TestSubnetOf(t *testing.T) {
 	if got := SubnetOf("10.8.0.1/24"); got != "10.8.0.0/24" {
 		t.Fatal(got)
+	}
+}
+
+func TestTrimVersion(t *testing.T) {
+	if got := TrimVersion("wireguard-tools v1.0.20210914 - https://git.zx2c4.com/wireguard-tools/\n"); got != "wireguard-tools v1.0.20210914" {
+		t.Fatal(got)
+	}
+	if got := TrimVersion(strings.Repeat("x", 100)); len(got) != 64 {
+		t.Fatal(len(got))
 	}
 }

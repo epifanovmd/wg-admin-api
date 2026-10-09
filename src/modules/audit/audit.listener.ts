@@ -1,6 +1,7 @@
 import { inject } from "inversify";
 
 import { EventBus, Injectable } from "../../core";
+import { AgentActionAuditedEvent, AgentActionFinishedEvent } from "../agent";
 import { ApiKeyCreatedEvent, ApiKeyRevokedEvent } from "../api-key";
 import {
   AccountLockedEvent,
@@ -166,5 +167,35 @@ export class AuditListener implements ISocketEventListener {
         subjectId: e.apiKeyId,
       }),
     );
+
+    on(AgentActionAuditedEvent, e =>
+      this._audit.record({
+        type: AuditEventType.AGENT_ACTION,
+        actorId: e.actorId,
+        subjectId: e.target,
+        meta: {
+          action: e.action,
+          ...(e.agentId && { agentId: e.agentId }),
+          ...e.details,
+        },
+      }),
+    );
+
+    // Журнал строк с узла — чтение, не изменение: в аудит не пишется.
+    on(AgentActionFinishedEvent, async ({ action }) => {
+      if (action.name === "agent.logs") return;
+
+      await this._audit.record({
+        type: AuditEventType.AGENT_ACTION_RESULT,
+        actorId: action.actor || null,
+        subjectId: action.agentId,
+        meta: {
+          action: action.name,
+          status: action.status,
+          ...(action.args && { args: action.args }),
+          ...(action.error && { error: action.error }),
+        },
+      });
+    });
   }
 }

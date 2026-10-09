@@ -9,13 +9,18 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
-	"wgadmin/agent/internal/protocol"
+	"wgadmin/agent/internal/desired"
 	"wgadmin/agent/internal/shell"
 )
 
+// quickTimeout — срок wg и ip в метриках и самочувствии: агент ждёт их
+// ответа 2 с.
+const quickTimeout = 1500 * time.Millisecond
+
 // Dump — интерфейс → пиры.
-type Dump map[string][]protocol.PeerStat
+type Dump map[string][]desired.PeerStat
 
 // ParseDump разбирает `wg show all dump`: 5 полей — интерфейс, 9 — пир.
 func ParseDump(output string) Dump {
@@ -31,10 +36,10 @@ func ParseDump(output string) Dump {
 		switch len(parts) {
 		case 5:
 			if _, ok := result[parts[0]]; !ok {
-				result[parts[0]] = []protocol.PeerStat{}
+				result[parts[0]] = []desired.PeerStat{}
 			}
 		case 9:
-			peer := protocol.PeerStat{PublicKey: parts[1]}
+			peer := desired.PeerStat{PublicKey: parts[1]}
 
 			if parts[3] != "(none)" {
 				endpoint := parts[3]
@@ -54,7 +59,7 @@ func ParseDump(output string) Dump {
 
 // ReadDump — счётчики всех интерфейсов.
 func ReadDump() (Dump, error) {
-	result := shell.Exec(shell.DefaultTimeout, "wg", "show", "all", "dump")
+	result := shell.Exec(quickTimeout, "wg", "show", "all", "dump")
 	if result.Code != 0 {
 		return nil, fmt.Errorf("wg show all dump: %s", strings.TrimSpace(result.Stderr))
 	}
@@ -62,29 +67,34 @@ func ReadDump() (Dump, error) {
 	return ParseDump(result.Stdout), nil
 }
 
-// Version — «wireguard-tools v1.0.…» без ссылки; nil — wg не установлен.
-func Version() *string {
-	result := shell.Exec(shell.DefaultTimeout, "wg", "--version")
+// Version — «wireguard-tools v1.0.…» без ссылки; "" — wg не установлен.
+func Version() string {
+	result := shell.Exec(quickTimeout, "wg", "--version")
 	if result.Code != 0 {
-		return nil
+		return ""
 	}
 
-	version := strings.SplitN(strings.TrimSpace(result.Stdout), " - ", 2)[0]
+	return TrimVersion(result.Stdout)
+}
+
+// TrimVersion — первая часть вывода `wg --version`, не длиннее 64 символов.
+func TrimVersion(output string) string {
+	version := strings.SplitN(strings.TrimSpace(output), " - ", 2)[0]
 	if len(version) > 64 {
 		version = version[:64]
 	}
 
-	return &version
+	return version
 }
 
 // IsUp — интерфейс существует.
 func IsUp(name string) bool {
-	return shell.Exec(shell.DefaultTimeout, "ip", "link", "show", name).Code == 0
+	return shell.Exec(5*time.Second, "ip", "link", "show", name).Code == 0
 }
 
 // DefaultEgress — интерфейс маршрута по умолчанию (для masquerade).
 func DefaultEgress() string {
-	result := shell.Exec(shell.DefaultTimeout, "ip", "route", "show", "default")
+	result := shell.Exec(5*time.Second, "ip", "route", "show", "default")
 	fields := strings.Fields(result.Stdout)
 
 	for i := 0; i+1 < len(fields); i++ {
@@ -114,7 +124,7 @@ func SubnetOf(addressCidr string) string {
 	return network.String()
 }
 
-func peerLines(peers []protocol.Peer) []string {
+func peerLines(peers []desired.Peer) []string {
 	var lines []string
 
 	for _, peer := range peers {
@@ -129,7 +139,7 @@ func peerLines(peers []protocol.Peer) []string {
 }
 
 // RenderConfig — полный конфиг wg-quick интерфейса.
-func RenderConfig(iface protocol.Interface, egress string) string {
+func RenderConfig(iface desired.Interface, egress string) string {
 	address := iface.AddressCidr
 	if iface.AddressV6Cidr != nil && *iface.AddressV6Cidr != "" {
 		address += ", " + *iface.AddressV6Cidr
@@ -173,7 +183,7 @@ func RenderConfig(iface protocol.Interface, egress string) string {
 }
 
 // RenderStripped — конфиг для `wg syncconf` (без полей wg-quick).
-func RenderStripped(iface protocol.Interface) string {
+func RenderStripped(iface desired.Interface) string {
 	lines := []string{
 		"[Interface]",
 		"PrivateKey = " + iface.PrivateKey,
@@ -188,8 +198,8 @@ func RenderStripped(iface protocol.Interface) string {
 
 // Fingerprint — отпечаток interface-секции: изменение требует down/up, а
 // не syncconf. Формат (JSON-массив) фиксирован: его смена перезапустит
-// интерфейсы при обновлении агента.
-func Fingerprint(iface protocol.Interface, egress string) string {
+// интерфейсы при обновлении воркера.
+func Fingerprint(iface desired.Interface, egress string) string {
 	var buf bytes.Buffer
 
 	encoder := json.NewEncoder(&buf)

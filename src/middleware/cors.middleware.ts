@@ -22,6 +22,7 @@ export const corsMiddleware = cors({
     "WWW-Authenticate",
     "Server-Authorization",
     REQUEST_ID_HEADER,
+    "X-Agent-Worker-Status",
   ],
   maxAge: 86400,
   credentials: true,

@@ -1,5 +1,4 @@
 export * from "./dto";
-export * from "./install-script";
 export * from "./provision-plan";
 export * from "./ssh-runner";
 export * from "./validation";

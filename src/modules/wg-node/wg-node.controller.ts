@@ -22,28 +22,45 @@ import {
   Injectable,
   normalizePagination,
   ValidateBody,
+  ValidateQuery,
 } from "../../core";
 import { UUID } from "../../core/http";
 import { KoaRequest } from "../../types/koa";
+import type {
+  IAgentUpdateResultDto,
+  IAgentWorkerActionResultDto,
+} from "../agent";
 import {
   IAssignWgNodeBody,
+  IBindWgNodeAgentBody,
   ICreatedWgNodeDto,
   ICreateWgNodeBody,
+  ICreateWgNodeInstallCommandBody,
   IUpdateWgNodeBody,
-  IWgAgentKeyDto,
+  IUpdateWgNodeWorkerBody,
+  IWgNodeInstallCommandDto,
   IWgNodeLogsDto,
   WgNodeDto,
   WgNodeOptionDto,
 } from "./dto";
 import {
   AssignWgNodeSchema,
+  BindWgNodeAgentSchema,
+  CreateWgNodeInstallCommandSchema,
   CreateWgNodeSchema,
   UpdateWgNodeSchema,
+  UpdateWgNodeWorkerSchema,
+  WgNodeLogsQuerySchema,
 } from "./validation";
-import { WgNodePermissions } from "./wg-node.permissions";
 import { WgNodeService } from "./wg-node.service";
-import { EWgNodeStatus, WG_AGENT_LOGS_MAX_LINES } from "./wg-node.types";
-import { WgNodeCommandService } from "./wg-node-command.service";
+import { EWgNodeStatus } from "./wg-node.types";
+import { WgNodeAgentService } from "./wg-node-agent.service";
+
+/**
+ * Имя воркера агента ноды в пути.
+ * @pattern ^[a-z][a-z0-9-]{0,31}$ Некорректное имя воркера
+ */
+type TWgNodeWorker = string;
 
 @Injectable()
 @Tags("WgNode")
@@ -52,27 +69,33 @@ import { WgNodeCommandService } from "./wg-node-command.service";
 export class WgNodeController extends Controller {
   constructor(
     @inject(WgNodeService) private readonly _nodes: WgNodeService,
-    @inject(WgNodeCommandService)
-    private readonly _commands: WgNodeCommandService,
+    @inject(WgNodeAgentService) private readonly _agents: WgNodeAgentService,
   ) {
     super();
   }
 
   /**
-   * Создать ноду (VPS с агентом). Ключ агента возвращается только в этом
-   * ответе — сохранить сразу. Создатель — автор запроса; владелец, отличный
-   * от себя, — только с правом `wg:node:assign`.
+   * Создать ноду (VPS с агентом). В ответе — команда установки агента с
+   * одноразовым токеном регистрации (токен виден только здесь; новый —
+   * `POST /{id}/install-command`). Создатель — автор запроса; владелец,
+   * отличный от себя, — только с правом `wg:node:assign`.
    * @summary Создание ноды
    */
   @Security("jwt", ["permission:wg:node:create"])
   @ValidateBody(CreateWgNodeSchema)
   @SuccessResponse(201, "Created")
   @Post()
-  createWgNode(
+  async createWgNode(
     @Request() req: KoaRequest,
     @Body() body: ICreateWgNodeBody,
   ): Promise<ICreatedWgNodeDto> {
-    return this._nodes.create(getContextUser(req), body);
+    const actor = getContextUser(req);
+    const node = await this._nodes.create(actor, body);
+
+    return {
+      node: WgNodeDto.fromEntity(node),
+      install: await this._agents.installFor(actor.userId, node),
+    };
   }
 
   /**
@@ -180,39 +203,112 @@ export class WgNodeController extends Controller {
   }
 
   /**
-   * Перевыпустить ключ агента: старый отзывается сразу, новый возвращается
-   * один раз.
-   * @summary Ротация ключа агента
+   * Команда установки агента на VPS: одноразовый токен регистрации с меткой
+   * ноды (агент привяжется к ней), экземпляр проекта (`--instance`), воркеры
+   * wg и socks, пакеты и параметры ядра. Токен виден только в ответе.
+   * @summary Команда установки агента
    */
   @Security("jwt", ["permission:wg:node:agent:own"])
+  @ValidateBody(CreateWgNodeInstallCommandSchema)
   @SuccessResponse(201, "Created")
-  @Post("{id}/agent-key")
-  rotateWgAgentKey(
+  @Post("{id}/install-command")
+  createWgNodeInstallCommand(
     @Request() req: KoaRequest,
     @Path() id: UUID,
-  ): Promise<IWgAgentKeyDto> {
-    return this._nodes.rotateAgentKey(getContextUser(req), id);
+    @Body() body: ICreateWgNodeInstallCommandBody,
+  ): Promise<IWgNodeInstallCommandDto> {
+    return this._agents.installCommand(getContextUser(req), id, body);
   }
 
   /**
-   * Последние строки журнала агента ноды (синхронно, через команду агенту).
+   * Привязать к ноде уже зарегистрированного агента (например, общим
+   * токеном окружения); прежний агент ноды отзывается.
+   * @summary Привязка агента к ноде
+   */
+  @Security("jwt", ["permission:wg:node:agent:own"])
+  @ValidateBody(BindWgNodeAgentSchema)
+  @SuccessResponse(204, "No Content")
+  @Post("{id}/agent")
+  async bindWgNodeAgent(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+    @Body() body: IBindWgNodeAgentBody,
+  ): Promise<void> {
+    await this._agents.bind(getContextUser(req), id, body.agentId);
+  }
+
+  /**
+   * Обновить агента ноды до версии выпуска; итог — после запуска новой
+   * версии агента.
+   * @summary Обновление агента ноды
+   */
+  @Security("jwt", ["permission:wg:node:agent:own"])
+  @Post("{id}/agent/update")
+  updateWgNodeAgent(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+  ): Promise<IAgentUpdateResultDto> {
+    return this._agents.updateAgent(getContextUser(req), id);
+  }
+
+  /**
+   * Обновить воркер агента ноды (`wg`, `socks`) из выпуска. Занятый воркер —
+   * `deferred: true`, итог — событием `agent:action`.
+   * @summary Обновление воркера ноды
+   */
+  @Security("jwt", ["permission:wg:node:agent:own"])
+  @ValidateBody(UpdateWgNodeWorkerSchema)
+  @Post("{id}/workers/{worker}/update")
+  updateWgNodeWorker(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+    @Path() worker: TWgNodeWorker,
+    @Body() body: IUpdateWgNodeWorkerBody,
+  ): Promise<IAgentWorkerActionResultDto> {
+    return this._agents.updateWorker(
+      getContextUser(req),
+      id,
+      worker,
+      body.force ?? false,
+    );
+  }
+
+  /**
+   * Перезапустить воркер агента ноды. Созданное воркером на узле
+   * (интерфейсы, туннели, пробросы) при этом не разбирается.
+   * @summary Перезапуск воркера ноды
+   */
+  @Security("jwt", ["permission:wg:node:agent:own"])
+  @ValidateBody(UpdateWgNodeWorkerSchema)
+  @Post("{id}/workers/{worker}/restart")
+  restartWgNodeWorker(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+    @Path() worker: TWgNodeWorker,
+    @Body() body: IUpdateWgNodeWorkerBody,
+  ): Promise<IAgentWorkerActionResultDto> {
+    return this._agents.restartWorker(
+      getContextUser(req),
+      id,
+      worker,
+      body.force ?? false,
+    );
+  }
+
+  /**
+   * Последние строки журнала агента ноды или его воркера (`worker`) — с
+   * узла.
    * @summary Журнал агента
    */
   @Security("jwt", ["permission:wg:node:logs:own"])
+  @ValidateQuery(WgNodeLogsQuerySchema)
   @Get("{id}/logs")
-  async wgNodeLogs(
+  wgNodeLogs(
     @Request() req: KoaRequest,
     @Path() id: UUID,
     @Query() lines?: number,
+    @Query() worker?: TWgNodeWorker,
   ): Promise<IWgNodeLogsDto> {
-    const actor = getContextUser(req);
-    const capped =
-      lines === undefined
-        ? undefined
-        : Math.max(1, Math.min(lines, WG_AGENT_LOGS_MAX_LINES));
-
-    await this._nodes.findFor(actor, id, WgNodePermissions.NODE_LOGS);
-
-    return this._commands.requestAgentLogs(id, actor.userId, capped);
+    return this._agents.logs(getContextUser(req), id, { lines, worker });
   }
 }

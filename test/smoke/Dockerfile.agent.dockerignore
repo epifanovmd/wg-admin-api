@@ -1,0 +1,7 @@
+# Контекст образа узла smoke-стенда (Dockerfile.agent): исходники воркеров и agent.yaml стенда.
+*
+!agent/go.mod
+!agent/go.sum
+!agent/internal
+!agent/workers
+!test/smoke/agent.yaml

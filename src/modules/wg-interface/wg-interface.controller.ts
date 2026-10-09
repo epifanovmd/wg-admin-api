@@ -25,7 +25,7 @@ import {
 } from "../../core";
 import { UUID } from "../../core/http";
 import { KoaRequest } from "../../types/koa";
-import { WgNodeCommandDto } from "../wg-node";
+import type { IWgInterfaceRestartResult } from "../wg-node";
 import {
   IAddWgInterfaceReplicaBody,
   IAssignWgInterfaceBody,
@@ -243,16 +243,16 @@ export class WgInterfaceController extends Controller {
   }
 
   /**
-   * Перезапустить интерфейс на ноде (`wg-quick down && up`).
+   * Перезапустить интерфейс на основной ноде (`wg-quick down && up`
+   * воркером wg агента); итог — в ответе. Агент не на связи — 503.
    * @summary Перезапуск интерфейса
    */
   @Security("jwt", ["permission:wg:interface:control:own"])
-  @SuccessResponse(201, "Created")
   @Post("{id}/restart")
   restartWgInterface(
     @Request() req: KoaRequest,
     @Path() id: UUID,
-  ): Promise<WgNodeCommandDto> {
+  ): Promise<IWgInterfaceRestartResult> {
     return this._service.restart(getContextUser(req), id);
   }
 

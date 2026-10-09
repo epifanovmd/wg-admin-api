@@ -170,50 +170,27 @@ describe("WgStatsIngestService", () => {
       .true;
   });
 
-  describe("тики агента", () => {
-    const tick = (
-      rx: number,
-      fields: { seq?: number; collectedAt?: number; sentAt?: number },
-    ) => ({ ...report(rx, 0), bootId: "boot-1", ...fields });
-
-    it("время сбора — по задержке доставки на часах агента, не по их показаниям", () => {
-      // Часы агента отстают на час: момент сбора всё равно «сейчас − 3 с».
-      const now = 1_800_000_000_000;
-      const agentNow = now - 3_600_000;
-
-      expect(
-        tickTime({ collectedAt: agentNow - 3000, sentAt: agentNow }, now),
-      ).to.equal(now - 3000);
-      expect(tickTime({}, now)).to.equal(now);
+  describe("точки метрик агента", () => {
+    const tick = (rx: number, fields: { collectedAt?: number }) => ({
+      ...report(rx, 0),
+      ...fields,
     });
 
-    it("повтор тика того же запуска отбрасывается, новый запуск — принимается", async () => {
+    it("время сбора — по часам узла, не позже приёма", () => {
+      const now = 1_800_000_000_000;
+
+      expect(tickTime(now - 3000, now)).to.equal(now - 3000);
+      // Часы узла спешат — точка не «из будущего».
+      expect(tickTime(now + 60_000, now)).to.equal(now);
+      expect(tickTime(undefined, now)).to.equal(now);
+    });
+
+    it("свежая точка — не досылка", async () => {
       const at = Date.now();
 
       expect(
-        await service.ingest(
-          node,
-          tick(1000, { seq: 5, collectedAt: at, sentAt: at }),
-        ),
-      ).to.deep.equal({ duplicate: false, backfill: false });
-      expect(
-        (
-          await service.ingest(
-            node,
-            tick(9000, { seq: 5, collectedAt: at, sentAt: at }),
-          )
-        ).duplicate,
-      ).to.equal(true);
-      expect((await live.getJson<any>(`peer:${peerId}`)).rxTotal).to.equal(
-        1000,
-      );
-
-      const restarted = {
-        ...tick(1500, { seq: 1, collectedAt: at, sentAt: at }),
-        bootId: "boot-2",
-      };
-
-      expect((await service.ingest(node, restarted)).duplicate).to.equal(false);
+        await service.ingest(node, tick(1000, { collectedAt: at })),
+      ).to.deep.equal({ backfill: false });
     });
 
     it("досылка после разрыва: трафик учтён, живых событий и точек ряда нет", async () => {
@@ -221,21 +198,13 @@ describe("WgStatsIngestService", () => {
 
       await service.ingest(
         node,
-        tick(1000, {
-          seq: 1,
-          collectedAt: agentNow - 120_000,
-          sentAt: agentNow,
-        }),
+        tick(1000, { collectedAt: agentNow - 120_000 }),
       );
       eventBus.emit.resetHistory();
 
       const result = await service.ingest(
         node,
-        tick(4000, {
-          seq: 2,
-          collectedAt: agentNow - 60_000,
-          sentAt: agentNow,
-        }),
+        tick(4000, { collectedAt: agentNow - 60_000 }),
       );
 
       expect(result.backfill).to.equal(true);
@@ -246,17 +215,11 @@ describe("WgStatsIngestService", () => {
       expect(await live.listRecent(`win:peer:${peerId}`)).to.deep.equal([]);
     });
 
-    it("скорость — по моментам сбора тиков, короткий ряд копит точки", async () => {
+    it("скорость — по моментам сбора точек, короткий ряд копит точки", async () => {
       const at = Date.now();
 
-      await service.ingest(
-        node,
-        tick(0, { seq: 1, collectedAt: at - 2000, sentAt: at }),
-      );
-      await service.ingest(
-        node,
-        tick(4000, { seq: 2, collectedAt: at, sentAt: at }),
-      );
+      await service.ingest(node, tick(0, { collectedAt: at - 2000 }));
+      await service.ingest(node, tick(4000, { collectedAt: at }));
 
       const window = await live.listRecent<any>(`win:peer:${peerId}`);
 
@@ -265,31 +228,22 @@ describe("WgStatsIngestService", () => {
       expect(await live.listRecent(`win:node:${nodeId}`)).to.have.length(2);
     });
 
-    it("при открытой админке события уходят каждый тик, без неё — при изменении", async () => {
+    it("при открытой админке события уходят каждую точку, без неё — при изменении", async () => {
       const at = Date.now();
       const nodeEvents = () =>
         eventBus.emit
           .getCalls()
           .filter(call => call.args[0] instanceof WgNodeLiveStatsEvent).length;
 
-      await service.ingest(
-        node,
-        tick(1000, { seq: 1, collectedAt: at - 2000, sentAt: at }),
-      );
+      await service.ingest(node, tick(1000, { collectedAt: at - 2000 }));
       const before = nodeEvents();
 
       // Скорость не изменилась: без зрителей события нет.
-      await service.ingest(
-        node,
-        tick(1000, { seq: 2, collectedAt: at - 1000, sentAt: at }),
-      );
+      await service.ingest(node, tick(1000, { collectedAt: at - 1000 }));
       expect(nodeEvents()).to.equal(before);
 
       watched = true;
-      await service.ingest(
-        node,
-        tick(1000, { seq: 3, collectedAt: at, sentAt: at }),
-      );
+      await service.ingest(node, tick(1000, { collectedAt: at }));
       expect(nodeEvents()).to.equal(before + 1);
     });
   });

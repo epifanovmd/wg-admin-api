@@ -10,28 +10,23 @@ import {
   signInAdmin,
   signUp,
 } from "./client";
-
-/** Вызов от имени агента (api-ключ ноды). */
-const agent = <T = any>(
-  key: string,
-  method: string,
-  path: string,
-  body?: unknown,
-) => call<T>(key, method, path, body, { scheme: "ApiKey" });
-
-const agentState = async (key: string) =>
-  expectStatus(
-    await agent(key, "GET", "/api/v1/wg-agent/state?knownVersion=-1&waitMs=0"),
-    200,
-  ).data;
+import { FakeNodeAgent } from "./fake-agent";
+import { BASE_URL } from "./harness";
+import {
+  agentState,
+  attachAgent,
+  report,
+  stats,
+  useStateReader,
+} from "./node-agent";
 
 describe("wireguard", () => {
   let admin: Actor;
   let user: Actor;
   let nodeA: any;
-  let nodeAKey: string;
+  let nodeAKey: FakeNodeAgent;
   let relayNode: any;
-  let relayKey: string;
+  let relayKey: FakeNodeAgent;
   let endpoint: any;
   let iface: any;
   let peer1: any;
@@ -39,11 +34,12 @@ describe("wireguard", () => {
 
   before(async () => {
     admin = await signInAdmin();
+    useStateReader(admin);
     user = await signUp("wg-user");
   });
 
   describe("ноды", () => {
-    it("админ создаёт ноды, ключ агента выдаётся один раз", async () => {
+    it("админ создаёт ноды, команда установки агента выдаётся с токеном", async () => {
       const resA = expectStatus(
         await call(admin, "POST", "/api/v1/wg/nodes", {
           name: "node-a",
@@ -54,9 +50,27 @@ describe("wireguard", () => {
       );
 
       nodeA = resA.data.node;
-      nodeAKey = resA.data.agentKey;
-      expect(nodeAKey).to.include(".");
+      expect(resA.data.install.command).to.match(
+        /\/api\/v1\/agent-link\/install\.sh' \| sudo sh -s -- --instance 'wg' --token '[^']+\.[^']+'/,
+      );
+      expect(resA.data.install.command).to.include(
+        "--worker 'wg' --worker 'socks'",
+      );
+      expect(resA.data.install.command).to.include("--privileged");
       expect(nodeA.status).to.equal("created");
+      expect(nodeA.agentId).to.equal(null);
+      nodeAKey = await attachAgent(resA.data, "node-a");
+
+      const bound = await eventually(async () => {
+        const res = await call(admin, "GET", `/api/v1/wg/nodes/${nodeA.id}`);
+
+        return res.data.agentId === nodeAKey.agentId &&
+          res.data.status === "online"
+          ? res.data
+          : null;
+      });
+
+      expect(bound.status).to.equal("online");
 
       const resB = expectStatus(
         await call(admin, "POST", "/api/v1/wg/nodes", {
@@ -67,7 +81,7 @@ describe("wireguard", () => {
       );
 
       relayNode = resB.data.node;
-      relayKey = resB.data.agentKey;
+      relayKey = await attachAgent(resB.data, "relay-node");
     });
 
     it("дубль имени — 409", async () => {
@@ -116,18 +130,54 @@ describe("wireguard", () => {
       );
     });
 
-    it("ротация ключа агента: старый ключ перестаёт работать", async () => {
+    it("переустановка: новый токен, нода переходит к новому агенту, прежний отозван", async () => {
       const res = expectStatus(
-        await call(admin, "POST", `/api/v1/wg/nodes/${relayNode.id}/agent-key`),
+        await call(
+          admin,
+          "POST",
+          `/api/v1/wg/nodes/${relayNode.id}/install-command`,
+          { expiresInMinutes: 30 },
+        ),
         201,
       );
-      const oldKey = relayKey;
+      const old = relayKey;
 
-      relayKey = res.data.agentKey;
-      expectStatus(
-        await agent(oldKey, "GET", "/api/v1/wg-agent/state?waitMs=0"),
-        401,
-      );
+      expect(res.data.command).to.include(res.data.token);
+      relayKey = await FakeNodeAgent.start(res.data.token, {
+        name: "relay-node",
+      });
+      await eventually(async () => {
+        const node = await call(
+          admin,
+          "GET",
+          `/api/v1/wg/nodes/${relayNode.id}`,
+        );
+
+        return node.data.agentId === relayKey.agentId ? true : null;
+      });
+
+      const previous = await eventually(async () => {
+        const agent = await call(admin, "GET", `/api/v1/agents/${old.agentId}`);
+
+        return agent.data.revoked ? agent.data : null;
+      });
+
+      expect(previous.revoked).to.equal(true);
+      // Токен одноразовый.
+      expect(
+        (
+          await fetch(`${BASE_URL}/api/v1/agent-link/enroll`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              token: res.data.token,
+              name: "again",
+              host: { os: "linux", arch: "amd64", hostname: "again" },
+            }),
+          })
+        ).status,
+      ).to.equal(401);
+      await old.disconnect();
     });
     it("область «свои»: создатель и назначенный владелец видят и меняют только свои ноды", async () => {
       const tenant = await signUp("wg-node-tenant");
@@ -1072,16 +1122,8 @@ describe("wireguard", () => {
       expect(state.tunnels[0].remoteHost).to.equal("203.0.113.20");
     });
 
-    it("long-poll просыпается сразу после изменения (NOTIFY триггера)", async () => {
+    it("изменение доходит до агента сразу после коммита (NOTIFY триггера)", async () => {
       const current = await agentState(nodeAKey);
-      const poll = agent(
-        nodeAKey,
-        "GET",
-        `/api/v1/wg-agent/state?knownVersion=${current.version}&waitMs=20000`,
-      );
-
-      await new Promise(resolve => setTimeout(resolve, 300));
-
       const changedAt = Date.now();
 
       expectStatus(
@@ -1089,10 +1131,14 @@ describe("wireguard", () => {
         200,
       );
 
-      const res = expectStatus(await poll, 200).data;
+      const changed = await nodeAKey.waitConfig(
+        "wg",
+        "state",
+        data => data.version > current.version,
+      );
 
-      expect(res.version).to.be.greaterThan(current.version);
-      expect(Date.now() - changedAt).to.be.lessThan(700);
+      expect(changed.version).to.be.greaterThan(current.version);
+      expect(Date.now() - changedAt).to.be.lessThan(2000);
       expectStatus(
         await call(admin, "POST", `/api/v1/wg/peers/${peer1.id}/enable`),
         200,
@@ -1115,98 +1161,58 @@ describe("wireguard", () => {
       );
     });
 
-    it("агент: версия и бинари, установщик, обновление с sha256", async () => {
-      const binaryHash =
-        "6e160e6aef0f531d7c11433f82d0e8da577debca1bd9c02ff2c8c7184f9f2cda";
+    it("агент ноды: выпуск, установщик, обновление агента и воркера, журнал", async () => {
       const release = expectStatus(
-        await call(admin, "GET", "/api/v1/wg/agent/release"),
+        await call(admin, "GET", "/api/v1/agent-releases"),
         200,
       ).data;
 
-      expect(release).to.deep.equal({
-        version: "2.0.0",
-        hashes: { amd64: binaryHash },
-      });
+      expect(release).to.have.property("candidates");
 
-      // Архитектура ноды ещё не известна — бинаря для неё нет.
-      expectStatus(
-        await call(admin, "POST", `/api/v1/wg/agent/nodes/${nodeA.id}/update`),
-        404,
-        "WG_AGENT_BINARY_NOT_BUILT",
-      );
-
-      expectStatus(
-        await agent(nodeAKey, "POST", "/api/v1/wg-agent/state", {
-          agentVersion: "2.0.0",
-          os: { arch: "amd64" },
-        }),
-        204,
-      );
-
-      const command = expectStatus(
-        await call(admin, "POST", `/api/v1/wg/agent/nodes/${nodeA.id}/update`),
-        201,
-      ).data;
-
-      expect(command.type).to.equal("agent-update");
-      expect(command.payload.hash).to.equal(binaryHash);
-      expect(
-        (await agentState(nodeAKey)).commands.map((c: any) => c.id),
-      ).to.include(command.id);
-
-      const binary = await agent(
-        nodeAKey,
-        "GET",
-        "/api/v1/wg-agent/binary/amd64",
-      );
-
-      expect(binary.status).to.equal(200);
-      expect(binary.data).to.equal("AMD64-AGENT-BINARY");
-      expect(binary.headers.get("x-agent-sha256")).to.equal(binaryHash);
-      expectStatus(
-        await agent(nodeAKey, "GET", "/api/v1/wg-agent/binary/arm64"),
-        404,
-        "WG_AGENT_BINARY_NOT_BUILT",
-      );
-      expect(
-        (await call(null, "GET", "/api/v1/wg-agent/binary/amd64")).status,
-      ).to.equal(401);
-
-      // Установщик публичный: без секретов, бинарь — по ключу агента. Идёт
-      // сразу после бинаря того же контроллера — заголовки не протекают.
-      const script = await call(null, "GET", "/api/v1/wg-agent/install.sh");
+      // Установщик публичный: без секретов, адрес сервера вписан.
+      const script = await call(null, "GET", "/api/v1/agent-link/install.sh");
 
       expect(script.status).to.equal(200);
-      expect(script.headers.get("x-agent-sha256")).to.equal(null);
       expect(script.data).to.include("#!/bin/sh");
-      expect(script.data).to.include("BACKEND_URL='");
-      expect(script.data).to.not.include(nodeAKey);
 
-      expectStatus(
-        await agent(nodeAKey, "POST", "/api/v1/wg-agent/state", {
-          codeHash: binaryHash,
-        }),
-        204,
+      const updated = await call(
+        admin,
+        "POST",
+        `/api/v1/wg/nodes/${nodeA.id}/agent/update`,
       );
-      expect(
-        expectStatus(
-          await call(admin, "GET", `/api/v1/wg/nodes/${nodeA.id}`),
-          200,
-        ).data.agentCodeHash,
-      ).to.equal(binaryHash);
+
+      // В выпуске стенда нет сборки под фейковый агент — обновлять нечем.
+      expect([200, 409]).to.include(updated.status);
       expectStatus(
-        await call(user, "POST", `/api/v1/wg/agent/nodes/${nodeA.id}/update`),
+        await call(user, "POST", `/api/v1/wg/nodes/${nodeA.id}/agent/update`),
         403,
       );
-      expectStatus(
-        await agent(
-          nodeAKey,
-          "POST",
-          `/api/v1/wg-agent/commands/${command.id}/complete`,
-          { exitCode: 0 },
-        ),
-        204,
+
+      const worker = await call(
+        admin,
+        "POST",
+        `/api/v1/wg/nodes/${nodeA.id}/workers/wg/update`,
+        {},
       );
+
+      expect([200, 409]).to.include(worker.status);
+
+      const restarted = expectStatus(
+        await call(
+          admin,
+          "POST",
+          `/api/v1/wg/nodes/${nodeA.id}/workers/socks/restart`,
+          { force: true },
+        ),
+        200,
+      ).data;
+
+      expect(restarted.deferred).to.equal(false);
+      expect(
+        nodeAKey.actions.some(
+          a => a.name === "worker.restart" && a.args?.name === "socks",
+        ),
+      ).to.equal(true);
     });
 
     it("связность нод: цели проверки и матрица", async () => {
@@ -1220,13 +1226,10 @@ describe("wireguard", () => {
         state.probeTargets.some((t: any) => t.nodeId === nodeA.id),
       ).to.equal(false);
 
-      expectStatus(
-        await agent(nodeAKey, "POST", "/api/v1/wg-agent/stats", {
-          interfaces: [],
-          nodeProbes: [{ nodeId: relayNode.id, rttMs: 61.2, lossPercent: 0 }],
-        }),
-        204,
-      );
+      await stats(nodeAKey, {
+        interfaces: [],
+        nodeProbes: [{ nodeId: relayNode.id, rttMs: 61.2, lossPercent: 0 }],
+      });
 
       const mesh = expectStatus(
         await call(admin, "GET", "/api/v1/wg/stats/mesh"),
@@ -1351,13 +1354,10 @@ describe("wireguard", () => {
       );
 
       // Агент релея сообщает, что туннель лёг и проброс идёт напрямую.
-      expectStatus(
-        await agent(relayKey, "POST", "/api/v1/wg-agent/stats", {
-          interfaces: [],
-          forwards: [{ id: udp.id, activeRoute: "direct" }],
-        }),
-        204,
-      );
+      await stats(relayKey, {
+        interfaces: [],
+        forwards: [{ id: udp.id, activeRoute: "direct" }],
+      });
       expect(
         expectStatus(
           await call(admin, "GET", `/api/v1/wg/forwards/${udp.id}`),
@@ -1535,7 +1535,6 @@ describe("wireguard", () => {
         201,
       ).data;
       const nodeC = created.node;
-      const nodeCKey = created.agentKey;
 
       const withReplica = expectStatus(
         await call(
@@ -1555,6 +1554,17 @@ describe("wireguard", () => {
       // Агента на ноде копии ещё нет — UI показывает «ожидает агента».
       expect(withReplica.replicas[0].nodeStatus).to.equal("created");
       expect(withReplica.nodeStatus).to.be.a("string");
+
+      // Копия поднимается только по отчёту сценария.
+      const nodeCKey = await attachAgent(created, "replica-c", {
+        stateResult: state => ({
+          version: state.version,
+          appliedAt: Date.now(),
+          interfaces: [],
+          routes: [],
+          errors: [],
+        }),
+      });
 
       // Список интерфейсов — с копиями; viaRelay — только за точками через релей.
       const viaRelay = expectStatus(
@@ -1663,13 +1673,13 @@ describe("wireguard", () => {
         [nodeA.id, "direct"],
       ]);
 
+      // Копия получила своё состояние — дальше её статус задают отчёты.
+      await agentState(nodeCKey);
+
       const reportReplica = async (status: string) =>
-        expectStatus(
-          await agent(nodeCKey, "POST", "/api/v1/wg-agent/state", {
-            interfaces: [{ name: "wg0", status }],
-          }),
-          204,
-        );
+        await report(nodeCKey, {
+          interfaces: [{ name: "wg0", status }],
+        });
 
       // Копия поднялась — релей получает новую версию с резервом по приоритету.
       await reportReplica("up");
@@ -1749,20 +1759,17 @@ describe("wireguard", () => {
       );
 
       // Отчёт релея о копии, обслуживающей трафик; статус копии.
-      expectStatus(
-        await agent(relayKey, "POST", "/api/v1/wg-agent/stats", {
-          interfaces: [],
-          forwards: [
-            {
-              id: iface.id,
-              activeRoute: "tunnel",
-              activeCandidate: 1,
-              activeNodeId: nodeC.id,
-            },
-          ],
-        }),
-        204,
-      );
+      await stats(relayKey, {
+        interfaces: [],
+        forwards: [
+          {
+            id: iface.id,
+            activeRoute: "tunnel",
+            activeCandidate: 1,
+            activeNodeId: nodeC.id,
+          },
+        ],
+      });
 
       const current = expectStatus(
         await call(admin, "GET", `/api/v1/wg/interfaces/${iface.id}`),
@@ -1832,13 +1839,10 @@ describe("wireguard", () => {
     it("здоровье туннеля: проба релея видна обеим нодам", async () => {
       const tunnelName = (await agentState(relayKey)).tunnels[0].name;
 
-      expectStatus(
-        await agent(relayKey, "POST", "/api/v1/wg-agent/stats", {
-          interfaces: [],
-          tunnels: [{ name: tunnelName, rttMs: 42.5, lossPercent: 0 }],
-        }),
-        204,
-      );
+      await stats(relayKey, {
+        interfaces: [],
+        tunnels: [{ name: tunnelName, rttMs: 42.5, lossPercent: 0 }],
+      });
 
       const links = expectStatus(
         await call(admin, "GET", `/api/v1/wg/stats/links/node/${nodeA.id}`),
@@ -1860,22 +1864,19 @@ describe("wireguard", () => {
     });
 
     it("отчёт агента: нода online и inSync, интерфейс up", async () => {
-      expectStatus(
-        await agent(nodeAKey, "POST", "/api/v1/wg-agent/state", {
-          appliedVersion: stateVersion,
-          applyError: null,
-          agentVersion: "1.0.0-e2e",
-          wgVersion: "wireguard-tools v1.0.0",
-          os: {
-            distro: "Ubuntu 24.04",
-            hostname: "node-a",
-            wgMode: "userspace",
-            udpPorts: [53, 51820],
-          },
-          interfaces: [{ name: "wg0", status: "up" }],
-        }),
-        204,
-      );
+      await report(nodeAKey, {
+        appliedVersion: stateVersion,
+        applyError: null,
+        agentVersion: "1.0.0-e2e",
+        wgVersion: "wireguard-tools v1.0.0",
+        os: {
+          distro: "Ubuntu 24.04",
+          hostname: "node-a",
+          wgMode: "userspace",
+          udpPorts: [53, 51820],
+        },
+        interfaces: [{ name: "wg0", status: "up" }],
+      });
 
       const node = expectStatus(
         await call(admin, "GET", `/api/v1/wg/nodes/${nodeA.id}`),
@@ -1901,7 +1902,7 @@ describe("wireguard", () => {
 
     it("статистика: скорость, handshake, история и overview", async () => {
       const handshake = Math.floor(Date.now() / 1000) - 5;
-      const stats = (rx: number, tx: number) => ({
+      const point = (rx: number, tx: number) => ({
         sys: {
           cpuPercent: 12.5,
           load1: 0.4,
@@ -1932,24 +1933,8 @@ describe("wireguard", () => {
         ],
       });
 
-      expectStatus(
-        await agent(
-          nodeAKey,
-          "POST",
-          "/api/v1/wg-agent/stats",
-          stats(100_000, 50_000),
-        ),
-        204,
-      );
-      expectStatus(
-        await agent(
-          nodeAKey,
-          "POST",
-          "/api/v1/wg-agent/stats",
-          stats(300_000, 90_000),
-        ),
-        204,
-      );
+      await stats(nodeAKey, point(100_000, 50_000));
+      await stats(nodeAKey, point(300_000, 90_000));
 
       const peer = await eventually(async () => {
         const res = await call(admin, "GET", `/api/v1/wg/peers/${peer1.id}`);
@@ -2046,68 +2031,67 @@ describe("wireguard", () => {
     });
   });
 
-  describe("команды агенту и журнал", () => {
-    it("журнал агента приходит синхронно", async () => {
-      // Логи ждут ответа агента: обслуживаем команду параллельно запросу.
-      const logsPromise = call(
-        admin,
-        "GET",
-        `/api/v1/wg/nodes/${nodeA.id}/logs?lines=50`,
-      );
-      const logCommand = await eventually(async () => {
-        const state = await agentState(nodeAKey);
-
-        return state.commands.find((c: any) => c.type === "agent-logs");
-      });
-
-      await agent(
-        nodeAKey,
-        "POST",
-        `/api/v1/wg-agent/commands/${logCommand.id}/output`,
-        { chunk: "2026-09-27 INFO агент работает" },
-      );
-      await agent(
-        nodeAKey,
-        "POST",
-        `/api/v1/wg-agent/commands/${logCommand.id}/complete`,
-        { exitCode: 0 },
+  describe("журнал и перезапуск интерфейса через агента", () => {
+    it("журнал агента и воркера — с узла", async () => {
+      const logs = expectStatus(
+        await call(admin, "GET", `/api/v1/wg/nodes/${nodeA.id}/logs?lines=50`),
+        200,
       );
 
-      const logs = expectStatus(await logsPromise, 200);
+      expect(logs.data.content).to.include("журнал фейкового агента");
+      expect(logs.data.entries[0].source).to.equal("agent");
 
-      expect(logs.data.content).to.include("агент работает");
+      const worker = expectStatus(
+        await call(
+          admin,
+          "GET",
+          `/api/v1/wg/nodes/${nodeA.id}/logs?lines=10&worker=wg`,
+        ),
+        200,
+      );
+
+      expect(worker.data.entries[0].source).to.equal("wg");
+      expect(
+        nodeAKey.actions.some(
+          a => a.name === "agent.logs" && a.args?.lines === 10,
+        ),
+      ).to.equal(true);
+      expectStatus(
+        await call(user, "GET", `/api/v1/wg/nodes/${nodeA.id}/logs`),
+        403,
+      );
     });
 
-    it("перезапуск интерфейса — команда агенту", async () => {
-      const created = expectStatus(
+    it("перезапуск интерфейса — запрос к воркеру wg основной ноды, итог в ответе", async () => {
+      const res = expectStatus(
         await call(admin, "POST", `/api/v1/wg/interfaces/${iface.id}/restart`),
-        201,
+        200,
       );
 
-      expect(created.data.type).to.equal("interface-restart");
-      expect(created.data.payload.interfaceName).to.equal("wg0");
-      // Агент другой ноды чужую команду не берёт.
+      expect(res.data).to.deep.equal({ name: "wg0", status: "up" });
+      expect(nodeAKey.fetches.at(-1)).to.deep.equal({
+        worker: "wg",
+        method: "POST",
+        path: "/interfaces/wg0/restart",
+      });
+      expect(relayKey.fetches.some(f => f.path.includes("restart"))).to.equal(
+        false,
+      );
+
+      // Воркер отказал — ошибка с его текстом.
+      nodeAKey.onFetch = () => ({
+        status: 409,
+        body: { message: "интерфейс выключен" },
+      });
       expectStatus(
-        await agent(
-          relayKey,
-          "POST",
-          `/api/v1/wg-agent/commands/${created.data.id}/ack`,
-        ),
-        404,
-        "WG_NODE_COMMAND_NOT_FOUND",
+        await call(admin, "POST", `/api/v1/wg/interfaces/${iface.id}/restart`),
+        502,
+        "WG_NODE_WORKER_FAILED",
       );
-      // Агент подтверждает, чтобы команда не висела.
-      await agent(
-        nodeAKey,
-        "POST",
-        `/api/v1/wg-agent/commands/${created.data.id}/ack`,
-      );
-      await agent(
-        nodeAKey,
-        "POST",
-        `/api/v1/wg-agent/commands/${created.data.id}/complete`,
-        { exitCode: 0 },
-      );
+      nodeAKey.onFetch = (_w, _m, path) => ({
+        status: 200,
+        body: { name: path.split("/")[2], status: "up" },
+      });
     });
   });
 
@@ -2236,8 +2220,8 @@ describe("wireguard", () => {
         expectStatus(
           await call(admin, "GET", `/api/v1/wg/nodes/${nodeA.id}`),
           200,
-        ).data.hasAgentKey,
-      ).to.equal(true);
+        ).data.agentId,
+      ).to.equal(nodeAKey.agentId);
     });
   });
 

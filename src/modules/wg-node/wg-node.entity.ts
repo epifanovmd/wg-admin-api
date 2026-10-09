@@ -14,20 +14,26 @@ import { User } from "../user/user.entity";
 import {
   EWgNodeStatus,
   IWgNodeOsInfo,
+  WG_NODE_AGENT_ID_MAX,
   WG_NODE_HOST_MAX,
   WG_NODE_NAME_MAX,
 } from "./wg-node.types";
 
 /**
  * Нода — VPS с агентом, на котором работают WireGuard-интерфейсы.
- * Желаемая конфигурация версионируется (`configVersion`); агент применяет её
- * и сообщает `appliedVersion` и фактические статусы.
+ * Желаемая конфигурация версионируется (`configVersion`) и уходит воркеру
+ * wg агента настройкой `state`; итог применения даёт `appliedVersion` и
+ * фактические статусы.
  */
 @Entity("wg_nodes")
 @Index("IDX_WG_NODES_NAME", ["name"], { unique: true })
 @Index("IDX_WG_NODES_STATUS", ["status"])
 @Index("IDX_WG_NODES_OWNER", ["ownerId"])
 @Index("IDX_WG_NODES_CREATED_BY", ["createdById"])
+@Index("IDX_WG_NODES_AGENT", ["agentId"], {
+  unique: true,
+  where: "agent_id IS NOT NULL",
+})
 export class WgNode {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -66,9 +72,18 @@ export class WgNode {
   @Column({ type: "enum", enum: EWgNodeStatus, default: EWgNodeStatus.Created })
   status!: EWgNodeStatus;
 
-  /** API-ключ агента этой ноды (отзыв/ротация — через модуль api-key). */
-  @Column({ name: "agent_key_id", type: "uuid", nullable: true })
-  agentKeyId!: string | null;
+  /** Пояснение к статусу: что не так с агентом или воркерами. */
+  @Column({ name: "status_message", type: "text", nullable: true })
+  statusMessage!: string | null;
+
+  /** Агент ноды (id агента в модуле agent); нет — агент не установлен. */
+  @Column({
+    name: "agent_id",
+    type: "varchar",
+    length: WG_NODE_AGENT_ID_MAX,
+    nullable: true,
+  })
+  agentId!: string | null;
 
   /** Желаемая версия конфигурации; растёт при любом изменении домена. */
   @Column({
@@ -79,7 +94,7 @@ export class WgNode {
   })
   configVersion!: number;
 
-  /** Версия, которую агент применил последней. */
+  /** Версия, которую воркер wg применил последней. */
   @Column({
     name: "applied_version",
     type: "bigint",
@@ -103,19 +118,10 @@ export class WgNode {
   @Column({ name: "wg_version", type: "varchar", length: 64, nullable: true })
   wgVersion!: string | null;
 
-  /** sha256 кода агента на ноде (сверка с доступным обновлением). */
-  @Column({
-    name: "agent_code_hash",
-    type: "varchar",
-    length: 64,
-    nullable: true,
-  })
-  agentCodeHash!: string | null;
-
   @Column({ name: "os_info", type: "jsonb", nullable: true })
   osInfo!: IWgNodeOsInfo | null;
 
-  /** IP, с которого агент обращается к бэкенду (подсказка для publicHost). */
+  /** IP, с которого агент подключился к бэкенду (подсказка для publicHost). */
   @Column({
     name: "agent_remote_ip",
     type: "varchar",

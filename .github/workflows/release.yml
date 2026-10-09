@@ -27,7 +27,7 @@ jobs:
             exit 1
           }
 
-  # Один образ: api, worker, migrate (роль — APP_ROLE) и бинари агента нод.
+  # Один образ: api, worker, migrate (роль — APP_ROLE) и воркеры проекта для узлов.
   image:
     needs: on-main
     runs-on: ubuntu-latest
@@ -68,6 +68,10 @@ jobs:
             APP_VERSION=${{ github.ref_name }}
             APP_COMMIT=${{ steps.build-info.outputs.commit }}
             APP_BUILT_AT=${{ steps.build-info.outputs.built-at }}
+          # Ключ проекта для подписи воркеров wg и socks (agent-release keygen);
+          # нет секрета — воркеры без подписи.
+          secrets: |
+            agent_signing_key=${{ secrets.AGENT_SIGNING_KEY }}
           provenance: true
           cache-from: type=gha,scope=release-app
           cache-to: type=gha,mode=max,scope=release-app

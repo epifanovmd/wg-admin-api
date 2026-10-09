@@ -43,143 +43,6 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"ApiKeyDto": {
-				"properties": {
-					"id": {
-						"type": "string"
-					},
-					"name": {
-						"type": "string"
-					},
-					"prefix": {
-						"type": "string",
-						"description": "Открытая часть ключа: по ней ключ узнают в списке."
-					},
-					"scopes": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array"
-					},
-					"ownerId": {
-						"type": "string"
-					},
-					"lastUsedAt": {
-						"type": "string",
-						"format": "date-time",
-						"nullable": true
-					},
-					"expiresAt": {
-						"type": "string",
-						"format": "date-time",
-						"nullable": true
-					},
-					"revokedAt": {
-						"type": "string",
-						"format": "date-time",
-						"nullable": true
-					},
-					"createdAt": {
-						"type": "string",
-						"format": "date-time"
-					}
-				},
-				"required": [
-					"id",
-					"name",
-					"prefix",
-					"scopes",
-					"ownerId",
-					"lastUsedAt",
-					"expiresAt",
-					"revokedAt",
-					"createdAt"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"ICreatedApiKeyDto": {
-				"description": "Созданный ключ: `key` показывается один раз и больше не восстановим.",
-				"properties": {
-					"apiKey": {
-						"$ref": "#/components/schemas/ApiKeyDto"
-					},
-					"key": {
-						"type": "string",
-						"description": "Полный ключ `<prefix>.<secret>` — передаётся в `X-Api-Key`."
-					}
-				},
-				"required": [
-					"apiKey",
-					"key"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"ICreateApiKeyBody": {
-				"properties": {
-					"name": {
-						"type": "string",
-						"minLength": 1,
-						"maxLength": 100
-					},
-					"scopes": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"description": "Разрешения: `worker:demo.echo`, `worker:*`."
-					},
-					"expiresAt": {
-						"type": "string",
-						"format": "date-time",
-						"description": "Срок действия; без него ключ бессрочный."
-					}
-				},
-				"required": [
-					"name",
-					"scopes"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IPaginatedDto_ApiKeyDto_": {
-				"description": "Страница по смещению: списки с известным общим числом.",
-				"properties": {
-					"items": {
-						"items": {
-							"$ref": "#/components/schemas/ApiKeyDto"
-						},
-						"type": "array"
-					},
-					"total": {
-						"type": "number",
-						"format": "double",
-						"description": "Всего элементов, подходящих под фильтр."
-					},
-					"offset": {
-						"type": "number",
-						"format": "double"
-					},
-					"limit": {
-						"type": "number",
-						"format": "double"
-					}
-				},
-				"required": [
-					"items",
-					"total",
-					"offset",
-					"limit"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"UUID": {
-				"type": "string",
-				"description": "Идентификатор сущности в пути или теле запроса. tsoa проверяет формат до\nконтроллера: неверный uuid → 422, а не ошибка Postgres.",
-				"pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
-			},
 			"TPermission": {
 				"type": "string",
 				"description": "Право — строка `domain:action` (или `domain:*` — wildcard). Модуль объявляет\nсвои права сам через `definePermissions`; каталог с подписями отдаёт\n`GET /api/v1/permissions`."
@@ -245,6 +108,1439 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"Record_string.string_": {
+				"properties": {},
+				"additionalProperties": {
+					"type": "string"
+				},
+				"type": "object",
+				"description": "Construct a type with a set of properties K of type T"
+			},
+			"IAgentHostDto": {
+				"description": "Узел агента.",
+				"properties": {
+					"os": {
+						"type": "string"
+					},
+					"arch": {
+						"type": "string"
+					},
+					"hostname": {
+						"type": "string"
+					},
+					"kernel": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"os",
+					"arch",
+					"hostname"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"Record_string.unknown_": {
+				"properties": {},
+				"additionalProperties": {},
+				"type": "object",
+				"description": "Construct a type with a set of properties K of type T"
+			},
+			"IAgentWorkerHealthDto": {
+				"description": "Последний ответ воркера на `GET /health`.",
+				"properties": {
+					"ok": {
+						"type": "boolean"
+					},
+					"busy": {
+						"type": "boolean",
+						"description": "Идёт долгая работа: плановая замена воркера ждёт её окончания."
+					},
+					"message": {
+						"type": "string"
+					},
+					"info": {
+						"$ref": "#/components/schemas/Record_string.unknown_",
+						"description": "Сведения от воркера (версии, порты и т. п.)."
+					}
+				},
+				"required": [
+					"ok"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentManifestConfigDto": {
+				"description": "Ключ настроек в манифесте воркера.",
+				"properties": {
+					"key": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"schema": {
+						"$ref": "#/components/schemas/Record_string.unknown_",
+						"description": "JSON Schema значения."
+					}
+				},
+				"required": [
+					"key"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentManifestRouteDto": {
+				"description": "Маршрут воркера в манифесте: `{name}` в пути — один сегмент. Агент\nпропускает к воркеру только объявленные маршруты (`ROUTE_UNDECLARED`).",
+				"properties": {
+					"method": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"request": {
+						"$ref": "#/components/schemas/Record_string.unknown_",
+						"description": "JSON Schema тела запроса: сервер проверяет тело до отправки."
+					},
+					"response": {
+						"$ref": "#/components/schemas/Record_string.unknown_",
+						"description": "JSON Schema тела ответа `2xx` — описание, не проверяется."
+					}
+				},
+				"required": [
+					"method",
+					"path"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentManifestEventDto": {
+				"description": "Тип события воркера в манифесте: другие типы агент не принимает.",
+				"properties": {
+					"type": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"schema": {
+						"$ref": "#/components/schemas/Record_string.unknown_",
+						"description": "JSON Schema `data` события."
+					}
+				},
+				"required": [
+					"type"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentManifestJobDto": {
+				"description": "Тип задачи воркера в манифесте (`POST /jobs`).",
+				"properties": {
+					"type": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"schema": {
+						"$ref": "#/components/schemas/Record_string.unknown_",
+						"description": "JSON Schema `data` задачи."
+					}
+				},
+				"required": [
+					"type"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentManifestRequestDto": {
+				"description": "Запрос воркера к серверу (`POST /requests` на сокете агента).",
+				"properties": {
+					"type": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"schema": {
+						"$ref": "#/components/schemas/Record_string.unknown_",
+						"description": "JSON Schema `data` запроса: сервер проверяет до обработчика."
+					},
+					"response": {
+						"$ref": "#/components/schemas/Record_string.unknown_",
+						"description": "JSON Schema `data` ответа — описание, не проверяется."
+					}
+				},
+				"required": [
+					"type"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentWorkerManifestDto": {
+				"description": "Манифест воркера — ответ `GET /manifest`: что воркер умеет (каталог\nвозможностей). Агент пропускает только объявленное: маршруты, типы задач,\nсобытия, запросы к серверу, ключи настроек.",
+				"properties": {
+					"version": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"configs": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentManifestConfigDto"
+						},
+						"type": "array"
+					},
+					"routes": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentManifestRouteDto"
+						},
+						"type": "array"
+					},
+					"events": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentManifestEventDto"
+						},
+						"type": "array"
+					},
+					"jobs": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentManifestJobDto"
+						},
+						"type": "array"
+					},
+					"requests": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentManifestRequestDto"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"version",
+					"configs",
+					"routes",
+					"events",
+					"jobs",
+					"requests"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentErrorDto": {
+				"description": "Ошибка `{ code, message }` агента или воркера.",
+				"properties": {
+					"code": {
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"code",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentWorkerConfigReportDto": {
+				"description": "Что агент сообщил о ключе настроек: версия на диске и итог применения.",
+				"properties": {
+					"version": {
+						"type": "number",
+						"format": "double"
+					},
+					"ok": {
+						"type": "boolean",
+						"description": "Нет — ещё применяется."
+					},
+					"error": {
+						"$ref": "#/components/schemas/IAgentErrorDto"
+					}
+				},
+				"required": [
+					"version"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"Record_string.IAgentWorkerConfigReportDto_": {
+				"properties": {},
+				"additionalProperties": {
+					"$ref": "#/components/schemas/IAgentWorkerConfigReportDto"
+				},
+				"type": "object",
+				"description": "Construct a type with a set of properties K of type T"
+			},
+			"IAgentWorkerDto": {
+				"description": "Воркер агента: из `hello` и последнего `status`. `state` — `starting`,\n`running` (зарегистрирован), `invalid` (не ответил как нужно на\n`GET /health` или `GET /manifest`, причина — `message`), `backoff`,\n`stopped`.",
+				"properties": {
+					"name": {
+						"type": "string"
+					},
+					"state": {
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					},
+					"version": {
+						"type": "string"
+					},
+					"release": {
+						"type": "boolean",
+						"description": "Ставится и обновляется из выпуска."
+					},
+					"builtin": {
+						"type": "boolean",
+						"description": "Встроенный `sysmetrics`: часть агента."
+					},
+					"restarts": {
+						"type": "number",
+						"format": "double"
+					},
+					"health": {
+						"$ref": "#/components/schemas/IAgentWorkerHealthDto"
+					},
+					"pending": {
+						"type": "string",
+						"description": "`restart` | `update` — замена ждёт, пока воркер занят."
+					},
+					"manifest": {
+						"$ref": "#/components/schemas/IAgentWorkerManifestDto"
+					},
+					"configs": {
+						"$ref": "#/components/schemas/Record_string.IAgentWorkerConfigReportDto_",
+						"description": "Ключ → что на диске агента и итог применения."
+					}
+				},
+				"required": [
+					"name"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentMetricsPointDto": {
+				"description": "Точка метрик: узел (`host`) и ответы `GET /metrics` воркеров.",
+				"properties": {
+					"at": {
+						"type": "number",
+						"format": "double",
+						"description": "Время сбора на узле, мс."
+					},
+					"host": {
+						"$ref": "#/components/schemas/Record_string.unknown_"
+					},
+					"workers": {
+						"$ref": "#/components/schemas/Record_string.unknown_"
+					}
+				},
+				"required": [
+					"at"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"AgentAlertDto": {
+				"description": "Проблема агента.",
+				"properties": {
+					"key": {
+						"type": "string",
+						"description": "Ключ в пределах агента: `offline`, `workerDown:<воркер>`, …"
+					},
+					"agentId": {
+						"type": "string"
+					},
+					"agentName": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string",
+						"description": "`offline` | `workerDown` | `workerInvalid` | `workerUnhealthy` | `configFailed`."
+					},
+					"worker": {
+						"type": "string"
+					},
+					"configKey": {
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					},
+					"since": {
+						"type": "number",
+						"format": "double",
+						"description": "С какого времени, мс."
+					},
+					"active": {
+						"type": "boolean",
+						"description": "В событии: `true` — началась, `false` — закончилась."
+					}
+				},
+				"required": [
+					"key",
+					"agentId",
+					"agentName",
+					"type",
+					"message",
+					"since"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentSessionDto": {
+				"description": "Какой процесс сервера держит соединение агента.",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"instance": {
+						"type": "string"
+					},
+					"since": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"id",
+					"instance",
+					"since"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"AgentDto": {
+				"description": "Агент, как его видит бэкенд: связь, узел, воркеры (состояние, самочувствие,\nманифест, настройки), последняя точка метрик, текущие проблемы.",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"labels": {
+						"$ref": "#/components/schemas/Record_string.string_"
+					},
+					"online": {
+						"type": "boolean"
+					},
+					"revoked": {
+						"type": "boolean"
+					},
+					"enrolledAt": {
+						"type": "number",
+						"format": "double",
+						"description": "Время регистрации, мс."
+					},
+					"lastSeenAt": {
+						"type": "number",
+						"format": "double"
+					},
+					"connectedAt": {
+						"type": "number",
+						"format": "double"
+					},
+					"address": {
+						"type": "string",
+						"description": "IP последнего подключения."
+					},
+					"version": {
+						"type": "string",
+						"description": "Версия агента."
+					},
+					"bootId": {
+						"type": "string"
+					},
+					"startedAt": {
+						"type": "number",
+						"format": "double"
+					},
+					"host": {
+						"$ref": "#/components/schemas/IAgentHostDto"
+					},
+					"workers": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentWorkerDto"
+						},
+						"type": "array"
+					},
+					"statusAt": {
+						"type": "number",
+						"format": "double",
+						"description": "Когда пришёл последний `status`, мс."
+					},
+					"outbox": {
+						"type": "number",
+						"format": "double",
+						"description": "Сколько важных сообщений агента ждут подтверждения."
+					},
+					"metrics": {
+						"$ref": "#/components/schemas/IAgentMetricsPointDto",
+						"description": "Последняя точка метрик."
+					},
+					"alerts": {
+						"items": {
+							"$ref": "#/components/schemas/AgentAlertDto"
+						},
+						"type": "array"
+					},
+					"session": {
+						"$ref": "#/components/schemas/IAgentSessionDto"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"labels",
+					"online",
+					"revoked",
+					"enrolledAt",
+					"workers",
+					"alerts"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IPaginatedDto_AgentDto_": {
+				"description": "Страница по смещению: списки с известным общим числом.",
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/AgentDto"
+						},
+						"type": "array"
+					},
+					"total": {
+						"type": "number",
+						"format": "double",
+						"description": "Всего элементов, подходящих под фильтр."
+					},
+					"offset": {
+						"type": "number",
+						"format": "double"
+					},
+					"limit": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"items",
+					"total",
+					"offset",
+					"limit"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentEventDto": {
+				"description": "Событие воркера.",
+				"properties": {
+					"id": {
+						"type": "string",
+						"description": "Id сообщения агента."
+					},
+					"agentId": {
+						"type": "string"
+					},
+					"worker": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string"
+					},
+					"data": {},
+					"at": {
+						"type": "number",
+						"format": "double",
+						"description": "Когда случилось на узле, мс."
+					},
+					"receivedAt": {
+						"type": "number",
+						"format": "double",
+						"description": "Когда принято, мс."
+					},
+					"problems": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"description": "`data` не подошло под схему события из манифеста воркера: замечания."
+					}
+				},
+				"required": [
+					"id",
+					"agentId",
+					"worker",
+					"type",
+					"at",
+					"receivedAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ICursorPageDto_IAgentEventDto_": {
+				"description": "Страница по курсору: ленты, где записи добавляются во время чтения\n(сообщения, события). Курсор непрозрачен для клиента.",
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentEventDto"
+						},
+						"type": "array"
+					},
+					"nextCursor": {
+						"type": "string",
+						"nullable": true,
+						"description": "Курсор следующей страницы; `null` — страниц больше нет."
+					}
+				},
+				"required": [
+					"items",
+					"nextCursor"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"TAgentId": {
+				"type": "string",
+				"description": "Id агента в пути: формат проверяется до контроллера.",
+				"pattern": "^[0-9a-f]{32}$"
+			},
+			"IAgentUpdateResultDto": {
+				"description": "Итог обновления агента.",
+				"properties": {
+					"version": {
+						"type": "string"
+					},
+					"previous": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"version"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"TAgentLogLevel": {
+				"type": "string",
+				"enum": [
+					"debug",
+					"info",
+					"warn",
+					"error"
+				]
+			},
+			"IAgentLogEntryDto": {
+				"description": "Запись журнала агента или воркера.",
+				"properties": {
+					"at": {
+						"type": "number",
+						"format": "double",
+						"description": "Время, мс."
+					},
+					"level": {
+						"$ref": "#/components/schemas/TAgentLogLevel"
+					},
+					"source": {
+						"type": "string",
+						"description": "`agent` или имя воркера."
+					},
+					"msg": {
+						"type": "string"
+					},
+					"attrs": {
+						"$ref": "#/components/schemas/Record_string.unknown_"
+					}
+				},
+				"required": [
+					"at",
+					"level",
+					"source",
+					"msg"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentLogsDto": {
+				"description": "Последние строки журнала.",
+				"properties": {
+					"entries": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentLogEntryDto"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"entries"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"TAgentWorkerName": {
+				"type": "string",
+				"description": "Имя воркера или ключа настроек в пути.",
+				"pattern": "^[a-z][a-z0-9-]{0,31}$"
+			},
+			"AgentEnrollmentTokenDto": {
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"prefix": {
+						"type": "string",
+						"description": "Открытая часть токена: по ней токен узнают в списке."
+					},
+					"labels": {
+						"$ref": "#/components/schemas/Record_string.string_"
+					},
+					"maxUses": {
+						"type": "number",
+						"format": "double",
+						"nullable": true
+					},
+					"uses": {
+						"type": "number",
+						"format": "double"
+					},
+					"expiresAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"revokedAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"createdBy": {
+						"type": "string",
+						"nullable": true
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"prefix",
+					"labels",
+					"maxUses",
+					"uses",
+					"expiresAt",
+					"revokedAt",
+					"createdBy",
+					"createdAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ICreatedAgentEnrollmentTokenDto": {
+				"description": "Выпущенный токен: `token` показывается один раз.",
+				"properties": {
+					"enrollmentToken": {
+						"$ref": "#/components/schemas/AgentEnrollmentTokenDto"
+					},
+					"token": {
+						"type": "string",
+						"description": "Полный токен `<prefix>.<secret>` — в настройки агента."
+					}
+				},
+				"required": [
+					"enrollmentToken",
+					"token"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ICreateAgentEnrollmentTokenBody": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"minLength": 1,
+						"maxLength": 100
+					},
+					"labels": {
+						"$ref": "#/components/schemas/Record_string.string_",
+						"description": "Метки, которые получат агенты: `zone`, `gpu`."
+					},
+					"maxUses": {
+						"type": "number",
+						"format": "double",
+						"description": "Сколько агентов можно зарегистрировать; без него — без ограничения."
+					},
+					"expiresAt": {
+						"type": "string",
+						"format": "date-time",
+						"description": "Срок действия; без него — бессрочный."
+					}
+				},
+				"required": [
+					"name"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IPaginatedDto_AgentEnrollmentTokenDto_": {
+				"description": "Страница по смещению: списки с известным общим числом.",
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/AgentEnrollmentTokenDto"
+						},
+						"type": "array"
+					},
+					"total": {
+						"type": "number",
+						"format": "double",
+						"description": "Всего элементов, подходящих под фильтр."
+					},
+					"offset": {
+						"type": "number",
+						"format": "double"
+					},
+					"limit": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"items",
+					"total",
+					"offset",
+					"limit"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"UUID": {
+				"type": "string",
+				"description": "Идентификатор сущности в пути или теле запроса. tsoa проверяет формат до\nконтроллера: неверный uuid → 422, а не ошибка Postgres.",
+				"pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+			},
+			"TAgentReleaseSource": {
+				"type": "string",
+				"enum": [
+					"remote",
+					"local"
+				],
+				"description": "Откуда сборка: `remote` — удалённый источник выпуска агента (GitHub или\n`AGENT_RELEASES_URL`), `local` — каталог воркеров проекта\n(`AGENT_RELEASES_DIR`)."
+			},
+			"IAgentReleaseArtifactDto": {
+				"description": "Сборка агента в выпуске.",
+				"properties": {
+					"os": {
+						"type": "string"
+					},
+					"arch": {
+						"type": "string"
+					},
+					"file": {
+						"type": "string",
+						"description": "Имя файла для `…/agent-link/releases/<file>`."
+					},
+					"sha256": {
+						"type": "string"
+					},
+					"signature": {
+						"type": "string"
+					},
+					"source": {
+						"$ref": "#/components/schemas/TAgentReleaseSource"
+					},
+					"url": {
+						"type": "string",
+						"description": "Ссылка на сборку в источнике или путь от корня бэкенда."
+					}
+				},
+				"required": [
+					"os",
+					"arch",
+					"file",
+					"sha256",
+					"source",
+					"url"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentWorkerArtifactDto": {
+				"description": "Сборка воркера в выпуске.",
+				"properties": {
+					"os": {
+						"type": "string"
+					},
+					"arch": {
+						"type": "string"
+					},
+					"file": {
+						"type": "string",
+						"description": "Имя файла для `…/agent-link/releases/<file>`."
+					},
+					"sha256": {
+						"type": "string"
+					},
+					"signature": {
+						"type": "string"
+					},
+					"source": {
+						"$ref": "#/components/schemas/TAgentReleaseSource"
+					},
+					"url": {
+						"type": "string",
+						"description": "Ссылка на сборку в источнике или путь от корня бэкенда."
+					},
+					"name": {
+						"type": "string"
+					},
+					"version": {
+						"type": "string"
+					},
+					"command": {
+						"type": "string",
+						"description": "Что запускать в сборке-архиве."
+					},
+					"stopTimeout": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"os",
+					"arch",
+					"file",
+					"sha256",
+					"source",
+					"url",
+					"name",
+					"version"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentRemoteReleaseDto": {
+				"description": "Удалённый выпуск агента: версия, источник, когда проверен.",
+				"properties": {
+					"version": {
+						"type": "string"
+					},
+					"from": {
+						"type": "string",
+						"description": "`github:owner/repo` или база выпуска (url)."
+					},
+					"checkedAt": {
+						"type": "number",
+						"format": "double",
+						"description": "Когда источник проверен, мс с 1970-01-01."
+					},
+					"publicKey": {
+						"type": "string",
+						"description": "Ключ подписи удалённого выпуска (base64)."
+					}
+				},
+				"required": [
+					"version",
+					"from",
+					"checkedAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentReleaseManifestDto": {
+				"description": "Итоговый выпуск: агент и netprobe — из удалённого источника, воркеры\nпроекта (wg, socks) — из `AGENT_RELEASES_DIR`.",
+				"properties": {
+					"version": {
+						"type": "string"
+					},
+					"publicKey": {
+						"type": "string"
+					},
+					"artifacts": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentReleaseArtifactDto"
+						},
+						"type": "array"
+					},
+					"workers": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentWorkerArtifactDto"
+						},
+						"type": "array"
+					},
+					"remote": {
+						"$ref": "#/components/schemas/IAgentRemoteReleaseDto",
+						"description": "Нет — удалённый выпуск ещё не получен (или источник не задан)."
+					}
+				},
+				"required": [
+					"version",
+					"artifacts"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentUpdateCandidateDto": {
+				"description": "Агент, которого можно обновить до версии выпуска.",
+				"properties": {
+					"agentId": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"online": {
+						"type": "boolean"
+					},
+					"current": {
+						"type": "string"
+					},
+					"target": {
+						"type": "string"
+					},
+					"os": {
+						"type": "string"
+					},
+					"arch": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"agentId",
+					"name",
+					"online",
+					"current",
+					"target",
+					"os",
+					"arch"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentWorkerUpdateCandidateDto": {
+				"description": "Воркер из выпуска, которого можно обновить.",
+				"properties": {
+					"agentId": {
+						"type": "string"
+					},
+					"agentName": {
+						"type": "string"
+					},
+					"online": {
+						"type": "boolean"
+					},
+					"worker": {
+						"type": "string"
+					},
+					"current": {
+						"type": "string"
+					},
+					"target": {
+						"type": "string"
+					},
+					"os": {
+						"type": "string"
+					},
+					"arch": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"agentId",
+					"agentName",
+					"online",
+					"worker",
+					"current",
+					"target",
+					"os",
+					"arch"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentReleaseDto": {
+				"description": "Выпуск агента и кого можно обновить.",
+				"properties": {
+					"manifest": {
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/IAgentReleaseManifestDto"
+							}
+						],
+						"nullable": true,
+						"description": "`null` — каталог выпуска не задан или пуст."
+					},
+					"candidates": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentUpdateCandidateDto"
+						},
+						"type": "array"
+					},
+					"workerCandidates": {
+						"items": {
+							"$ref": "#/components/schemas/IAgentWorkerUpdateCandidateDto"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"manifest",
+					"candidates",
+					"workerCandidates"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentInstallCommandDto": {
+				"properties": {
+					"command": {
+						"type": "string",
+						"description": "`curl … | sudo sh -s -- …`."
+					}
+				},
+				"required": [
+					"command"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentPackagesByManagerDto": {
+				"description": "Пакеты по менеджерам (`--packages-apt` и т. п.).",
+				"properties": {
+					"apt": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"dnf": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"yum": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"apk": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"zypper": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ICreateAgentInstallCommandBody": {
+				"properties": {
+					"token": {
+						"type": "string",
+						"description": "Токен регистрации; ровно одно из `token` и `tokenFile`."
+					},
+					"tokenFile": {
+						"type": "string",
+						"description": "Путь к файлу с токеном на узле."
+					},
+					"baseUrl": {
+						"type": "string",
+						"description": "Адрес сервера; без него — `AGENT_PUBLIC_URL` или `APP_PUBLIC_URL`."
+					},
+					"name": {
+						"type": "string"
+					},
+					"user": {
+						"type": "string",
+						"description": "Пользователь службы агента."
+					},
+					"config": {
+						"type": "string",
+						"description": "Путь к `agent.yaml` на узле."
+					},
+					"privileged": {
+						"type": "boolean"
+					},
+					"killMode": {
+						"type": "string",
+						"enum": [
+							"process",
+							"mixed"
+						],
+						"description": "`process` | `mixed`."
+					},
+					"packages": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"packagesByManager": {
+						"$ref": "#/components/schemas/IAgentPackagesByManagerDto",
+						"description": "Свои имена пакетов для менеджера: на узле с ним заменяют `packages`."
+					},
+					"sysctl": {
+						"$ref": "#/components/schemas/Record_string.string_"
+					},
+					"rwPaths": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"caFile": {
+						"type": "string"
+					},
+					"workers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"description": "Воркеры из выпуска."
+					},
+					"stopTimeout": {
+						"type": "string",
+						"description": "Например `30s`."
+					},
+					"releases": {
+						"type": "string",
+						"description": "Другой источник сборок воркеров (`--releases`)."
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentWorkerActionResultDto": {
+				"description": "Ответ на перезапуск и обновление воркера. Воркер свободен — заменён сразу\n(`deferred: false`, у обновления — версии). Занят (`health.busy`) — замена\nотложена до окончания работы (`deferred: true`, `pending`, `actionId`);\nеё итог — событие сокета `agent:action` с `id = actionId` и `deferred: true`.",
+				"properties": {
+					"deferred": {
+						"type": "boolean"
+					},
+					"pending": {
+						"type": "string",
+						"description": "Что ждёт: `restart` | `update`."
+					},
+					"actionId": {
+						"type": "string",
+						"description": "Id действия: по нему узнаётся итог в `agent:action`."
+					},
+					"version": {
+						"type": "string",
+						"description": "Обновление: новая версия воркера."
+					},
+					"previous": {
+						"type": "string",
+						"description": "Обновление: прежняя версия."
+					}
+				},
+				"required": [
+					"deferred"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentWorkerActionBody": {
+				"description": "Тело перезапуска и обновления воркера.",
+				"properties": {
+					"force": {
+						"type": "boolean",
+						"description": "Заменить сразу, не дожидаясь окончания работы воркера (`busy`)."
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentFetchBody": {
+				"description": "Запрос к воркеру через агента.",
+				"properties": {
+					"method": {
+						"type": "string",
+						"description": "HTTP-метод.",
+						"pattern": "^[A-Z]{1,16}$"
+					},
+					"path": {
+						"type": "string",
+						"description": "Путь у воркера от `/`, с параметрами.",
+						"maxLength": 2048
+					},
+					"headers": {
+						"$ref": "#/components/schemas/Record_string.string_",
+						"description": "Заголовки запроса."
+					},
+					"body": {
+						"type": "string",
+						"description": "Тело: текст или base64 (`encoding: \"base64\"`)."
+					},
+					"encoding": {
+						"type": "string",
+						"enum": [
+							"utf8",
+							"base64"
+						],
+						"description": "`utf8` (по умолчанию) | `base64`."
+					},
+					"timeoutMs": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок, мс (по умолчанию 30 000, не больше 600 000)."
+					}
+				},
+				"required": [
+					"path"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentConfigDto": {
+				"description": "Значение ключа настроек воркера.",
+				"properties": {
+					"agentId": {
+						"type": "string"
+					},
+					"worker": {
+						"type": "string"
+					},
+					"key": {
+						"type": "string"
+					},
+					"version": {
+						"type": "number",
+						"format": "double"
+					},
+					"data": {
+						"description": "Значение; только с правом на настройки (`agent:config`)."
+					},
+					"updatedAt": {
+						"type": "number",
+						"format": "double",
+						"description": "Время записи, мс."
+					},
+					"actor": {
+						"type": "string",
+						"description": "Кто изменил."
+					}
+				},
+				"required": [
+					"agentId",
+					"worker",
+					"key",
+					"version",
+					"updatedAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"AgentConfigStatusDto": {
+				"description": "Статус ключа настроек воркера на агенте.",
+				"properties": {
+					"agentId": {
+						"type": "string"
+					},
+					"worker": {
+						"type": "string"
+					},
+					"key": {
+						"type": "string"
+					},
+					"version": {
+						"type": "number",
+						"format": "double",
+						"nullable": true,
+						"description": "Желаемая версия; `null` — ключ удалён, агент ещё не удалил."
+					},
+					"delivered": {
+						"type": "number",
+						"format": "double",
+						"description": "Версия на диске агента."
+					},
+					"applied": {
+						"type": "number",
+						"format": "double",
+						"description": "Последняя версия, применённая воркером."
+					},
+					"state": {
+						"type": "string",
+						"description": "`pending` | `applying` | `applied` | `failed` | `deleting`; `deleted` —\nагент удалил ключ (только в событии сокета `agent:config`)."
+					},
+					"error": {
+						"$ref": "#/components/schemas/IAgentErrorDto"
+					},
+					"result": {
+						"description": "Подробный итог применения от воркера (только в `applied`)."
+					},
+					"updatedAt": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"agentId",
+					"worker",
+					"key",
+					"version",
+					"state"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentConfigEntryDto": {
+				"description": "Ключ настроек: значение (если задано) и статус применения.",
+				"properties": {
+					"worker": {
+						"type": "string"
+					},
+					"key": {
+						"type": "string"
+					},
+					"config": {
+						"$ref": "#/components/schemas/IAgentConfigDto",
+						"description": "Желаемое значение; нет — ключ удалён и ещё удаляется на агенте."
+					},
+					"status": {
+						"$ref": "#/components/schemas/AgentConfigStatusDto"
+					}
+				},
+				"required": [
+					"worker",
+					"key",
+					"status"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ISetAgentConfigBody": {
+				"description": "Тело записи настроек воркера.",
+				"properties": {
+					"data": {
+						"description": "Значение ключа — любой JSON; проверяется по схеме из манифеста воркера."
+					}
+				},
+				"required": [
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"EWgNodeStatus": {
 				"description": "Статус ноды: online/offline — живость агента, provisioning — идёт установка.",
 				"enum": [
@@ -257,7 +1553,7 @@
 				"type": "string"
 			},
 			"EWgMode": {
-				"description": "Реализация WireGuard на ноде. `userspace` (wireguard-go) живёт в процессе\nагента: перезапуск контейнера агента роняет интерфейсы.",
+				"description": "Реализация WireGuard на ноде: модуль ядра или wireguard-go.",
 				"enum": [
 					"kernel",
 					"userspace"
@@ -265,6 +1561,7 @@
 				"type": "string"
 			},
 			"IWgNodeOsInfo": {
+				"description": "Сведения об ОС ноды: от агента (узел) и воркера wg (режим, порты).",
 				"properties": {
 					"platform": {
 						"type": "string"
@@ -347,9 +1644,15 @@
 					"status": {
 						"$ref": "#/components/schemas/EWgNodeStatus"
 					},
-					"hasAgentKey": {
-						"type": "boolean",
-						"description": "Есть ли выпущенный ключ агента."
+					"statusMessage": {
+						"type": "string",
+						"nullable": true,
+						"description": "Пояснение к статусу: что не так с агентом или воркерами."
+					},
+					"agentId": {
+						"type": "string",
+						"nullable": true,
+						"description": "Агент ноды (`/api/v1/agents/{agentId}`); нет — агент не установлен."
 					},
 					"configVersion": {
 						"type": "number",
@@ -375,11 +1678,6 @@
 						"type": "string",
 						"nullable": true
 					},
-					"agentCodeHash": {
-						"type": "string",
-						"nullable": true,
-						"description": "sha256 бинаря агента; сравнивается с `release` для обновления."
-					},
 					"osInfo": {
 						"allOf": [
 							{
@@ -391,7 +1689,7 @@
 					"agentRemoteIp": {
 						"type": "string",
 						"nullable": true,
-						"description": "IP, с которого агент обращается к бэкенду."
+						"description": "IP, с которого агент подключился к бэкенду."
 					},
 					"lastSeenAt": {
 						"type": "string",
@@ -417,14 +1715,14 @@
 					"description",
 					"publicHost",
 					"status",
-					"hasAgentKey",
+					"statusMessage",
+					"agentId",
 					"configVersion",
 					"appliedVersion",
 					"inSync",
 					"applyError",
 					"agentVersion",
 					"wgVersion",
-					"agentCodeHash",
 					"osInfo",
 					"agentRemoteIp",
 					"lastSeenAt",
@@ -434,25 +1732,47 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"IWgNodeInstallCommandDto": {
+				"description": "Команда установки агента на ноду и токен регистрации в ней.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"description": "`curl … | sudo sh -s -- --instance … --token … --worker wg …` — выполнить на VPS."
+					},
+					"token": {
+						"type": "string",
+						"description": "Токен регистрации (одноразовый, с меткой ноды) — виден только здесь."
+					},
+					"tokenId": {
+						"type": "string"
+					},
+					"expiresAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"command",
+					"token",
+					"tokenId",
+					"expiresAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"ICreatedWgNodeDto": {
-				"description": "Ответ создания ноды: ключ агента возвращается только один раз.",
+				"description": "Ответ создания ноды: команда установки агента (токен — только здесь).",
 				"properties": {
 					"node": {
 						"$ref": "#/components/schemas/WgNodeDto"
 					},
-					"agentKey": {
-						"type": "string",
-						"description": "Секрет ключа агента — сохранить сразу, повторно не выдаётся."
-					},
-					"installCommand": {
-						"type": "string",
-						"description": "Команда ручной установки агента на VPS с этим ключом."
+					"install": {
+						"$ref": "#/components/schemas/IWgNodeInstallCommandDto"
 					}
 				},
 				"required": [
 					"node",
-					"agentKey",
-					"installCommand"
+					"install"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -565,33 +1885,88 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"IWgAgentKeyDto": {
-				"description": "Ответ ротации ключа агента.",
+			"ICreateWgNodeInstallCommandBody": {
+				"description": "Команда установки агента: срок токена.",
 				"properties": {
-					"agentKey": {
+					"expiresInMinutes": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок одноразового токена регистрации, минут (по умолчанию сутки)."
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IBindWgNodeAgentBody": {
+				"description": "Привязать к ноде уже зарегистрированного агента.",
+				"properties": {
+					"agentId": {
 						"type": "string"
-					},
-					"installCommand": {
-						"type": "string",
-						"description": "Команда ручной установки агента на VPS с этим ключом."
 					}
 				},
 				"required": [
-					"agentKey",
-					"installCommand"
+					"agentId"
 				],
 				"type": "object",
 				"additionalProperties": false
 			},
+			"TWgNodeWorker": {
+				"type": "string",
+				"description": "Имя воркера агента ноды в пути.",
+				"pattern": "^[a-z][a-z0-9-]{0,31}$"
+			},
+			"IUpdateWgNodeWorkerBody": {
+				"description": "Обновить воркер агента ноды из выпуска.",
+				"properties": {
+					"force": {
+						"type": "boolean",
+						"description": "Заменить сразу, не дожидаясь окончания работы воркера."
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
 			"IWgNodeLogsDto": {
-				"description": "Журнал агента ноды (результат команды `agent-logs`).",
+				"description": "Журнал агента или воркера ноды.",
 				"properties": {
 					"content": {
-						"type": "string"
+						"type": "string",
+						"description": "Строки журнала текстом: `время уровень источник: сообщение`."
+					},
+					"entries": {
+						"items": {
+							"properties": {
+								"attrs": {
+									"$ref": "#/components/schemas/Record_string.unknown_"
+								},
+								"msg": {
+									"type": "string"
+								},
+								"source": {
+									"type": "string"
+								},
+								"level": {
+									"type": "string"
+								},
+								"at": {
+									"type": "number",
+									"format": "double"
+								}
+							},
+							"required": [
+								"msg",
+								"source",
+								"level",
+								"at"
+							],
+							"type": "object"
+						},
+						"type": "array"
 					}
 				},
 				"required": [
-					"content"
+					"content",
+					"entries"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -1351,111 +2726,19 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"EWgNodeCommandType": {
-				"description": "Типы команд, исполняемых агентом на ноде.",
-				"enum": [
-					"interface-restart",
-					"agent-logs",
-					"agent-update"
-				],
-				"type": "string"
-			},
-			"EWgNodeCommandStatus": {
-				"enum": [
-					"pending",
-					"running",
-					"succeeded",
-					"failed",
-					"timeout"
-				],
-				"type": "string"
-			},
-			"IWgNodeCommandPayload": {
-				"description": "Полезная нагрузка команды агенту.",
+			"IWgInterfaceRestartResult": {
+				"description": "Итог перезапуска интерфейса воркером wg.",
 				"properties": {
-					"interfaceName": {
-						"type": "string",
-						"description": "interface-restart: имя интерфейса."
-					},
-					"lines": {
-						"type": "number",
-						"format": "double",
-						"description": "agent-logs: сколько последних строк вернуть."
-					},
-					"hash": {
-						"type": "string",
-						"description": "agent-update: sha256 бинаря, который агент должен установить."
-					}
-				},
-				"type": "object",
-				"additionalProperties": false
-			},
-			"WgNodeCommandDto": {
-				"properties": {
-					"id": {
+					"name": {
 						"type": "string"
-					},
-					"nodeId": {
-						"type": "string"
-					},
-					"type": {
-						"$ref": "#/components/schemas/EWgNodeCommandType"
 					},
 					"status": {
-						"$ref": "#/components/schemas/EWgNodeCommandStatus"
-					},
-					"payload": {
-						"$ref": "#/components/schemas/IWgNodeCommandPayload"
-					},
-					"output": {
 						"type": "string"
-					},
-					"exitCode": {
-						"type": "number",
-						"format": "double",
-						"nullable": true
-					},
-					"error": {
-						"type": "string",
-						"nullable": true
-					},
-					"requestedBy": {
-						"type": "string",
-						"nullable": true
-					},
-					"timeoutSec": {
-						"type": "number",
-						"format": "double"
-					},
-					"startedAt": {
-						"type": "string",
-						"format": "date-time",
-						"nullable": true
-					},
-					"finishedAt": {
-						"type": "string",
-						"format": "date-time",
-						"nullable": true
-					},
-					"createdAt": {
-						"type": "string",
-						"format": "date-time"
 					}
 				},
 				"required": [
-					"id",
-					"nodeId",
-					"type",
-					"status",
-					"payload",
-					"output",
-					"exitCode",
-					"error",
-					"requestedBy",
-					"timeoutSec",
-					"startedAt",
-					"finishedAt",
-					"createdAt"
+					"name",
+					"status"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -2204,14 +3487,6 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"EWgAgentTransport": {
-				"description": "Канал связи агента с бэкендом.",
-				"enum": [
-					"link",
-					"http"
-				],
-				"type": "string"
-			},
 			"IWgNodeLive": {
 				"description": "Live-снимок ноды.",
 				"properties": {
@@ -2254,15 +3529,6 @@
 						],
 						"nullable": true
 					},
-					"transport": {
-						"allOf": [
-							{
-								"$ref": "#/components/schemas/EWgAgentTransport"
-							}
-						],
-						"nullable": true,
-						"description": "Канал связи агента; `null` — неизвестен."
-					},
 					"ts": {
 						"type": "string"
 					}
@@ -2277,7 +3543,6 @@
 					"rxBps",
 					"txBps",
 					"sys",
-					"transport",
 					"ts"
 				],
 				"type": "object",
@@ -3332,892 +4597,6 @@
 				},
 				"required": [
 					"userId"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"EJobRunStatus": {
-				"description": "Статус видимой задачи.",
-				"enum": [
-					"queued",
-					"running",
-					"completed",
-					"failed",
-					"cancelled"
-				],
-				"type": "string"
-			},
-			"IJobRunError": {
-				"description": "Ошибка задачи в записи и в ответе API.",
-				"properties": {
-					"code": {
-						"type": "string"
-					},
-					"message": {
-						"type": "string"
-					}
-				},
-				"required": [
-					"code",
-					"message"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"JobRunDto": {
-				"properties": {
-					"id": {
-						"type": "string",
-						"description": "Id задачи (совпадает с id pg-boss)."
-					},
-					"queue": {
-						"type": "string"
-					},
-					"status": {
-						"$ref": "#/components/schemas/EJobRunStatus"
-					},
-					"title": {
-						"type": "string"
-					},
-					"progress": {
-						"type": "number",
-						"format": "double",
-						"description": "Прогресс 0..1."
-					},
-					"progressText": {
-						"type": "string",
-						"nullable": true
-					},
-					"logTail": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"description": "Последние строки лога."
-					},
-					"result": {},
-					"error": {
-						"allOf": [
-							{
-								"$ref": "#/components/schemas/IJobRunError"
-							}
-						],
-						"nullable": true
-					},
-					"ownerId": {
-						"type": "string",
-						"nullable": true
-					},
-					"scopeType": {
-						"type": "string",
-						"nullable": true
-					},
-					"scopeId": {
-						"type": "string",
-						"nullable": true
-					},
-					"attempt": {
-						"type": "number",
-						"format": "double",
-						"description": "Номер попытки, с 0."
-					},
-					"cancelRequested": {
-						"type": "boolean"
-					},
-					"startedAt": {
-						"type": "string",
-						"format": "date-time",
-						"nullable": true
-					},
-					"finishedAt": {
-						"type": "string",
-						"format": "date-time",
-						"nullable": true
-					},
-					"createdAt": {
-						"type": "string",
-						"format": "date-time"
-					}
-				},
-				"required": [
-					"id",
-					"queue",
-					"status",
-					"title",
-					"progress",
-					"progressText",
-					"logTail",
-					"result",
-					"error",
-					"ownerId",
-					"scopeType",
-					"scopeId",
-					"attempt",
-					"cancelRequested",
-					"startedAt",
-					"finishedAt",
-					"createdAt"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IPaginatedDto_JobRunDto_": {
-				"description": "Страница по смещению: списки с известным общим числом.",
-				"properties": {
-					"items": {
-						"items": {
-							"$ref": "#/components/schemas/JobRunDto"
-						},
-						"type": "array"
-					},
-					"total": {
-						"type": "number",
-						"format": "double",
-						"description": "Всего элементов, подходящих под фильтр."
-					},
-					"offset": {
-						"type": "number",
-						"format": "double"
-					},
-					"limit": {
-						"type": "number",
-						"format": "double"
-					}
-				},
-				"required": [
-					"items",
-					"total",
-					"offset",
-					"limit"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentPeer": {
-				"description": "Пир в серверном конфиге интерфейса.",
-				"properties": {
-					"publicKey": {
-						"type": "string"
-					},
-					"presharedKey": {
-						"type": "string",
-						"nullable": true
-					},
-					"allowedIps": {
-						"type": "string"
-					}
-				},
-				"required": [
-					"publicKey",
-					"presharedKey",
-					"allowedIps"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentInterface": {
-				"description": "Желаемое состояние интерфейса на ноде.",
-				"properties": {
-					"name": {
-						"type": "string"
-					},
-					"enabled": {
-						"type": "boolean"
-					},
-					"listenPort": {
-						"type": "number",
-						"format": "double"
-					},
-					"addressCidr": {
-						"type": "string"
-					},
-					"addressV6Cidr": {
-						"type": "string",
-						"nullable": true
-					},
-					"privateKey": {
-						"type": "string"
-					},
-					"mtu": {
-						"type": "number",
-						"format": "double",
-						"nullable": true
-					},
-					"natEnabled": {
-						"type": "boolean",
-						"description": "Пресет NAT (masquerade через egress-интерфейс ноды)."
-					},
-					"customPostUp": {
-						"type": "string",
-						"nullable": true
-					},
-					"customPostDown": {
-						"type": "string",
-						"nullable": true
-					},
-					"peers": {
-						"items": {
-							"$ref": "#/components/schemas/IWgAgentPeer"
-						},
-						"type": "array"
-					}
-				},
-				"required": [
-					"name",
-					"enabled",
-					"listenPort",
-					"addressCidr",
-					"addressV6Cidr",
-					"privateKey",
-					"mtu",
-					"natEnabled",
-					"customPostUp",
-					"customPostDown",
-					"peers"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentTunnel": {
-				"description": "IPIP-туннель (конец на этой ноде).",
-				"properties": {
-					"name": {
-						"type": "string"
-					},
-					"remoteHost": {
-						"type": "string"
-					},
-					"localTunnelIp": {
-						"type": "string"
-					},
-					"remoteTunnelIp": {
-						"type": "string"
-					},
-					"prefix": {
-						"type": "number",
-						"format": "double"
-					},
-					"mtu": {
-						"type": "number",
-						"format": "double"
-					}
-				},
-				"required": [
-					"name",
-					"remoteHost",
-					"localTunnelIp",
-					"remoteTunnelIp",
-					"prefix",
-					"mtu"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentForward": {
-				"description": "Проброс на релее (см. агент: failover.ts).",
-				"properties": {
-					"id": {
-						"type": "string",
-						"description": "id проброса wg-forward — для отчёта о маршруте; у точек подключения нет."
-					},
-					"proto": {
-						"type": "string",
-						"enum": [
-							"udp",
-							"tcp"
-						]
-					},
-					"listenPort": {
-						"type": "number",
-						"format": "double"
-					},
-					"targetIp": {
-						"type": "string"
-					},
-					"targetPort": {
-						"type": "number",
-						"format": "double"
-					},
-					"fallbackIp": {
-						"type": "string",
-						"nullable": true,
-						"description": "Прямой адрес цели для аварийного пути мимо туннеля."
-					},
-					"route": {
-						"$ref": "#/components/schemas/EWgForwardRoute"
-					},
-					"tunnel": {
-						"type": "string",
-						"nullable": true,
-						"description": "Туннель, по здоровью которого агент выбирает маршрут."
-					},
-					"candidates": {
-						"items": {
-							"properties": {
-								"nodeId": {
-									"type": "string"
-								},
-								"tunnel": {
-									"type": "string",
-									"nullable": true
-								},
-								"targetIp": {
-									"type": "string"
-								}
-							},
-							"required": [
-								"nodeId",
-								"tunnel",
-								"targetIp"
-							],
-							"type": "object"
-						},
-						"type": "array",
-						"description": "Копии интерфейса (реплики) по приоритету — агент берёт первую живую."
-					}
-				},
-				"required": [
-					"proto",
-					"listenPort",
-					"targetIp",
-					"targetPort"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgProbeTarget": {
-				"description": "Нода, которую агент должен пинговать.",
-				"properties": {
-					"nodeId": {
-						"type": "string"
-					},
-					"host": {
-						"type": "string"
-					}
-				},
-				"required": [
-					"nodeId",
-					"host"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgSocksAgentConfig": {
-				"description": "SOCKS5-прокси для desired state агента.",
-				"properties": {
-					"id": {
-						"type": "string"
-					},
-					"listenPort": {
-						"type": "number",
-						"format": "double"
-					},
-					"certPem": {
-						"type": "string"
-					},
-					"keyPem": {
-						"type": "string"
-					},
-					"caPem": {
-						"type": "string"
-					},
-					"allowedFingerprints": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"description": "SHA-256 допущенных клиентских сертификатов (отозванные — исключены)."
-					},
-					"users": {
-						"items": {
-							"properties": {
-								"hash": {
-									"type": "string"
-								},
-								"salt": {
-									"type": "string"
-								},
-								"username": {
-									"type": "string"
-								}
-							},
-							"required": [
-								"hash",
-								"salt",
-								"username"
-							],
-							"type": "object"
-						},
-						"type": "array"
-					}
-				},
-				"required": [
-					"id",
-					"listenPort",
-					"certPem",
-					"keyPem",
-					"caPem",
-					"allowedFingerprints",
-					"users"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentCommand": {
-				"description": "Императивная команда агенту.",
-				"properties": {
-					"id": {
-						"type": "string"
-					},
-					"type": {
-						"$ref": "#/components/schemas/EWgNodeCommandType"
-					},
-					"payload": {
-						"$ref": "#/components/schemas/IWgNodeCommandPayload"
-					},
-					"timeoutSec": {
-						"type": "number",
-						"format": "double",
-						"description": "Срок выполнения: дольше команда считается просроченной (timeout)."
-					}
-				},
-				"required": [
-					"id",
-					"type",
-					"payload",
-					"timeoutSec"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentDesiredState": {
-				"description": "Полное желаемое состояние ноды.",
-				"properties": {
-					"version": {
-						"type": "number",
-						"format": "double"
-					},
-					"nodeId": {
-						"type": "string"
-					},
-					"nodeName": {
-						"type": "string"
-					},
-					"interfaces": {
-						"items": {
-							"$ref": "#/components/schemas/IWgAgentInterface"
-						},
-						"type": "array"
-					},
-					"tunnels": {
-						"items": {
-							"$ref": "#/components/schemas/IWgAgentTunnel"
-						},
-						"type": "array"
-					},
-					"forwards": {
-						"items": {
-							"$ref": "#/components/schemas/IWgAgentForward"
-						},
-						"type": "array"
-					},
-					"probeTargets": {
-						"items": {
-							"$ref": "#/components/schemas/IWgProbeTarget"
-						},
-						"type": "array",
-						"description": "Ноды для проверки связности (не версионируются: берутся из любого ответа)."
-					},
-					"socks": {
-						"items": {
-							"$ref": "#/components/schemas/IWgSocksAgentConfig"
-						},
-						"type": "array",
-						"description": "SOCKS5-прокси через mTLS на ноде."
-					},
-					"commands": {
-						"items": {
-							"$ref": "#/components/schemas/IWgAgentCommand"
-						},
-						"type": "array"
-					},
-					"settings": {
-						"properties": {
-							"statsIntervalMs": {
-								"type": "number",
-								"format": "double",
-								"description": "Период отправки статистики агентом."
-							}
-						},
-						"required": [
-							"statsIntervalMs"
-						],
-						"type": "object"
-					}
-				},
-				"required": [
-					"version",
-					"nodeId",
-					"nodeName",
-					"interfaces",
-					"tunnels",
-					"forwards",
-					"probeTargets",
-					"socks",
-					"commands",
-					"settings"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentInterfaceStatusReport": {
-				"description": "Статус интерфейса в отчёте агента.",
-				"properties": {
-					"name": {
-						"type": "string"
-					},
-					"status": {
-						"type": "string",
-						"enum": [
-							"up",
-							"down",
-							"error",
-							"unknown"
-						]
-					},
-					"message": {
-						"type": "string",
-						"nullable": true
-					}
-				},
-				"required": [
-					"name",
-					"status"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentReportBody": {
-				"description": "Отчёт агента о применении конфигурации и системе.",
-				"properties": {
-					"appliedVersion": {
-						"type": "number",
-						"format": "double"
-					},
-					"applyError": {
-						"type": "string",
-						"nullable": true
-					},
-					"agentVersion": {
-						"type": "string"
-					},
-					"wgVersion": {
-						"type": "string",
-						"nullable": true
-					},
-					"codeHash": {
-						"type": "string",
-						"nullable": true,
-						"description": "sha256 бинаря агента."
-					},
-					"os": {
-						"properties": {
-							"tcpPorts": {
-								"items": {
-									"type": "number",
-									"format": "double"
-								},
-								"type": "array"
-							},
-							"udpPorts": {
-								"items": {
-									"type": "number",
-									"format": "double"
-								},
-								"type": "array"
-							},
-							"wgMode": {
-								"$ref": "#/components/schemas/EWgMode"
-							},
-							"kernel": {
-								"type": "string"
-							},
-							"hostname": {
-								"type": "string"
-							},
-							"arch": {
-								"type": "string"
-							},
-							"distro": {
-								"type": "string"
-							},
-							"release": {
-								"type": "string"
-							},
-							"platform": {
-								"type": "string"
-							}
-						},
-						"type": "object"
-					},
-					"interfaces": {
-						"items": {
-							"$ref": "#/components/schemas/IWgAgentInterfaceStatusReport"
-						},
-						"type": "array"
-					}
-				},
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgTunnelProbe": {
-				"description": "Проба IPIP-туннеля агентом.",
-				"properties": {
-					"name": {
-						"type": "string"
-					},
-					"rttMs": {
-						"type": "number",
-						"format": "double",
-						"nullable": true
-					},
-					"lossPercent": {
-						"type": "number",
-						"format": "double"
-					}
-				},
-				"required": [
-					"name",
-					"rttMs",
-					"lossPercent"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgNodeProbe": {
-				"description": "Проба другой ноды агентом.",
-				"properties": {
-					"nodeId": {
-						"type": "string"
-					},
-					"rttMs": {
-						"type": "number",
-						"format": "double",
-						"nullable": true
-					},
-					"lossPercent": {
-						"type": "number",
-						"format": "double"
-					}
-				},
-				"required": [
-					"nodeId",
-					"rttMs",
-					"lossPercent"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentStatsBody": {
-				"description": "Статистика от агента (см. wg-stats). Поля тика необязательны: без них\nмомент сбора — время приёма, повторы не распознаются.",
-				"properties": {
-					"seq": {
-						"type": "number",
-						"format": "double",
-						"description": "Номер тика в рамках запуска агента: повтор с тем же номером отбрасывается."
-					},
-					"bootId": {
-						"type": "string",
-						"description": "Идентификатор запуска агента: при перезапуске нумерация начинается заново."
-					},
-					"collectedAt": {
-						"type": "number",
-						"format": "double",
-						"description": "Момент сбора по часам агента (unix ms)."
-					},
-					"sentAt": {
-						"type": "number",
-						"format": "double",
-						"description": "Момент отправки по часам агента (unix ms): задержка доставки — `sentAt − collectedAt`."
-					},
-					"sys": {
-						"$ref": "#/components/schemas/IWgNodeSysMetrics"
-					},
-					"tunnels": {
-						"items": {
-							"$ref": "#/components/schemas/IWgTunnelProbe"
-						},
-						"type": "array",
-						"description": "Пробы IPIP-туннелей ноды."
-					},
-					"forwards": {
-						"items": {
-							"properties": {
-								"activeNodeId": {
-									"type": "string",
-									"description": "Копия интерфейса, обслуживающая трафик (для пробросов точек)."
-								},
-								"activeRoute": {
-									"$ref": "#/components/schemas/EWgForwardActiveRoute"
-								},
-								"id": {
-									"type": "string"
-								}
-							},
-							"required": [
-								"activeRoute",
-								"id"
-							],
-							"type": "object"
-						},
-						"type": "array",
-						"description": "Активные маршруты пробросов релея."
-					},
-					"socks": {
-						"items": {
-							"properties": {
-								"txBytes": {
-									"type": "number",
-									"format": "double"
-								},
-								"rxBytes": {
-									"type": "number",
-									"format": "double"
-								},
-								"connections": {
-									"type": "number",
-									"format": "double"
-								},
-								"id": {
-									"type": "string"
-								}
-							},
-							"required": [
-								"txBytes",
-								"rxBytes",
-								"connections",
-								"id"
-							],
-							"type": "object"
-						},
-						"type": "array",
-						"description": "Подключения и трафик прокси ноды."
-					},
-					"nodeProbes": {
-						"items": {
-							"$ref": "#/components/schemas/IWgNodeProbe"
-						},
-						"type": "array",
-						"description": "Пробы других нод (раз в ~60 с)."
-					},
-					"interfaces": {
-						"items": {
-							"properties": {
-								"peers": {
-									"items": {
-										"properties": {
-											"endpoint": {
-												"type": "string",
-												"nullable": true
-											},
-											"lastHandshake": {
-												"type": "number",
-												"format": "double",
-												"nullable": true
-											},
-											"txBytes": {
-												"type": "number",
-												"format": "double"
-											},
-											"rxBytes": {
-												"type": "number",
-												"format": "double"
-											},
-											"publicKey": {
-												"type": "string"
-											}
-										},
-										"required": [
-											"endpoint",
-											"lastHandshake",
-											"txBytes",
-											"rxBytes",
-											"publicKey"
-										],
-										"type": "object"
-									},
-									"type": "array"
-								},
-								"name": {
-									"type": "string"
-								}
-							},
-							"required": [
-								"peers",
-								"name"
-							],
-							"type": "object"
-						},
-						"type": "array"
-					}
-				},
-				"required": [
-					"interfaces"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentCommandOutputBody": {
-				"properties": {
-					"chunk": {
-						"type": "string"
-					}
-				},
-				"required": [
-					"chunk"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentCommandCompleteBody": {
-				"properties": {
-					"exitCode": {
-						"type": "number",
-						"format": "double",
-						"nullable": true
-					},
-					"error": {
-						"type": "string",
-						"nullable": true
-					}
-				},
-				"type": "object",
-				"additionalProperties": false
-			},
-			"IWgAgentReleaseInfo": {
-				"description": "Доступная версия агента.",
-				"properties": {
-					"version": {
-						"type": "string",
-						"nullable": true,
-						"description": "Версия; null — агент на бэкенде не собран."
-					},
-					"hashes": {
-						"properties": {
-							"arm64": {
-								"type": "string"
-							},
-							"amd64": {
-								"type": "string"
-							}
-						},
-						"type": "object",
-						"description": "sha256 бинарей по архитектурам: нода с другим `agentCodeHash` — к обновлению."
-					}
-				},
-				"required": [
-					"version",
-					"hashes"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -5506,6 +5885,163 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"EJobRunStatus": {
+				"description": "Статус видимой задачи.",
+				"enum": [
+					"queued",
+					"running",
+					"completed",
+					"failed",
+					"cancelled"
+				],
+				"type": "string"
+			},
+			"IJobRunError": {
+				"description": "Ошибка задачи в записи и в ответе API.",
+				"properties": {
+					"code": {
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"code",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"JobRunDto": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"description": "Id задачи (совпадает с id pg-boss)."
+					},
+					"queue": {
+						"type": "string"
+					},
+					"status": {
+						"$ref": "#/components/schemas/EJobRunStatus"
+					},
+					"title": {
+						"type": "string"
+					},
+					"progress": {
+						"type": "number",
+						"format": "double",
+						"description": "Прогресс 0..1."
+					},
+					"progressText": {
+						"type": "string",
+						"nullable": true
+					},
+					"logTail": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"description": "Последние строки лога."
+					},
+					"result": {},
+					"error": {
+						"allOf": [
+							{
+								"$ref": "#/components/schemas/IJobRunError"
+							}
+						],
+						"nullable": true
+					},
+					"ownerId": {
+						"type": "string",
+						"nullable": true
+					},
+					"scopeType": {
+						"type": "string",
+						"nullable": true
+					},
+					"scopeId": {
+						"type": "string",
+						"nullable": true
+					},
+					"attempt": {
+						"type": "number",
+						"format": "double",
+						"description": "Номер попытки, с 0."
+					},
+					"cancelRequested": {
+						"type": "boolean"
+					},
+					"startedAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"finishedAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"queue",
+					"status",
+					"title",
+					"progress",
+					"progressText",
+					"logTail",
+					"result",
+					"error",
+					"ownerId",
+					"scopeType",
+					"scopeId",
+					"attempt",
+					"cancelRequested",
+					"startedAt",
+					"finishedAt",
+					"createdAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IPaginatedDto_JobRunDto_": {
+				"description": "Страница по смещению: списки с известным общим числом.",
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/JobRunDto"
+						},
+						"type": "array"
+					},
+					"total": {
+						"type": "number",
+						"format": "double",
+						"description": "Всего элементов, подходящих под фильтр."
+					},
+					"offset": {
+						"type": "number",
+						"format": "double"
+					},
+					"limit": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"items",
+					"total",
+					"offset",
+					"limit"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"IRegisterBiometricResponseDto": {
 				"properties": {
 					"registered": {
@@ -5656,12 +6192,6 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"Record_string.unknown_": {
-				"properties": {},
-				"additionalProperties": {},
-				"type": "object",
-				"description": "Construct a type with a set of properties K of type T"
-			},
 			"AuditEventDto": {
 				"description": "Событие журнала безопасности.",
 				"properties": {
@@ -5755,7 +6285,7 @@
 					"agentVersion": {
 						"type": "string",
 						"nullable": true,
-						"description": "Версия агента, которую бэкенд ставит и раздаёт при обновлении\n(`agent/VERSION`); null — бинари агента не собраны. Установленная на\nноде — `agentVersion` ноды."
+						"description": "Версия агента в выпуске, который бэкенд раздаёт узлам (установка и\nобновление); null — выпуска нет. Установленная на ноде — `agentVersion`\nноды."
 					}
 				},
 				"required": [
@@ -5764,6 +6294,138 @@
 					"builtAt",
 					"startedAt",
 					"agentVersion"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ApiKeyDto": {
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"prefix": {
+						"type": "string",
+						"description": "Открытая часть ключа: по ней ключ узнают в списке."
+					},
+					"scopes": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"ownerId": {
+						"type": "string"
+					},
+					"lastUsedAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"expiresAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"revokedAt": {
+						"type": "string",
+						"format": "date-time",
+						"nullable": true
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"name",
+					"prefix",
+					"scopes",
+					"ownerId",
+					"lastUsedAt",
+					"expiresAt",
+					"revokedAt",
+					"createdAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ICreatedApiKeyDto": {
+				"description": "Созданный ключ: `key` показывается один раз и больше не восстановим.",
+				"properties": {
+					"apiKey": {
+						"$ref": "#/components/schemas/ApiKeyDto"
+					},
+					"key": {
+						"type": "string",
+						"description": "Полный ключ `<prefix>.<secret>` — передаётся в `X-Api-Key`."
+					}
+				},
+				"required": [
+					"apiKey",
+					"key"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ICreateApiKeyBody": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"minLength": 1,
+						"maxLength": 100
+					},
+					"scopes": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"description": "Разрешения: `worker:demo.echo`, `worker:*`."
+					},
+					"expiresAt": {
+						"type": "string",
+						"format": "date-time",
+						"description": "Срок действия; без него ключ бессрочный."
+					}
+				},
+				"required": [
+					"name",
+					"scopes"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IPaginatedDto_ApiKeyDto_": {
+				"description": "Страница по смещению: списки с известным общим числом.",
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/ApiKeyDto"
+						},
+						"type": "array"
+					},
+					"total": {
+						"type": "number",
+						"format": "double",
+						"description": "Всего элементов, подходящих под фильтр."
+					},
+					"offset": {
+						"type": "number",
+						"format": "double"
+					},
+					"limit": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"items",
+					"total",
+					"offset",
+					"limit"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -5786,7 +6448,7 @@
 	"info": {
 		"title": "wg-admin",
 		"version": "1.0.1",
-		"description": "WG Admin — админка WireGuard: бэкенд (Koa, tsoa, TypeORM, pg-boss) и агент нод на Go",
+		"description": "WG Admin — админка WireGuard: бэкенд (Koa, tsoa, TypeORM, pg-boss) и воркеры агента нод на Go",
 		"license": {
 			"name": "MIT"
 		},
@@ -5796,155 +6458,6 @@
 		}
 	},
 	"paths": {
-		"/api/v1/api-keys": {
-			"post": {
-				"operationId": "CreateApiKey",
-				"responses": {
-					"201": {
-						"description": "Created",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ICreatedApiKeyDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Выпустить API-ключ сервиса. Полный ключ (`key`) возвращается только в\nэтом ответе — сохраните его: в БД хранится лишь хеш.",
-				"summary": "Создание API-ключа",
-				"tags": [
-					"ApiKey"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:apikey:create"
-						]
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/ICreateApiKeyBody"
-							}
-						}
-					}
-				}
-			},
-			"get": {
-				"operationId": "ListApiKeys",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IPaginatedDto_ApiKeyDto_"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Все API-ключи, новые первыми. Секреты не возвращаются.",
-				"summary": "Список API-ключей",
-				"tags": [
-					"ApiKey"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:apikey:view"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"in": "query",
-						"name": "offset",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					},
-					{
-						"in": "query",
-						"name": "limit",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/api-keys/{id}/revoke": {
-			"post": {
-				"operationId": "RevokeApiKey",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Отозвать ключ: запросы с ним сразу получают 401. Повторный отзыв — 204.",
-				"summary": "Отзыв API-ключа",
-				"tags": [
-					"ApiKey"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:apikey:revoke"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
-			}
-		},
 		"/api/v1/permissions": {
 			"get": {
 				"operationId": "GetPermissionCatalog",
@@ -5983,6 +6496,1155 @@
 				"parameters": []
 			}
 		},
+		"/api/v1/agents": {
+			"get": {
+				"operationId": "GetAgents",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IPaginatedDto_AgentDto_"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Агенты в порядке регистрации: связь, узел, воркеры (состояние,\nсамочувствие, манифест, настройки), последняя точка метрик, проблемы.\nПраво `agent:view` — все агенты, иначе — доступные через политику.",
+				"summary": "Список агентов",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "offset",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agents/alerts": {
+			"get": {
+				"operationId": "GetAgentAlerts",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/AgentAlertDto"
+									},
+									"type": "array"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Текущие проблемы: агент без связи, воркер упал, не зарегистрирован, не в\nпорядке, отказал в настройке. Без `agentId` — у всех доступных агентов.",
+				"summary": "Проблемы агентов",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "agentId",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agents/events": {
+			"get": {
+				"operationId": "GetAgentEvents",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ICursorPageDto_IAgentEventDto_"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "События воркеров, новые первыми: фильтр по агенту, воркеру и типу;\nследующая страница — `cursor` из ответа.",
+				"summary": "Лента событий воркеров",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "agentId",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "worker",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "type",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "cursor",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agents/{id}": {
+			"get": {
+				"operationId": "GetAgent",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Агент: `hello` (версия, узел, воркеры), последний `status` (воркеры с\n`state`, `health`, `pending`, манифестом и итогами настроек), метрики,\nпроблемы, процесс с соединением.",
+				"summary": "Агент",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					}
+				]
+			},
+			"delete": {
+				"operationId": "DeleteAgent",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Удалить запись агента, его настройки и историю; соединение закрывается.\nАгент с токеном регистрации зарегистрируется заново — уже другим.",
+				"summary": "Удаление агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agents/{id}/revoke": {
+			"post": {
+				"operationId": "RevokeAgent",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Отозвать агента: ключ больше не принимается, соединение закрывается.\nПовторный отзыв — тот же ответ.",
+				"summary": "Отзыв агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agents/{id}/rotate-key": {
+			"post": {
+				"operationId": "RotateAgentKey",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Сменить ключ агента: агент создаёт новый секрет и переподключается с\nним. Агент должен быть на связи.",
+				"summary": "Смена ключа агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agents/{id}/update": {
+			"post": {
+				"operationId": "UpdateAgent",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentUpdateResultDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Обновить агента до версии выпуска (`AGENT_RELEASES_DIR`): итог — после\nзапуска новой версии. Агент в контейнере себя не обновляет.",
+				"summary": "Обновление агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agents/{id}/logs": {
+			"get": {
+				"operationId": "GetAgentLogs",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentLogsDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Последние строки журнала с узла: агента или воркера (`worker`).",
+				"summary": "Журнал агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					},
+					{
+						"in": "query",
+						"name": "worker",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					},
+					{
+						"in": "query",
+						"name": "lines",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agent-enrollment-tokens": {
+			"post": {
+				"operationId": "CreateAgentEnrollmentToken",
+				"responses": {
+					"201": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ICreatedAgentEnrollmentTokenDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Выпустить токен регистрации агентов. Полный токен (`token`) — только в\nэтом ответе: он кладётся в настройки агента (`enroll.token`) или в\nкоманду установки. `maxUses` не задан — многоразовый (парк машин).",
+				"summary": "Выпуск токена регистрации",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:agent:enroll"
+						]
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ICreateAgentEnrollmentTokenBody"
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"operationId": "GetAgentEnrollmentTokens",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IPaginatedDto_AgentEnrollmentTokenDto_"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Токены регистрации, новые первыми; секреты не возвращаются.",
+				"summary": "Список токенов регистрации",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:agent:enroll"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "offset",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agent-enrollment-tokens/{id}/revoke": {
+			"post": {
+				"operationId": "RevokeAgentEnrollmentToken",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Отозвать токен: новые регистрации по нему невозможны, агенты остаются.\nПовторный отзыв — 204.",
+				"summary": "Отзыв токена регистрации",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:agent:enroll"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agent-releases": {
+			"get": {
+				"operationId": "GetAgentRelease",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentReleaseDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Выпуск агента и кого из доступных агентов можно обновить до него:\nагент и netprobe — из выпусков GitHub (`AGENT_RELEASES_GITHUB`) или\nбазы выпуска (`AGENT_RELEASES_URL`), воркеры проекта wg и socks — из\n`AGENT_RELEASES_DIR`. Новую версию агента в источнике бэкенд замечает\nсам (сокет `agent:release`).",
+				"summary": "Выпуск агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			}
+		},
+		"/api/v1/agent-releases/install-command": {
+			"post": {
+				"operationId": "CreateAgentInstallCommand",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentInstallCommandDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Команда установки агента на новый узел одной строкой:\n`curl …/api/v1/agent-link/install.sh | sudo sh -s -- --token … [флаги]`\n(воркеры из выпуска — `workers`, флаг `--worker`).",
+				"summary": "Команда установки агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:agent:enroll"
+						]
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ICreateAgentInstallCommandBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/agents/{id}/workers/{worker}/restart": {
+			"post": {
+				"operationId": "RestartAgentWorker",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentWorkerActionResultDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Перезапустить воркер. Свободный — перезапускается сразу (`deferred:\nfalse` после запуска). Занятый (`health.busy`) — ответ сразу (`deferred:\ntrue`, `pending`, `actionId`), замена — после окончания работы, её итог —\nсобытие сокета `agent:action` (`id = actionId`, `deferred: true`);\n`force` — заменить сразу.",
+				"summary": "Перезапуск воркера",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					},
+					{
+						"in": "path",
+						"name": "worker",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IAgentWorkerActionBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/agents/{id}/workers/{worker}/update": {
+			"post": {
+				"operationId": "UpdateAgentWorker",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentWorkerActionResultDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Обновить воркер из выпуска до новейшей сборки под агента. Свободный — сразу\n(версии в ответе); занятый — как у перезапуска: ответ `deferred: true`,\nитог — событие `agent:action`; `force` — сразу. Новая сборка не\nзаработала — агент возвращает прежнюю.",
+				"summary": "Обновление воркера",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					},
+					{
+						"in": "path",
+						"name": "worker",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IAgentWorkerActionBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/agents/{id}/workers/{worker}/fetch": {
+			"post": {
+				"operationId": "FetchAgentWorker",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/octet-stream": {
+								"schema": {
+									"type": "string",
+									"format": "byte"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Запрос к воркеру через агента: метод, путь, заголовки, тело. Ответ —\nстатус, заголовки и тело воркера потоком и заголовок\n`X-Agent-Worker-Status` (статус ответа воркера): по нему ответ воркера\nотличается от ошибки API (её тело — `{ code, message }`, заголовка нет).\nСлужебные пути воркера (`/health`, `/metrics`, `/config/*`, `/cleanup`)\nнедоступны. В аудит попадают изменяющие запросы (`POST`, `PUT`, `PATCH`,\n`DELETE`).",
+				"summary": "Запрос к воркеру",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					},
+					{
+						"in": "path",
+						"name": "worker",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IAgentFetchBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/agents/{id}/configs": {
+			"get": {
+				"operationId": "GetAgentConfigs",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/IAgentConfigEntryDto"
+									},
+									"type": "array"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Ключи настроек агента (или одного воркера): значение и статус\nприменения — желаемая, доставленная и применённая версии, ошибка.",
+				"summary": "Настройки воркеров агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					},
+					{
+						"in": "query",
+						"name": "worker",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/agents/{id}/workers/{worker}/configs/{key}": {
+			"get": {
+				"operationId": "GetAgentWorkerConfig",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentConfigEntryDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Ключ настроек воркера: значение и статус применения.",
+				"summary": "Настройка воркера",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					},
+					{
+						"in": "path",
+						"name": "worker",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					},
+					{
+						"in": "path",
+						"name": "key",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					}
+				]
+			},
+			"put": {
+				"operationId": "SetAgentWorkerConfig",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentConfigEntryDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Записать значение ключа (новая версия). Значение проверяется по схеме\nключа из манифеста воркера (400 `AGENT_CONFIG_INVALID`); агент получит\nего сразу или при подключении, итог — в статусе и событии сокета.",
+				"summary": "Запись настройки воркера",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					},
+					{
+						"in": "path",
+						"name": "worker",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					},
+					{
+						"in": "path",
+						"name": "key",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ISetAgentConfigBody"
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"operationId": "DeleteAgentWorkerConfig",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Удалить ключ: агент удалит его у себя и у воркера. Ключа нет — 404.",
+				"summary": "Удаление настройки воркера",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentId"
+						}
+					},
+					{
+						"in": "path",
+						"name": "worker",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					},
+					{
+						"in": "path",
+						"name": "key",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TAgentWorkerName"
+						}
+					}
+				]
+			}
+		},
 		"/api/v1/wg/nodes": {
 			"post": {
 				"operationId": "CreateWgNode",
@@ -6008,7 +7670,7 @@
 						}
 					}
 				},
-				"description": "Создать ноду (VPS с агентом). Ключ агента возвращается только в этом\nответе — сохранить сразу. Создатель — автор запроса; владелец, отличный\nот себя, — только с правом `wg:node:assign`.",
+				"description": "Создать ноду (VPS с агентом). В ответе — команда установки агента с\nодноразовым токеном регистрации (токен виден только здесь; новый —\n`POST /{id}/install-command`). Создатель — автор запроса; владелец,\nотличный от себя, — только с правом `wg:node:assign`.",
 				"summary": "Создание ноды",
 				"tags": [
 					"WgNode"
@@ -6422,16 +8084,16 @@
 				]
 			}
 		},
-		"/api/v1/wg/nodes/{id}/agent-key": {
+		"/api/v1/wg/nodes/{id}/install-command": {
 			"post": {
-				"operationId": "RotateWgAgentKey",
+				"operationId": "CreateWgNodeInstallCommand",
 				"responses": {
 					"201": {
 						"description": "Created",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/IWgAgentKeyDto"
+									"$ref": "#/components/schemas/IWgNodeInstallCommandDto"
 								}
 							}
 						}
@@ -6447,8 +8109,119 @@
 						}
 					}
 				},
-				"description": "Перевыпустить ключ агента: старый отзывается сразу, новый возвращается\nодин раз.",
-				"summary": "Ротация ключа агента",
+				"description": "Команда установки агента на VPS: одноразовый токен регистрации с меткой\nноды (агент привяжется к ней), экземпляр проекта (`--instance`), воркеры\nwg и socks, пакеты и параметры ядра. Токен виден только в ответе.",
+				"summary": "Команда установки агента",
+				"tags": [
+					"WgNode"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:node:agent:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ICreateWgNodeInstallCommandBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/nodes/{id}/agent": {
+			"post": {
+				"operationId": "BindWgNodeAgent",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Привязать к ноде уже зарегистрированного агента (например, общим\nтокеном окружения); прежний агент ноды отзывается.",
+				"summary": "Привязка агента к ноде",
+				"tags": [
+					"WgNode"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:node:agent:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IBindWgNodeAgentBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/nodes/{id}/agent/update": {
+			"post": {
+				"operationId": "UpdateWgNodeAgent",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentUpdateResultDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Обновить агента ноды до версии выпуска; итог — после запуска новой\nверсии агента.",
+				"summary": "Обновление агента ноды",
 				"tags": [
 					"WgNode"
 				],
@@ -6469,6 +8242,140 @@
 						}
 					}
 				]
+			}
+		},
+		"/api/v1/wg/nodes/{id}/workers/{worker}/update": {
+			"post": {
+				"operationId": "UpdateWgNodeWorker",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentWorkerActionResultDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Обновить воркер агента ноды (`wg`, `socks`) из выпуска. Занятый воркер —\n`deferred: true`, итог — событием `agent:action`.",
+				"summary": "Обновление воркера ноды",
+				"tags": [
+					"WgNode"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:node:agent:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					},
+					{
+						"in": "path",
+						"name": "worker",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TWgNodeWorker"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IUpdateWgNodeWorkerBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/nodes/{id}/workers/{worker}/restart": {
+			"post": {
+				"operationId": "RestartWgNodeWorker",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentWorkerActionResultDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Перезапустить воркер агента ноды. Созданное воркером на узле\n(интерфейсы, туннели, пробросы) при этом не разбирается.",
+				"summary": "Перезапуск воркера ноды",
+				"tags": [
+					"WgNode"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:node:agent:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					},
+					{
+						"in": "path",
+						"name": "worker",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/TWgNodeWorker"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IUpdateWgNodeWorkerBody"
+							}
+						}
+					}
+				}
 			}
 		},
 		"/api/v1/wg/nodes/{id}/logs": {
@@ -6496,7 +8403,7 @@
 						}
 					}
 				},
-				"description": "Последние строки журнала агента ноды (синхронно, через команду агенту).",
+				"description": "Последние строки журнала агента ноды или его воркера (`worker`) — с\nузла.",
 				"summary": "Журнал агента",
 				"tags": [
 					"WgNode"
@@ -6524,6 +8431,14 @@
 						"schema": {
 							"format": "double",
 							"type": "number"
+						}
+					},
+					{
+						"in": "query",
+						"name": "worker",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/TWgNodeWorker"
 						}
 					}
 				]
@@ -7601,12 +9516,12 @@
 			"post": {
 				"operationId": "RestartWgInterface",
 				"responses": {
-					"201": {
-						"description": "Created",
+					"200": {
+						"description": "Ok",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/WgNodeCommandDto"
+									"$ref": "#/components/schemas/IWgInterfaceRestartResult"
 								}
 							}
 						}
@@ -7622,7 +9537,7 @@
 						}
 					}
 				},
-				"description": "Перезапустить интерфейс на ноде (`wg-quick down && up`).",
+				"description": "Перезапустить интерфейс на основной ноде (`wg-quick down && up`\nворкером wg агента); итог — в ответе. Агент не на связи — 503.",
 				"summary": "Перезапуск интерфейса",
 				"tags": [
 					"WgInterface"
@@ -10609,636 +12524,6 @@
 				]
 			}
 		},
-		"/api/v1/jobs": {
-			"get": {
-				"operationId": "ListJobs",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IPaginatedDto_JobRunDto_"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Видимые задачи: свои, либо задачи scope (`scopeType` + `scopeId`), если\nполитика scope разрешает просмотр. Новые — первыми.",
-				"summary": "Список задач",
-				"tags": [
-					"Jobs"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [
-					{
-						"in": "query",
-						"name": "status",
-						"required": false,
-						"schema": {
-							"$ref": "#/components/schemas/EJobRunStatus"
-						}
-					},
-					{
-						"in": "query",
-						"name": "scopeType",
-						"required": false,
-						"schema": {
-							"type": "string"
-						}
-					},
-					{
-						"in": "query",
-						"name": "scopeId",
-						"required": false,
-						"schema": {
-							"type": "string"
-						}
-					},
-					{
-						"in": "query",
-						"name": "offset",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					},
-					{
-						"in": "query",
-						"name": "limit",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/jobs/{id}": {
-			"get": {
-				"operationId": "GetJob",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/JobRunDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Задача: статус, прогресс, хвост лога, результат или ошибка.",
-				"summary": "Задача",
-				"tags": [
-					"Jobs"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [
-					{
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/jobs/{id}/cancel": {
-			"post": {
-				"operationId": "CancelJob",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Отменить задачу: ждущая снимается сразу, выполняющаяся получает сигнал\nотмены. Завершённую отменить нельзя (409).",
-				"summary": "Отмена задачи",
-				"tags": [
-					"Jobs"
-				],
-				"security": [
-					{
-						"jwt": []
-					}
-				],
-				"parameters": [
-					{
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/wg-agent/state": {
-			"get": {
-				"operationId": "WgAgentState",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IWgAgentDesiredState"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Желаемое состояние ноды (long-poll): ответ приходит при изменении\nконфигурации, появлении команд или по таймауту ожидания.",
-				"summary": "Desired state (long-poll)",
-				"tags": [
-					"WgAgent"
-				],
-				"security": [
-					{
-						"apiKey": [
-							"wg-agent"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"in": "query",
-						"name": "knownVersion",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					},
-					{
-						"in": "query",
-						"name": "waitMs",
-						"required": false,
-						"schema": {
-							"format": "double",
-							"type": "number"
-						}
-					}
-				]
-			},
-			"post": {
-				"operationId": "WgAgentReport",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Отчёт агента: применённая версия, ошибка применения, версии ПО,\nсведения об ОС и фактические статусы интерфейсов.",
-				"summary": "Отчёт о состоянии",
-				"tags": [
-					"WgAgent"
-				],
-				"security": [
-					{
-						"apiKey": [
-							"wg-agent"
-						]
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IWgAgentReportBody"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/wg-agent/stats": {
-			"post": {
-				"operationId": "WgAgentStats",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Статистика `wg show all dump` и системные метрики хоста.",
-				"summary": "Статистика",
-				"tags": [
-					"WgAgent"
-				],
-				"security": [
-					{
-						"apiKey": [
-							"wg-agent"
-						]
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IWgAgentStatsBody"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/wg-agent/commands/{id}/ack": {
-			"post": {
-				"operationId": "WgAgentCommandAck",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Агент взял команду в работу.",
-				"summary": "Команда: взята",
-				"tags": [
-					"WgAgent"
-				],
-				"security": [
-					{
-						"apiKey": [
-							"wg-agent"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/wg-agent/commands/{id}/output": {
-			"post": {
-				"operationId": "WgAgentCommandOutput",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Фрагмент вывода команды: дописывается в `output` команды (с пределом).",
-				"summary": "Команда: вывод",
-				"tags": [
-					"WgAgent"
-				],
-				"security": [
-					{
-						"apiKey": [
-							"wg-agent"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IWgAgentCommandOutputBody"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/wg-agent/commands/{id}/complete": {
-			"post": {
-				"operationId": "WgAgentCommandComplete",
-				"responses": {
-					"204": {
-						"description": "No Content"
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Итог выполнения команды.",
-				"summary": "Команда: завершена",
-				"tags": [
-					"WgAgent"
-				],
-				"security": [
-					{
-						"apiKey": [
-							"wg-agent"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/IWgAgentCommandCompleteBody"
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/wg-agent/binary/{arch}": {
-			"get": {
-				"operationId": "WgAgentBinary",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/octet-stream": {
-								"schema": {
-									"type": "string",
-									"format": "byte"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Бинарь агента своей архитектуры (установка и команда `agent-update`):\nsha256 — в заголовке `X-Agent-Sha256`, агент и установщик его сверяют.",
-				"summary": "Бинарь агента",
-				"tags": [
-					"WgAgent"
-				],
-				"security": [
-					{
-						"apiKey": [
-							"wg-agent"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"in": "path",
-						"name": "arch",
-						"required": true,
-						"schema": {
-							"type": "string"
-						}
-					}
-				]
-			}
-		},
-		"/api/v1/wg-agent/install.sh": {
-			"get": {
-				"operationId": "WgAgentInstallScript",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"text/plain": {
-								"schema": {
-									"type": "string"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Установщик агента (sh) для ручной установки на сервер:\n`curl -fsSL <бэкенд>/api/v1/wg-agent/install.sh | sudo sh -s -- --key <ключ>`.\nСекретов не содержит — бинарь скачивается по ключу агента.",
-				"summary": "Установщик агента",
-				"tags": [
-					"WgAgent"
-				],
-				"security": [],
-				"parameters": []
-			}
-		},
-		"/api/v1/wg/agent/release": {
-			"get": {
-				"operationId": "WgAgentRelease",
-				"responses": {
-					"200": {
-						"description": "Ok",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IWgAgentReleaseInfo"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Версия агента, которую бэкенд может раздать, и sha256 бинарей. Нода с\nдругим `agentCodeHash` для своей архитектуры — кандидат на обновление.",
-				"summary": "Доступная версия агента",
-				"tags": [
-					"WgAgentUpdate"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:wg:node:view:own"
-						]
-					}
-				],
-				"parameters": []
-			}
-		},
-		"/api/v1/wg/agent/nodes/{nodeId}/update": {
-			"post": {
-				"operationId": "UpdateWgAgent",
-				"responses": {
-					"201": {
-						"description": "Created",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/WgNodeCommandDto"
-								}
-							}
-						}
-					},
-					"default": {
-						"description": "Ошибка",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/IErrorResponseDto"
-								}
-							}
-						}
-					}
-				},
-				"description": "Обновить агента на ноде: агент скачает бинарь своей архитектуры,\nсверит sha256 и перезапустится (не вышел на связь трижды — откат на\nпрежнюю версию). Архитектура ноды неизвестна или бинарь под неё не\nсобран — 404.",
-				"summary": "Обновить агента",
-				"tags": [
-					"WgAgentUpdate"
-				],
-				"security": [
-					{
-						"jwt": [
-							"permission:wg:node:agent:own"
-						]
-					}
-				],
-				"parameters": [
-					{
-						"in": "path",
-						"name": "nodeId",
-						"required": true,
-						"schema": {
-							"$ref": "#/components/schemas/UUID"
-						}
-					}
-				]
-			}
-		},
 		"/api/v1/user/my": {
 			"get": {
 				"operationId": "GetMyUser",
@@ -13117,6 +14402,174 @@
 				}
 			}
 		},
+		"/api/v1/jobs": {
+			"get": {
+				"operationId": "ListJobs",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IPaginatedDto_JobRunDto_"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Видимые задачи: свои, либо задачи scope (`scopeType` + `scopeId`), если\nполитика scope разрешает просмотр. Новые — первыми.",
+				"summary": "Список задач",
+				"tags": [
+					"Jobs"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "status",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/EJobRunStatus"
+						}
+					},
+					{
+						"in": "query",
+						"name": "scopeType",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "scopeId",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "offset",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/jobs/{id}": {
+			"get": {
+				"operationId": "GetJob",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/JobRunDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Задача: статус, прогресс, хвост лога, результат или ошибка.",
+				"summary": "Задача",
+				"tags": [
+					"Jobs"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/jobs/{id}/cancel": {
+			"post": {
+				"operationId": "CancelJob",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Отменить задачу: ждущая снимается сразу, выполняющаяся получает сигнал\nотмены. Завершённую отменить нельзя (409).",
+				"summary": "Отмена задачи",
+				"tags": [
+					"Jobs"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
+			}
+		},
 		"/api/v1/biometric/register": {
 			"post": {
 				"operationId": "RegisterBiometric",
@@ -13512,6 +14965,155 @@
 					}
 				],
 				"parameters": []
+			}
+		},
+		"/api/v1/api-keys": {
+			"post": {
+				"operationId": "CreateApiKey",
+				"responses": {
+					"201": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ICreatedApiKeyDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Выпустить API-ключ сервиса. Полный ключ (`key`) возвращается только в\nэтом ответе — сохраните его: в БД хранится лишь хеш.",
+				"summary": "Создание API-ключа",
+				"tags": [
+					"ApiKey"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:apikey:create"
+						]
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ICreateApiKeyBody"
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"operationId": "ListApiKeys",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IPaginatedDto_ApiKeyDto_"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Все API-ключи, новые первыми. Секреты не возвращаются.",
+				"summary": "Список API-ключей",
+				"tags": [
+					"ApiKey"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:apikey:view"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "offset",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/api/v1/api-keys/{id}/revoke": {
+			"post": {
+				"operationId": "RevokeApiKey",
+				"responses": {
+					"204": {
+						"description": "No Content"
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Отозвать ключ: запросы с ним сразу получают 401. Повторный отзыв — 204.",
+				"summary": "Отзыв API-ключа",
+				"tags": [
+					"ApiKey"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:apikey:revoke"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				]
 			}
 		}
 	},

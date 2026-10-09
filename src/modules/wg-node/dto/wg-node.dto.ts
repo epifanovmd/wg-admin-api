@@ -17,8 +17,10 @@ export class WgNodeDto extends BaseDto {
   description: string | null;
   publicHost: string | null;
   status: EWgNodeStatus;
-  /** Есть ли выпущенный ключ агента. */
-  hasAgentKey: boolean;
+  /** Пояснение к статусу: что не так с агентом или воркерами. */
+  statusMessage: string | null;
+  /** Агент ноды (`/api/v1/agents/{agentId}`); нет — агент не установлен. */
+  agentId: string | null;
   configVersion: number;
   appliedVersion: number;
   /** Конфигурация на ноде актуальна. */
@@ -26,10 +28,8 @@ export class WgNodeDto extends BaseDto {
   applyError: string | null;
   agentVersion: string | null;
   wgVersion: string | null;
-  /** sha256 бинаря агента; сравнивается с `release` для обновления. */
-  agentCodeHash: string | null;
   osInfo: IWgNodeOsInfo | null;
-  /** IP, с которого агент обращается к бэкенду. */
+  /** IP, с которого агент подключился к бэкенду. */
   agentRemoteIp: string | null;
   lastSeenAt: Date | null;
   createdAt: Date;
@@ -47,14 +47,14 @@ export class WgNodeDto extends BaseDto {
     this.description = entity.description;
     this.publicHost = entity.publicHost;
     this.status = entity.status;
-    this.hasAgentKey = entity.agentKeyId !== null;
+    this.statusMessage = entity.statusMessage;
+    this.agentId = entity.agentId;
     this.configVersion = entity.configVersion;
     this.appliedVersion = entity.appliedVersion;
     this.inSync = entity.appliedVersion >= entity.configVersion;
     this.applyError = entity.applyError;
     this.agentVersion = entity.agentVersion;
     this.wgVersion = entity.wgVersion;
-    this.agentCodeHash = entity.agentCodeHash;
     this.osInfo = entity.osInfo;
     this.agentRemoteIp = entity.agentRemoteIp;
     this.lastSeenAt = entity.lastSeenAt;
@@ -86,18 +86,31 @@ export class WgNodeOptionDto extends BaseDto {
   }
 }
 
-/** Ответ создания ноды: ключ агента возвращается только один раз. */
-export interface ICreatedWgNodeDto {
-  node: WgNodeDto;
-  /** Секрет ключа агента — сохранить сразу, повторно не выдаётся. */
-  agentKey: string;
-  /** Команда ручной установки агента на VPS с этим ключом. */
-  installCommand: string;
+/** Команда установки агента на ноду и токен регистрации в ней. */
+export interface IWgNodeInstallCommandDto {
+  /** `curl … | sudo sh -s -- --instance … --token … --worker wg …` — выполнить на VPS. */
+  command: string;
+  /** Токен регистрации (одноразовый, с меткой ноды) — виден только здесь. */
+  token: string;
+  tokenId: string;
+  expiresAt: Date;
 }
 
-/** Ответ ротации ключа агента. */
-export interface IWgAgentKeyDto {
-  agentKey: string;
-  /** Команда ручной установки агента на VPS с этим ключом. */
-  installCommand: string;
+/** Ответ создания ноды: команда установки агента (токен — только здесь). */
+export interface ICreatedWgNodeDto {
+  node: WgNodeDto;
+  install: IWgNodeInstallCommandDto;
+}
+
+/** Журнал агента или воркера ноды. */
+export interface IWgNodeLogsDto {
+  /** Строки журнала текстом: `время уровень источник: сообщение`. */
+  content: string;
+  entries: Array<{
+    at: number;
+    level: string;
+    source: string;
+    msg: string;
+    attrs?: Record<string, unknown>;
+  }>;
 }

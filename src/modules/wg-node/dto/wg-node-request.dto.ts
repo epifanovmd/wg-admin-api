@@ -16,3 +16,20 @@ export interface IUpdateWgNodeBody {
 export interface IAssignWgNodeBody {
   userId: string;
 }
+
+/** Команда установки агента: срок токена. */
+export interface ICreateWgNodeInstallCommandBody {
+  /** Срок одноразового токена регистрации, минут (по умолчанию сутки). */
+  expiresInMinutes?: number;
+}
+
+/** Привязать к ноде уже зарегистрированного агента. */
+export interface IBindWgNodeAgentBody {
+  agentId: string;
+}
+
+/** Обновить воркер агента ноды из выпуска. */
+export interface IUpdateWgNodeWorkerBody {
+  /** Заменить сразу, не дожидаясь окончания работы воркера. */
+  force?: boolean;
+}

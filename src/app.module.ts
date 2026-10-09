@@ -1,6 +1,7 @@
 import "reflect-metadata";
 
 import { CoreModule, Module, ObservabilityModule } from "./core";
+import { AgentModule } from "./modules/agent";
 import { ApiKeyModule } from "./modules/api-key";
 import { AppInfoModule } from "./modules/app-info";
 import { AuditModule } from "./modules/audit";
@@ -49,6 +50,9 @@ import { WgStatsModule } from "./modules/wg-stats";
     AuditModule,
     PasskeysModule,
     BiometricModule,
+
+    // Агенты на узлах (agent-sdk)
+    AgentModule,
 
     // Модули проекта
     WgNodeModule,

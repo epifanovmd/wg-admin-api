@@ -16,6 +16,10 @@ export const AuditEventType = {
   BIOMETRIC_REMOVED: "biometric.removed",
   API_KEY_CREATED: "api-key.created",
   API_KEY_REVOKED: "api-key.revoked",
+  /** Изменяющее действие над агентами: `meta.action` — что сделано. */
+  AGENT_ACTION: "agent.action",
+  /** Итог действия агента (перезапуск, обновление, ключ): `meta.status`. */
+  AGENT_ACTION_RESULT: "agent.action-result",
 } as const;
 
 export type TAuditEventType =

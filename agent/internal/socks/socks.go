@@ -25,8 +25,41 @@ import (
 	"golang.org/x/crypto/scrypt"
 
 	"wgadmin/agent/internal/logx"
-	"wgadmin/agent/internal/protocol"
 )
+
+// User — пользователь прокси: только соль и scrypt-хэш (hex).
+type User struct {
+	Username string `json:"username"`
+	Salt     string `json:"salt"`
+	Hash     string `json:"hash"`
+}
+
+// Config — SOCKS5-прокси через mTLS.
+type Config struct {
+	ID                  string   `json:"id"`
+	ListenPort          int      `json:"listenPort"`
+	CertPem             string   `json:"certPem"`
+	KeyPem              string   `json:"keyPem"`
+	CaPem               string   `json:"caPem"`
+	AllowedFingerprints []string `json:"allowedFingerprints"`
+	Users               []User   `json:"users"`
+}
+
+// Status — итог применения прокси: listening | error.
+type Status struct {
+	ID         string `json:"id"`
+	ListenPort int    `json:"listenPort"`
+	Status     string `json:"status"`
+	Message    string `json:"message,omitempty"`
+}
+
+// Stats — соединения и трафик прокси.
+type Stats struct {
+	ID          string `json:"id"`
+	Connections int    `json:"connections"`
+	RxBytes     int64  `json:"rxBytes"`
+	TxBytes     int64  `json:"txBytes"`
+}
 
 // Параметры scrypt — как у бэкенда при хэшировании пароля.
 const (
@@ -96,7 +129,7 @@ type connection struct {
 
 type proxy struct {
 	mu          sync.RWMutex
-	config      protocol.Socks
+	config      Config
 	tlsConfig   *tls.Config
 	listener    net.Listener
 	connections map[*connection]struct{}
@@ -105,7 +138,7 @@ type proxy struct {
 	wg          sync.WaitGroup
 }
 
-// Proxies — прокси агента: одно на процесс, живёт между применениями.
+// Proxies — прокси воркера: одно на процесс, живёт между применениями.
 type Proxies struct {
 	mu        sync.Mutex
 	proxies   map[string]*proxy
@@ -126,7 +159,7 @@ func New() *Proxies {
 	}
 }
 
-func buildTLS(config protocol.Socks) (*tls.Config, error) {
+func buildTLS(config Config) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair([]byte(config.CertPem), []byte(config.KeyPem))
 	if err != nil {
 		return nil, fmt.Errorf("сертификат сервера: %w", err)
@@ -145,18 +178,20 @@ func buildTLS(config protocol.Socks) (*tls.Config, error) {
 	}, nil
 }
 
-func tlsMaterial(config protocol.Socks) string {
+func tlsMaterial(config Config) string {
 	return config.CertPem + "\x00" + config.KeyPem + "\x00" + config.CaPem
 }
 
-// Apply приводит серверы к списку; ошибки (порт занят) — по сервису.
-func (p *Proxies) Apply(configs []protocol.Socks) []string {
+// Apply приводит прокси к списку: новые слушают, удалённые и сменившие порт
+// закрываются, у остальных сертификаты и доступы меняются без перезапуска
+// слушателя. Итог — по каждому прокси списка, в его порядке.
+func (p *Proxies) Apply(configs []Config) []Status {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	var errs []string
+	failed := map[string]string{}
 
-	wanted := map[string]protocol.Socks{}
+	wanted := map[string]Config{}
 	for _, config := range configs {
 		wanted[config.ID] = config
 	}
@@ -175,7 +210,7 @@ func (p *Proxies) Apply(configs []protocol.Socks) []string {
 		current, ok := p.proxies[config.ID]
 		if !ok {
 			if err := p.startLocked(config); err != nil {
-				errs = append(errs, fmt.Sprintf("прокси :%d: %s", config.ListenPort, err))
+				failed[config.ID] = err.Error()
 			}
 
 			continue
@@ -187,7 +222,10 @@ func (p *Proxies) Apply(configs []protocol.Socks) []string {
 				// Новые рукопожатия — с новыми сертификатами, слушатель тот же.
 				current.tlsConfig = tlsConfig
 			} else {
-				errs = append(errs, fmt.Sprintf("прокси :%d: %s", config.ListenPort, err))
+				// Сертификаты прежние (ими слушатель и работает), доступы —
+				// новые: отзыв действует и при ошибке сертификата.
+				failed[config.ID] = err.Error()
+				config.CertPem, config.KeyPem, config.CaPem = current.config.CertPem, current.config.KeyPem, current.config.CaPem
 			}
 		}
 		current.config = config
@@ -195,27 +233,38 @@ func (p *Proxies) Apply(configs []protocol.Socks) []string {
 		current.dropRevoked()
 	}
 
-	return errs
+	statuses := make([]Status, 0, len(configs))
+	for _, config := range configs {
+		status := Status{ID: config.ID, ListenPort: config.ListenPort, Status: "listening"}
+		if message, ok := failed[config.ID]; ok {
+			status.Status = "error"
+			status.Message = message
+			logx.Error("Прокси :%d: %s", config.ListenPort, message)
+		}
+		statuses = append(statuses, status)
+	}
+
+	return statuses
 }
 
 // Stats — соединения и трафик по прокси.
-func (p *Proxies) Stats() []protocol.SocksStats {
+func (p *Proxies) Stats() []Stats {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	stats := []protocol.SocksStats{}
+	stats := []Stats{}
 	for id, current := range p.proxies {
 		current.mu.RLock()
 		connections := len(current.connections)
 		current.mu.RUnlock()
 
-		stats = append(stats, protocol.SocksStats{ID: id, Connections: connections, RxBytes: current.rx.Load(), TxBytes: current.tx.Load()})
+		stats = append(stats, Stats{ID: id, Connections: connections, RxBytes: current.rx.Load(), TxBytes: current.tx.Load()})
 	}
 
 	return stats
 }
 
-// CloseAll — остановить все прокси (остановка агента).
+// CloseAll — остановить все прокси.
 func (p *Proxies) CloseAll() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -225,7 +274,7 @@ func (p *Proxies) CloseAll() {
 	}
 }
 
-func (p *Proxies) startLocked(config protocol.Socks) error {
+func (p *Proxies) startLocked(config Config) error {
 	tlsConfig, err := buildTLS(config)
 	if err != nil {
 		return err
@@ -302,8 +351,8 @@ func (current *proxy) dropRevoked() {
 	}
 }
 
-func (p *Proxies) verify(config protocol.Socks, username, password string) bool {
-	var user *protocol.SocksUser
+func (p *Proxies) verify(config Config, username, password string) bool {
+	var user *User
 
 	for i := range config.Users {
 		if config.Users[i].Username == username {

@@ -43,29 +43,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: agent/VERSION поднята, Go в Dockerfile-ах = go.mod
+      - name: Версии воркеров подняты, Go в Dockerfile-ах = toolchain go.mod
         run: ../scripts/check-agent-version.sh
-      # Ветка Go — из go.mod (1.26.0 → 1.26), патч — последний: исправления
-      # стандартной библиотеки попадают в бинари без правки go.mod.
+      # Версия Go — toolchain из go.mod: сборки и образы — одним Go с
+      # исправлениями стандартной библиотеки (новый патч — правка go.mod).
       - id: go
-        run: echo "version=$(awk '$1 == "go" { split($2, v, "."); print v[1] "." v[2]; exit }' go.mod)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' go.mod)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.go.outputs.version }}
-          check-latest: true
           cache-dependency-path: agent/go.sum
       - name: go.mod и go.sum актуальны
         run: go mod tidy && git diff --exit-code -- go.mod go.sum
       - name: gofmt
         run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
+      - name: go vet (linux и darwin — у воркеров есть код под платформу)
+        run: go vet ./... && GOOS=darwin go vet ./...
       - run: go test -race ./...
-      - name: Сборка linux/amd64 и linux/arm64
+      - name: Сборка воркеров wg и socks (linux и darwin × amd64 и arm64)
         run: |
-          version=$(cat VERSION)
-          for arch in amd64 arm64; do
-            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
-              -ldflags "-s -w -X main.version=$version" -o /tmp/agent-$arch ./cmd/wg-admin-agent
+          for name in wg socks; do
+            version=$(tr -d '[:space:]' < workers/$name/VERSION)
+            for p in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+              CGO_ENABLED=0 GOOS=${p%-*} GOARCH=${p#*-} go build -trimpath \
+                -ldflags "-s -w -X main.version=$version" -o /tmp/workers/$name-$version-$p ./workers/$name
+            done
           done
 
   shellcheck:
@@ -73,7 +75,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # shellcheck предустановлен в образе ubuntu-latest.
-      - run: shellcheck scripts/*.sh scripts/db/*.sh test/smoke/*.sh templates/*/*.sh
+      - run: shellcheck scripts/*.sh scripts/db/*.sh test/smoke/*.sh agent/*.sh agent/workers/*/*.sh
 
   migrations:
     runs-on: ubuntu-latest
@@ -154,6 +156,16 @@ jobs:
         run: yarn test:file src/core/redis/live-store.test.ts
         env:
           TEST_REDIS_URL: redis://localhost:6379/14
+      # Настоящий агент в e2e: воркеры проекта и выпуск агента с GitHub (текущий и
+      # прежний — для обновления); сами тесты в GitHub не ходят.
+      - id: go
+        run: echo "version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' agent/go.mod)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache-dependency-path: agent/go.sum
+      - run: yarn agent:release
+      - run: yarn agent:fetch && yarn agent:fetch 1.0.1
       - run: yarn test:e2e
 
   audit:

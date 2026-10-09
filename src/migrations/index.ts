@@ -24,6 +24,7 @@ import { EndpointOwnership1790761514632 } from "./1790761514632-EndpointOwnershi
 import { ForwardOwnership1790761799602 } from "./1790761799602-ForwardOwnership";
 import { SocksOwnership1790762066727 } from "./1790762066727-SocksOwnership";
 import { AddBiometric1790934167120 } from "./1790934167120-AddBiometric";
+import { AgentNodes1791548803242 } from "./1791548803242-AgentNodes";
 
 /**
  * Миграции в порядке применения. Новая миграция: `yarn migration:generate
@@ -57,4 +58,5 @@ export const migrations: Function[] = [
   ForwardOwnership1790761799602,
   SocksOwnership1790762066727,
   AddBiometric1790934167120,
+  AgentNodes1791548803242,
 ];

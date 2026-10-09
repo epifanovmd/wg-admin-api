@@ -1,26 +1,34 @@
 import { expect } from "chai";
 
 import { Actor, call, expectStatus, signInAdmin, signUp } from "./client";
+import { FakeNodeAgent } from "./fake-agent";
+import {
+  agentState,
+  attachAgent,
+  report,
+  stats,
+  useStateReader,
+} from "./node-agent";
 import { connectSocket, TestSocket } from "./socket";
 
-const agent = (key: string, method: string, path: string, body?: unknown) =>
-  call(key, method, path, body, { scheme: "ApiKey" });
+const agentStats = (agent: FakeNodeAgent, body: Record<string, unknown>) =>
+  stats(agent, { interfaces: [], ...body });
 
-const agentStats = async (key: string, body: Record<string, unknown>) =>
-  expectStatus(
-    await agent(key, "POST", "/api/v1/wg-agent/stats", {
-      interfaces: [],
-      ...body,
-    }),
-    204,
-  );
+/** Статусы интерфейсов — только из отчётов сценария. */
+const silentResult = (state: any) => ({
+  version: state.version,
+  appliedAt: Date.now(),
+  interfaces: [],
+  routes: [],
+  errors: [],
+});
 
 describe("wireguard: обновления по сокетам", () => {
   let admin: Actor;
   let user: Actor;
   let ws: TestSocket;
-  let relay: { id: string; key: string };
-  let target: { id: string; key: string };
+  let relay: { id: string; key: FakeNodeAgent };
+  let target: { id: string; key: FakeNodeAgent };
 
   const createNode = async (name: string, publicHost: string) => {
     const { data } = expectStatus(
@@ -28,11 +36,15 @@ describe("wireguard: обновления по сокетам", () => {
       201,
     );
 
-    return { id: data.node.id as string, key: data.agentKey as string };
+    return {
+      id: data.node.id as string,
+      key: await attachAgent(data, name, { stateResult: silentResult }),
+    };
   };
 
   before(async () => {
     admin = await signInAdmin();
+    useStateReader(admin);
     user = await signUp("wg-realtime-user");
     ws = await connectSocket(admin);
     relay = await createNode("rt-relay", "203.0.113.90");
@@ -363,14 +375,7 @@ describe("wireguard: обновления по сокетам", () => {
 
     expect(await ws.join("wg-node", target.id)).to.deep.equal({ ok: true });
 
-    const state = expectStatus(
-      await agent(
-        relay.key,
-        "GET",
-        "/api/v1/wg-agent/state?knownVersion=-1&waitMs=0",
-      ),
-      200,
-    ).data;
+    const state = await agentState(relay.key);
     const tunnelName = state.tunnels[0].name;
     const links = ws.next<any>("wg:node:links", l => l.nodeId === target.id);
 
@@ -441,12 +446,9 @@ describe("wireguard: обновления по сокетам", () => {
         i => i.id === iface.id && i.status === "error",
       );
 
-      expectStatus(
-        await agent(target.key, "POST", "/api/v1/wg-agent/state", {
-          interfaces: [{ name: "wg8", status: "error", message: "denied" }],
-        }),
-        204,
-      );
+      await report(target.key, {
+        interfaces: [{ name: "wg8", status: "error", message: "denied" }],
+      });
 
       const updated = await primary;
 
@@ -463,12 +465,9 @@ describe("wireguard: обновления по сокетам", () => {
           ),
       );
 
-      expectStatus(
-        await agent(relay.key, "POST", "/api/v1/wg-agent/state", {
-          interfaces: [{ name: "wg8", status: "up" }],
-        }),
-        204,
-      );
+      await report(relay.key, {
+        interfaces: [{ name: "wg8", status: "up" }],
+      });
       await replica;
 
       const deleted = [targetPage, relayPage].map(page =>
@@ -487,7 +486,7 @@ describe("wireguard: обновления по сокетам", () => {
     }
   });
 
-  it("статистика пиров — одной пачкой на комнату: обзор, интерфейс, «мои пиры», карточка пира только со своим пиром; короткий ряд; повтор тика не учитывается", async () => {
+  it("статистика пиров — одной пачкой на комнату: обзор, интерфейс, «мои пиры», карточка пира только со своим пиром; короткий ряд", async () => {
     const iface = expectStatus(
       await call(admin, "POST", "/api/v1/wg/interfaces", {
         nodeId: target.id,
@@ -520,10 +519,6 @@ describe("wireguard: обновления по сокетам", () => {
       const now = Date.now();
 
       return {
-        seq,
-        bootId: "e2e-boot",
-        collectedAt: now,
-        sentAt: now,
         interfaces: [
           {
             name: "wg7",
@@ -607,8 +602,6 @@ describe("wireguard: обновления по сокетам", () => {
       expect(overviewBatches).to.equal(1);
       expect(holderBatches).to.equal(1);
 
-      // Повтор того же тика (досылка) — трафик не удваивается.
-      await agentStats(target.key, tick(1, 999_999));
       await agentStats(target.key, tick(2, 3000));
 
       const current = expectStatus(

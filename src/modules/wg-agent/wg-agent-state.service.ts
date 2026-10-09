@@ -16,30 +16,31 @@ import {
   WgInterfaceRepository,
   WgInterfaceService,
 } from "../wg-interface";
-import {
-  wgConfig,
-  WgNode,
-  WgNodeCommandService,
-  WgNodeRepository,
-} from "../wg-node";
+import { wgConfig, WgNode, WgNodeRepository } from "../wg-node";
 import { WgPeerService } from "../wg-peer";
 import { WgSocksAppService } from "../wg-socks";
 import { WgMeshService } from "../wg-stats";
 import {
-  IWgAgentDesiredState,
-  IWgAgentForward,
-  IWgAgentTunnel,
-  WG_AGENT_STATS_INTERVAL_MS,
-  WG_AGENT_TUNNEL_MTU,
-} from "./wg-agent-protocol";
-import { WgNodeSignals } from "./wg-node-signals";
+  ISocksProxiesConfig,
+  IWgProbesConfig,
+  IWgStateConfig,
+  IWgWorkerForward,
+  IWgWorkerTunnel,
+  WG_TUNNEL_MTU,
+} from "./wg-worker.contract";
 
-/** Опрос без LISTEN (PgBouncer, обрыв соединения). */
-const POLL_TICK_MS = 1000;
-/** Страховочная перепроверка при работающем LISTEN. */
-const SIGNAL_SAFETY_MS = 10_000;
+/** Настройки воркеров ноды целиком. */
+export interface IWgNodeWorkerConfigs {
+  state: IWgStateConfig;
+  probes: IWgProbesConfig;
+  proxies: ISocksProxiesConfig;
+}
 
-/** Сборка желаемого состояния ноды и long-poll ожидание изменений. */
+/**
+ * Сборка настроек воркеров ноды из домена: желаемое состояние воркера wg
+ * (интерфейсы с пирами, IPIP-туннели, пробросы релея), цели проб связности,
+ * SOCKS-прокси.
+ */
 @Injectable()
 export class WgAgentStateService {
   constructor(
@@ -50,78 +51,27 @@ export class WgAgentStateService {
     private readonly _interfaces: WgInterfaceService,
     @inject(WgPeerService) private readonly _peers: WgPeerService,
     @inject(WgEndpointService) private readonly _endpoints: WgEndpointService,
-    @inject(WgNodeCommandService)
-    private readonly _commands: WgNodeCommandService,
-    @inject(WgNodeSignals) private readonly _signals: WgNodeSignals,
     @inject(WgMeshService) private readonly _mesh: WgMeshService,
     @inject(WgForwardRepository)
     private readonly _forwards: WgForwardRepository,
     @inject(WgSocksAppService) private readonly _socks: WgSocksAppService,
   ) {}
 
-  /**
-   * Ждать изменения (новая версия конфигурации или невыполненные команды)
-   * до `waitMs`, затем вернуть текущее желаемое состояние.
-   */
-  async waitAndBuild(
-    node: WgNode,
-    knownVersion: number,
-    waitMs: number,
-  ): Promise<IWgAgentDesiredState> {
-    const deadline =
-      Date.now() + Math.min(Math.max(waitMs, 0), wgConfig.agentPollWaitMs);
-    let currentVersion = node.configVersion;
-
-    for (;;) {
-      const pending = await this._commands.pendingForAgent(node.id);
-
-      if (
-        currentVersion !== knownVersion ||
-        pending.length > 0 ||
-        Date.now() >= deadline
-      ) {
-        return this._build(node, currentVersion, pending);
-      }
-
-      // Будит NOTIFY триггера (после коммита); без LISTEN — опрос.
-      await this._signals.waitForNode(
-        node.id,
-        Math.min(
-          deadline - Date.now(),
-          this._signals.isListening ? SIGNAL_SAFETY_MS : POLL_TICK_MS,
-        ),
-      );
-
-      const fresh = await this._nodes.findOne({
-        where: { id: node.id },
-        select: { id: true, configVersion: true },
-      });
-
-      currentVersion = fresh?.configVersion ?? currentVersion;
-    }
-  }
-
-  /**
-   * Актуальное состояние ноды без ожидания: версия конфигурации и
-   * невыполненные команды — на момент вызова (канал постоянной связи).
-   */
-  async buildCurrent(nodeId: string): Promise<IWgAgentDesiredState | null> {
+  /** Настройки воркеров ноды на текущую версию; ноды нет — `null`. */
+  async build(nodeId: string): Promise<IWgNodeWorkerConfigs | null> {
     const node = await this._nodes.findOne({ where: { id: nodeId } });
 
     if (!node) return null;
 
-    return this._build(
-      node,
-      node.configVersion,
-      await this._commands.pendingForAgent(node.id),
-    );
+    return {
+      state: await this.buildState(node),
+      probes: { targets: await this._mesh.probeTargetsFor(node.id) },
+      proxies: { proxies: await this._socks.agentConfigs(node.id) },
+    };
   }
 
-  private async _build(
-    node: WgNode,
-    version: number,
-    pending: Awaited<ReturnType<WgNodeCommandService["pendingForAgent"]>>,
-  ): Promise<IWgAgentDesiredState> {
+  /** Желаемое состояние воркера wg на версию ноды. */
+  async buildState(node: WgNode): Promise<IWgStateConfig> {
     // Свои интерфейсы и реплики чужих: тот же ключ и пиры.
     const interfaces = await this._interfaceRepo.findForNode(node.id);
     const peersByInterface = await this._peers.serverPeers(
@@ -130,7 +80,7 @@ export class WgAgentStateService {
     const { tunnels, forwards } = await this._relayTopology(node);
 
     return {
-      version,
+      version: node.configVersion,
       nodeId: node.id,
       nodeName: node.name,
       interfaces: interfaces.map(iface => ({
@@ -148,27 +98,16 @@ export class WgAgentStateService {
       })),
       tunnels,
       forwards,
-      probeTargets: await this._mesh.probeTargetsFor(node.id),
-      socks: await this._socks.agentConfigs(node.id),
-      commands: pending.map(command => ({
-        id: command.id,
-        type: command.type,
-        payload: command.payload,
-        timeoutSec: command.timeoutSec,
-      })),
-      settings: {
-        statsIntervalMs: WG_AGENT_STATS_INTERVAL_MS,
-      },
     };
   }
 
   /** Туннели обоих ролей ноды и пробросы, если нода — релей. */
   private async _relayTopology(node: WgNode): Promise<{
-    tunnels: IWgAgentTunnel[];
-    forwards: IWgAgentForward[];
+    tunnels: IWgWorkerTunnel[];
+    forwards: IWgWorkerForward[];
   }> {
-    const tunnels: IWgAgentTunnel[] = [];
-    const forwards: IWgAgentForward[] = [];
+    const tunnels: IWgWorkerTunnel[] = [];
+    const forwards: IWgWorkerForward[] = [];
     const asRelay = await this._endpoints.linksForRelay(node.id);
     const asTarget = await this._endpoints.linksForTarget(node.id);
     const counterpartIds = [
@@ -207,7 +146,7 @@ export class WgAgentStateService {
         localTunnelIp: isRelaySide ? addresses.relayIp : addresses.targetIp,
         remoteTunnelIp: isRelaySide ? addresses.targetIp : addresses.relayIp,
         prefix: addresses.prefix,
-        mtu: WG_AGENT_TUNNEL_MTU,
+        mtu: WG_TUNNEL_MTU,
       });
     };
 
@@ -262,7 +201,7 @@ export class WgAgentStateService {
           copy.nodeId === iface.activeReplicaNodeId,
       );
 
-      type TCandidate = NonNullable<IWgAgentForward["candidates"]>[number];
+      type TCandidate = NonNullable<IWgWorkerForward["candidates"]>[number];
       const direct = (copy: (typeof copies)[number]): TCandidate[] =>
         copy.publicHost
           ? [{ targetIp: copy.publicHost, tunnel: null, nodeId: copy.nodeId }]

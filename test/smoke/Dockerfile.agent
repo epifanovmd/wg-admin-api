@@ -1,33 +1,44 @@
 # syntax=docker/dockerfile:1.7
-# Агент ноды в контейнере — для smoke-стенда (test/smoke/wg-smoke.sh). На
-# нодах агент ставится install.sh как служба systemd (agent/README.md).
+# Узел для smoke-стенда (test/smoke/wg-smoke.sh): агент 1.1.0 в контейнере
+# (update.mode: external — обновляется новым образом) и воркеры wg и socks из
+# исходников. На настоящих узлах агент ставится службой (agent/README.md).
 # Сборка из корня репозитория:
-#   docker build -f test/smoke/Dockerfile.agent --build-arg AGENT_VERSION=2.0.0-smoke -t wg-admin-agent:test .
-# AGENT_VERSION — версия вместо agent/VERSION: smoke обновляет агента на
-# релизный бинарь бэкенда, поэтому бинарь образа должен от него отличаться.
-ARG GO_VERSION=1.26-bookworm
+#   docker build -f test/smoke/Dockerfile.agent -t wg-admin-node:test .
+# Запуск (NET_ADMIN — для wg, ip и iptables внутри контейнера):
+#   docker run -d --cap-add NET_ADMIN --device /dev/net/tun \
+#     -e AGENT_SERVER_URL=http://api:8181 -e AGENT_ENROLL_TOKEN=<токен> \
+#     -e AGENT_NAME=node-a -e AGENT_LABELS=nodeId=<id ноды> wg-admin-node:test
+ARG GO_VERSION=1.26.9-bookworm
+ARG AGENT_VERSION=1.1.0
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS build
+ARG TARGETOS
 ARG TARGETARCH
-ARG AGENT_VERSION=""
 WORKDIR /agent
 COPY agent/go.mod agent/go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
-COPY agent/ ./
+COPY agent/internal ./internal
+COPY agent/workers ./workers
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath \
-      -ldflags "-s -w -X main.version=${AGENT_VERSION:-$(cat VERSION)}" \
-      -o /out/wg-admin-agent ./cmd/wg-admin-agent
+    for name in wg socks; do \
+      version=$(tr -d '[:space:]' < workers/$name/VERSION); \
+      CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -buildvcs=false \
+        -ldflags "-s -w -X main.version=$version" -o /out/$name-worker ./workers/$name; \
+    done
 
 FROM debian:bookworm-slim
-# wireguard-go — userspace-замена модулю ядра (например, в Docker Desktop).
+ARG AGENT_VERSION
+ARG TARGETARCH
+# wireguard-go — userspace-замена модулю ядра (например, в Docker Desktop без модуля).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       wireguard-tools wireguard-go iproute2 iptables iputils-ping conntrack \
       procps ca-certificates tini >/dev/null && \
     rm -rf /var/lib/apt/lists/*
-COPY --from=build /out/wg-admin-agent /usr/local/bin/wg-admin-agent
-# Конфиги и состояние агента — в /etc/wireguard контейнера (smoke проверяет
-# там маркер обновления); тот же образ служит клиентом wg-quick.
-ENV WG_AGENT_CONFIG_DIR=/etc/wireguard
-ENTRYPOINT ["tini", "--", "/usr/local/bin/wg-admin-agent"]
+ADD --chmod=755 https://github.com/epifanovmd/agent/releases/download/v${AGENT_VERSION}/agent-linux-${TARGETARCH} /usr/local/bin/agent
+COPY --from=build /out/wg-worker /out/socks-worker /usr/local/bin/
+COPY test/smoke/agent.yaml /etc/agent/agent.yaml
+# Агент — от root: воркер wg настраивает сеть контейнера.
+ENV AGENT_UPDATE_MODE=external \
+    AGENT_DATA_DIR=/var/lib/agent
+ENTRYPOINT ["tini", "--", "/usr/local/bin/agent", "run"]

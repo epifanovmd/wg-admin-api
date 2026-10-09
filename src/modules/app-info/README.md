@@ -6,9 +6,9 @@
 
 - `GET /api/v1/app/version` — любой вошедший пользователь (`jwt`):
   `{ version, commit, builtAt, startedAt, agentVersion }`. `agentVersion` —
-  версия агента, которую бэкенд ставит и раздаёт (`WgAgentBinaryService`,
-  `agent/dist/VERSION`); null — бинари не собраны. Установленная на ноде —
-  `agentVersion` ноды.
+  версия агента в выпуске, который бэкенд раздаёт узлам (выпуски GitHub или
+  `AGENT_RELEASES_URL`, модуль agent); null — в выпуске нет сборок агента.
+  Установленная на ноде — `agentVersion` ноды.
 
 ## Откуда версия
 

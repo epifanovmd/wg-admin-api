@@ -19,8 +19,8 @@ import {
 } from "../wg-endpoint";
 import {
   generateWgKeyPair,
-  WgNodeCommandDto,
-  WgNodeCommandService,
+  IWgInterfaceRestartResult,
+  WgNodeAgentService,
   WgNodePermissions,
   WgNodeService,
   WgSecretBox,
@@ -77,8 +77,8 @@ export class WgInterfaceService {
     @inject(WgInterfaceRepository)
     private readonly _repo: WgInterfaceRepository,
     @inject(WgNodeService) private readonly _nodes: WgNodeService,
-    @inject(WgNodeCommandService)
-    private readonly _commands: WgNodeCommandService,
+    @inject(WgNodeAgentService)
+    private readonly _nodeAgents: WgNodeAgentService,
     @inject(WgEndpointService) private readonly _endpoints: WgEndpointService,
     @inject(WgRelaySyncService) private readonly _relaySync: WgRelaySyncService,
     @inject(WgSecretBox) private readonly _secrets: WgSecretBox,
@@ -453,18 +453,21 @@ export class WgInterfaceService {
     return this._emitUpdated(id);
   }
 
-  /** Перезапуск интерфейса на ноде (императивно, через команду агенту). */
-  async restart(actor: AuthContext, id: string): Promise<WgNodeCommandDto> {
+  /** Перезапуск интерфейса на ноде воркером wg; итог — сразу. */
+  async restart(
+    actor: AuthContext,
+    id: string,
+  ): Promise<IWgInterfaceRestartResult> {
     const iface = await this.findFor(
       actor,
       id,
       WgInterfacePermissions.INTERFACE_CONTROL,
     );
 
-    return this._commands.createInterfaceRestart(
+    return this._nodeAgents.restartInterface(
       iface.nodeId,
-      actor.userId,
       iface.name,
+      actor.userId,
     );
   }
 

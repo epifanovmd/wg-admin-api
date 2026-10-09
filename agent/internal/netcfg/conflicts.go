@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"wgadmin/agent/internal/protocol"
+	"wgadmin/agent/internal/desired"
 )
 
 // HostAddr — IPv4-адрес интерфейса хоста.
@@ -83,7 +83,7 @@ func overlaps(a, b string) bool {
 
 // TunnelConflict — причина не поднимать туннель: его подсеть занята чужим
 // интерфейсом или к тому же хосту уже есть чужой IPIP-туннель.
-func TunnelConflict(tunnel protocol.Tunnel, host HostNetwork) string {
+func TunnelConflict(tunnel desired.Tunnel, host HostNetwork) string {
 	cidr := fmt.Sprintf("%s/%d", tunnel.LocalTunnelIP, tunnel.Prefix)
 
 	for _, addr := range host.Addrs {
@@ -101,7 +101,7 @@ func TunnelConflict(tunnel protocol.Tunnel, host HostNetwork) string {
 }
 
 // ForwardConflict — порт проброса уже слушает другой процесс.
-func ForwardConflict(forward protocol.Forward, ports HostPorts) string {
+func ForwardConflict(forward desired.Forward, ports HostPorts) string {
 	busy := ports.UDP
 	if forward.Proto == "tcp" {
 		busy = ports.TCP

@@ -24,12 +24,17 @@ export class WgNodeHostChangedEvent {
   constructor(public readonly nodeId: string) {}
 }
 
-/** Нода удалена; владелец и создатель — кому она была своей. */
+/**
+ * Нода удалена; владелец и создатель — кому она была своей; агент ноды
+ * (его отзывают) и кто удалил.
+ */
 export class WgNodeDeletedEvent {
   constructor(
     public readonly nodeId: string,
     public readonly ownerId: string | null = null,
     public readonly createdById: string | null = null,
+    public readonly agentId: string | null = null,
+    public readonly actorId: string | null = null,
   ) {}
 }
 

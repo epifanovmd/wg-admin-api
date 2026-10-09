@@ -4,13 +4,13 @@ import (
 	"reflect"
 	"testing"
 
-	"wgadmin/agent/internal/protocol"
+	"wgadmin/agent/internal/desired"
 )
 
 func str(value string) *string { return &value }
 
-func forward(patch func(*protocol.Forward)) protocol.Forward {
-	f := protocol.Forward{
+func forward(patch func(*desired.Forward)) desired.Forward {
+	f := desired.Forward{
 		ID: "f1", Proto: "udp", ListenPort: 51820, TargetIP: "10.99.0.2", TargetPort: 51820,
 		FallbackIP: str("203.0.113.20"), Route: "auto", Tunnel: str("wgt0"),
 	}
@@ -21,7 +21,7 @@ func forward(patch func(*protocol.Forward)) protocol.Forward {
 	return f
 }
 
-func target(forwards []protocol.Forward, health *Health) string {
+func target(forwards []desired.Forward, health *Health) string {
 	return Resolve(forwards, health)[0].TargetIP
 }
 
@@ -33,7 +33,7 @@ func fail(health *Health, key string, times int) {
 
 func TestAutoFailoverAndBack(t *testing.T) {
 	health := NewHealth()
-	f := []protocol.Forward{forward(nil)}
+	f := []desired.Forward{forward(nil)}
 
 	if target(f, health) != "10.99.0.2" {
 		t.Fatal("туннель жив")
@@ -60,10 +60,10 @@ func TestManualRoute(t *testing.T) {
 	health := NewHealth()
 	fail(health, "wgt0", 10)
 
-	if target([]protocol.Forward{forward(func(f *protocol.Forward) { f.Route = "tunnel" })}, health) != "10.99.0.2" {
+	if target([]desired.Forward{forward(func(f *desired.Forward) { f.Route = "tunnel" })}, health) != "10.99.0.2" {
 		t.Fatal("tunnel — всегда туннель")
 	}
-	if target([]protocol.Forward{forward(func(f *protocol.Forward) { f.Route = "direct" })}, NewHealth()) != "203.0.113.20" {
+	if target([]desired.Forward{forward(func(f *desired.Forward) { f.Route = "direct" })}, NewHealth()) != "203.0.113.20" {
 		t.Fatal("direct — всегда напрямую")
 	}
 }
@@ -72,12 +72,12 @@ func TestWithoutFallback(t *testing.T) {
 	health := NewHealth()
 	fail(health, "wgt0", 10)
 
-	if target([]protocol.Forward{forward(func(f *protocol.Forward) { f.FallbackIP = nil })}, health) != "10.99.0.2" {
+	if target([]desired.Forward{forward(func(f *desired.Forward) { f.FallbackIP = nil })}, health) != "10.99.0.2" {
 		t.Fatal("без прямого адреса — туннель")
 	}
 
-	plain := forward(func(f *protocol.Forward) { f.Tunnel = nil; f.TargetIP = "203.0.113.5"; f.FallbackIP = nil })
-	if target([]protocol.Forward{plain}, health) != "203.0.113.5" {
+	plain := forward(func(f *desired.Forward) { f.Tunnel = nil; f.TargetIP = "203.0.113.5"; f.FallbackIP = nil })
+	if target([]desired.Forward{plain}, health) != "203.0.113.5" {
 		t.Fatal("без туннеля — как задан")
 	}
 }
@@ -90,13 +90,13 @@ func TestResolveHosts(t *testing.T) {
 		return ""
 	}
 
-	resolved := ResolveHosts([]protocol.Forward{forward(func(f *protocol.Forward) { f.FallbackIP = str("vpn.example.com") })}, lookup)[0]
+	resolved := ResolveHosts([]desired.Forward{forward(func(f *desired.Forward) { f.FallbackIP = str("vpn.example.com") })}, lookup)[0]
 	if resolved.TargetIP != "10.99.0.2" || *resolved.FallbackIP != "198.51.100.7" {
 		t.Fatalf("%+v", resolved)
 	}
 
 	// Не разрешился — прямой путь недоступен, туннель остаётся.
-	unresolved := ResolveHosts([]protocol.Forward{forward(func(f *protocol.Forward) { f.FallbackIP = str("unknown.example") })}, lookup)[0]
+	unresolved := ResolveHosts([]desired.Forward{forward(func(f *desired.Forward) { f.FallbackIP = str("unknown.example") })}, lookup)[0]
 	if unresolved.FallbackIP != nil {
 		t.Fatal("аварийный путь должен отключиться")
 	}
@@ -104,9 +104,9 @@ func TestResolveHosts(t *testing.T) {
 
 func TestCandidates(t *testing.T) {
 	health := NewHealth()
-	replicated := []protocol.Forward{forward(func(f *protocol.Forward) {
+	replicated := []desired.Forward{forward(func(f *desired.Forward) {
 		f.FallbackIP = nil
-		f.Candidates = []protocol.Candidate{
+		f.Candidates = []desired.Candidate{
 			{TargetIP: "10.99.0.2", Tunnel: str("wgt0")},
 			{TargetIP: "10.99.0.6", Tunnel: str("wgt1")},
 			{TargetIP: "203.0.113.9"},
@@ -141,9 +141,9 @@ func TestCandidates(t *testing.T) {
 // нода недоступна целиком — следующая копия.
 func TestTunnelThenDirectPerCopy(t *testing.T) {
 	health := NewHealth()
-	endpoint := []protocol.Forward{forward(func(f *protocol.Forward) {
+	endpoint := []desired.Forward{forward(func(f *desired.Forward) {
 		f.FallbackIP = nil
-		f.Candidates = []protocol.Candidate{
+		f.Candidates = []desired.Candidate{
 			{TargetIP: "10.99.0.2", Tunnel: str("wgt0"), NodeID: "a"},
 			{TargetIP: "203.0.113.20", NodeID: "a"},
 			{TargetIP: "10.99.0.6", Tunnel: str("wgt1"), NodeID: "c"},
@@ -166,9 +166,9 @@ func TestPinnedCandidate(t *testing.T) {
 	health := NewHealth()
 	fail(health, "wgt1", 10)
 
-	pinned := []protocol.Forward{forward(func(f *protocol.Forward) {
+	pinned := []desired.Forward{forward(func(f *desired.Forward) {
 		f.FallbackIP = nil
-		f.Candidates = []protocol.Candidate{{TargetIP: "10.99.0.6", Tunnel: str("wgt1")}}
+		f.Candidates = []desired.Candidate{{TargetIP: "10.99.0.6", Tunnel: str("wgt1")}}
 	})}
 	if target(pinned, health) != "10.99.0.6" {
 		t.Fatal("закреплённая — всегда она")
@@ -179,9 +179,9 @@ func TestDomainCandidateHealthKey(t *testing.T) {
 	// Проба пингует исходный адрес (домен), выбор — по разрешённому IP:
 	// ключ здоровья должен совпадать, иначе мёртвая реплика не отбросится.
 	health := NewHealth()
-	original := []protocol.Forward{forward(func(f *protocol.Forward) {
+	original := []desired.Forward{forward(func(f *desired.Forward) {
 		f.FallbackIP = nil
-		f.Candidates = []protocol.Candidate{{TargetIP: "node-a.example.com"}, {TargetIP: "203.0.113.20"}}
+		f.Candidates = []desired.Candidate{{TargetIP: "node-a.example.com"}, {TargetIP: "203.0.113.20"}}
 	})}
 
 	probes := DirectCandidateIPs(original)
@@ -202,15 +202,15 @@ func TestDomainCandidateHealthKey(t *testing.T) {
 }
 
 func TestStaleFlowArgs(t *testing.T) {
-	wrap := func(forwards ...protocol.Forward) []Resolved {
+	wrap := func(forwards ...desired.Forward) []Resolved {
 		var out []Resolved
 		for _, f := range forwards {
 			out = append(out, Resolved{Forward: f})
 		}
 		return out
 	}
-	udp := protocol.Forward{Proto: "udp", ListenPort: 51820, TargetIP: "172.21.0.5", TargetPort: 51820}
-	tcp := protocol.Forward{Proto: "tcp", ListenPort: 8443, TargetIP: "10.99.0.2", TargetPort: 8443}
+	udp := desired.Forward{Proto: "udp", ListenPort: 51820, TargetIP: "172.21.0.5", TargetPort: 51820}
+	tcp := desired.Forward{Proto: "tcp", ListenPort: 8443, TargetIP: "10.99.0.2", TargetPort: 8443}
 	moved := udp
 	moved.TargetIP = "172.21.0.9"
 

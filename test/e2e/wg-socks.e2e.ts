@@ -8,30 +8,21 @@ import {
   signInAdmin,
   signUp,
 } from "./client";
-
-const agentState = async (key: string) =>
-  expectStatus(
-    await call(
-      key,
-      "GET",
-      "/api/v1/wg-agent/state?knownVersion=-1&waitMs=0",
-      undefined,
-      { scheme: "ApiKey" },
-    ),
-    200,
-  ).data;
+import { FakeNodeAgent } from "./fake-agent";
+import { agentState, attachAgent, stats, useStateReader } from "./node-agent";
 
 describe("wireguard: прокси SOCKS5 через mTLS", () => {
   let admin: Actor;
   let user: Actor;
   let node: any;
-  let nodeKey: string;
+  let nodeKey: FakeNodeAgent;
   let service: any;
   let socksUser: any;
   let client: any;
 
   before(async () => {
     admin = await signInAdmin();
+    useStateReader(admin);
     user = await signUp("wg-socks-user");
 
     const res = expectStatus(
@@ -43,7 +34,7 @@ describe("wireguard: прокси SOCKS5 через mTLS", () => {
     );
 
     node = res.data.node;
-    nodeKey = res.data.agentKey;
+    nodeKey = await attachAgent(res.data, "socks-node");
   });
 
   it("создание: свой CA, серверный сертификат на имя ноды", async () => {
@@ -235,21 +226,10 @@ describe("wireguard: прокси SOCKS5 через mTLS", () => {
   });
 
   it("статистика агента видна в карточке", async () => {
-    expectStatus(
-      await call(
-        nodeKey,
-        "POST",
-        "/api/v1/wg-agent/stats",
-        {
-          interfaces: [],
-          socks: [
-            { id: service.id, connections: 3, rxBytes: 1000, txBytes: 5000 },
-          ],
-        },
-        { scheme: "ApiKey" },
-      ),
-      204,
-    );
+    await stats(nodeKey, {
+      interfaces: [],
+      socks: [{ id: service.id, connections: 3, rxBytes: 1000, txBytes: 5000 }],
+    });
 
     const card = expectStatus(
       await call(admin, "GET", `/api/v1/wg/socks/${service.id}`),

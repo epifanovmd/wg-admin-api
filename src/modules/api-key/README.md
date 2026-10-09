@@ -1,6 +1,6 @@
 # Модуль ApiKey
 
-API-ключи сервисов (агенты нод WireGuard, интеграции) и схема аутентификации
+API-ключи сервисов (интеграции) и схема аутентификации
 `@Security("apiKey", scopes)`. Ключ `<prefix>.<secret>` показывается один раз
 при создании; в БД — префикс для поиска и sha256 секрета.
 
@@ -33,7 +33,7 @@ src/modules/api-key/
 | `name`       | `varchar(100)`          | Название                                           |
 | `prefix`     | `varchar(8)`, unique    | Открытая часть ключа для поиска                    |
 | `hash`       | `varchar(64)`           | sha256 секрета (hex)                               |
-| `scopes`     | `varchar(100)[]`        | Разрешения: `wg-agent:<nodeId>`, `wg-agent:*`, `*` |
+| `scopes`     | `varchar(100)[]`        | Разрешения: `<домен>:<действие>`, `<домен>:*`, `*` |
 | `ownerId`    | `uuid` → users, CASCADE | Кто выпустил; от его имени действует сервис        |
 | `lastUsedAt` | `timestamptz`, nullable | Обновляется не чаще раза в минуту                  |
 | `expiresAt`  | `timestamptz`, nullable | Срок действия; `NULL` — бессрочный                 |
@@ -51,10 +51,9 @@ src/modules/api-key/
   Отозванный, просроченный, неверный — 401 `APIKEY_INVALID`; без ключа — 401
   `APIKEY_REQUIRED`.
 - Scopes `@Security("apiKey", [...])` должны быть покрыты scope ключа: точное
-  совпадение, wildcard (`wg-agent:*`, `*`) или — для требования без действия
-  (`wg-agent`) — любой scope домена. Иначе 403 `APIKEY_SCOPE_DENIED`. Точную
-  проверку (какой ноде принадлежит ключ, `wg-agent:<nodeId>`) делает вызывающий
-  модуль по `permissions` контекста.
+  совпадение, wildcard (`integration:*`, `*`) или — для требования без действия
+  (`integration`) — любой scope домена. Иначе 403 `APIKEY_SCOPE_DENIED`. Более
+  точную проверку делает вызывающий модуль по `permissions` контекста.
 - Контекст: `kind: "service"`, `userId` — владелец ключа, `sessionId:
 "apikey:<id>"`, `roles: []`, `permissions` — scopes ключа.
 - `lastUsedAt` — условный `UPDATE` (старше минуты), не задерживает запрос.
@@ -72,11 +71,10 @@ src/modules/api-key/
 
 ## Использование другими модулями
 
-`ApiKeyService` экспортируется из `index.ts`: `wg-node` выпускает им ключ агента
-(`create(actorId, { name: "wg-agent:<имя ноды>", scopes: ["wg-agent:<nodeId>"] })`)
-при создании ноды, ротации ключа и provision; маршруты `/api/v1/wg-agent/*` —
-`@Security("apiKey", ["wg-agent"])`. События `ApiKeyCreatedEvent` /
-`ApiKeyRevokedEvent` (после записи) пишет в журнал модуль audit.
+`ApiKeyService` экспортируется из `index.ts` (выпуск, проверка, отзыв ключей).
+Агенты нод ключами не пользуются: у них свой ключ из регистрации (модуль
+agent). События `ApiKeyCreatedEvent` / `ApiKeyRevokedEvent` (после записи) пишет
+в журнал модуль audit.
 
 ## Сокет
 

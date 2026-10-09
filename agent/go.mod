@@ -2,7 +2,6 @@ module wgadmin/agent
 
 go 1.26.0
 
-require (
-	github.com/coder/websocket v1.8.15
-	golang.org/x/crypto v0.57.0
-)
+toolchain go1.26.9
+
+require golang.org/x/crypto v0.57.0

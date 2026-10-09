@@ -1,7 +1,6 @@
 import { inject } from "inversify";
-import type { EntityManager } from "typeorm";
+import { type EntityManager, IsNull } from "typeorm";
 
-import { config } from "../../config";
 import type { IPaginatedDto, Pagination } from "../../core";
 import {
   EventBus,
@@ -12,13 +11,10 @@ import {
   toPage,
 } from "../../core";
 import type { AuthContext } from "../../types/koa";
-import { ApiKeyService } from "../api-key";
 import type {
   IAssignWgNodeBody,
-  ICreatedWgNodeDto,
   ICreateWgNodeBody,
   IUpdateWgNodeBody,
-  IWgAgentKeyDto,
 } from "./dto";
 import { WgNodeDto, WgNodeOptionDto } from "./dto";
 import {
@@ -34,26 +30,29 @@ import { WgNodeError } from "./wg-node.errors";
 import { WgNodePermissions } from "./wg-node.permissions";
 import type { IWgNodeFilters } from "./wg-node.repository";
 import { WgNodeRepository } from "./wg-node.repository";
-import {
-  EWgNodeStatus,
-  IWgNodeOsInfo,
-  nodeIdFromScopes,
-  wgAgentScope,
-} from "./wg-node.types";
+import { EWgNodeStatus, IWgNodeOsInfo } from "./wg-node.types";
 
-/** Состояние, которое агент сообщает о себе и ноде. */
-export interface IWgAgentStateReport {
+/**
+ * Что известно о ноде от агента и воркеров: связь, версии, ОС, итог
+ * применения конфигурации. Поля без значения не меняются.
+ */
+export interface IWgNodeAgentState {
+  status?: EWgNodeStatus;
+  statusMessage?: string | null;
   appliedVersion?: number;
   applyError?: string | null;
-  agentVersion?: string;
+  agentVersion?: string | null;
   wgVersion?: string | null;
-  codeHash?: string | null;
-  osInfo?: IWgNodeOsInfo;
+  osInfo?: IWgNodeOsInfo | null;
+  agentRemoteIp?: string | null;
+  lastSeenAt?: Date | null;
 }
 
-/** Установка агента вручную: установщик с бэкенда, ключ — аргументом. */
-const installCommand = (agentKey: string): string =>
-  `curl -fsSL ${config.app.publicUrl}/api/v1/wg-agent/install.sh | sudo sh -s -- --key '${agentKey.replace(/'/g, "'\\''")}'`;
+/** Поля состояния, которые сравниваются по значению (jsonb — по JSON). */
+const sameValue = (a: unknown, b: unknown): boolean =>
+  a instanceof Date || b instanceof Date
+    ? (a as Date | null)?.getTime?.() === (b as Date | null)?.getTime?.()
+    : JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 const mapSaveError = (err: unknown): unknown => {
   if (isUniqueViolation(err)) return WgNodeError.NAME_TAKEN();
@@ -65,24 +64,20 @@ const mapSaveError = (err: unknown): unknown => {
 };
 
 /**
- * Ноды: CRUD с областью прав «все / свои» (владелец или создатель), ключи
- * агентов, версии конфигурации и живость агентов. Чужая нода без права на
- * все не раскрывается (404); видимая, но без права на действие — 403.
- * Методы без актора — внутренние (агент, задачи, другие модули домена).
+ * Ноды: CRUD с областью прав «все / свои» (владелец или создатель), версии
+ * конфигурации и состояние агента. Чужая нода без права на все не
+ * раскрывается (404); видимая, но без права на действие — 403. Методы без
+ * актора — внутренние (агент, задачи, другие модули домена).
  */
 @Injectable()
 export class WgNodeService {
   constructor(
     @inject(WgNodeRepository) private readonly _repo: WgNodeRepository,
-    @inject(ApiKeyService) private readonly _apiKeys: ApiKeyService,
     @inject(EventBus) private readonly _eventBus: EventBus,
   ) {}
 
-  /** Создать ноду и выпустить ключ агента (секрет возвращается один раз). */
-  async create(
-    actor: AuthContext,
-    body: ICreateWgNodeBody,
-  ): Promise<ICreatedWgNodeDto> {
+  /** Создать ноду; команду установки агента выдаёт `WgNodeAgentService`. */
+  async create(actor: AuthContext, body: ICreateWgNodeBody): Promise<WgNode> {
     const ownerId = body.ownerId ?? null;
 
     if (
@@ -108,40 +103,11 @@ export class WgNodeService {
       throw mapSaveError(err);
     }
 
-    try {
-      const agentKey = await this._issueAgentKey(actor.userId, node);
-      const dto = WgNodeDto.fromEntity(await this._findOrFail(node.id));
+    const created = await this._findOrFail(node.id);
 
-      this._eventBus.emit(new WgNodeCreatedEvent(dto));
+    this._eventBus.emit(new WgNodeCreatedEvent(WgNodeDto.fromEntity(created)));
 
-      return { node: dto, agentKey, installCommand: installCommand(agentKey) };
-    } catch (err) {
-      await this._repo.delete({ id: node.id });
-      throw err;
-    }
-  }
-
-  /** Перевыпустить ключ агента по запросу пользователя (право agent). */
-  async rotateAgentKey(
-    actor: AuthContext,
-    id: string,
-  ): Promise<IWgAgentKeyDto> {
-    const node = await this.findFor(actor, id, WgNodePermissions.NODE_AGENT);
-
-    return this.reissueAgentKey(actor.userId, node.id);
-  }
-
-  /** Перевыпустить ключ агента без проверки прав: старый отзывается сразу. */
-  async reissueAgentKey(actorId: string, id: string): Promise<IWgAgentKeyDto> {
-    const node = await this._findOrFail(id);
-
-    if (node.agentKeyId) {
-      await this._apiKeys.revoke(node.agentKeyId, actorId);
-    }
-
-    const agentKey = await this._issueAgentKey(actorId, node);
-
-    return { agentKey, installCommand: installCommand(agentKey) };
+    return created;
   }
 
   /** Ноды в рамках прав; `mine` — только свои при любой области. */
@@ -226,12 +192,14 @@ export class WgNodeService {
       throw err;
     }
 
-    if (node.agentKeyId) {
-      await this._apiKeys.revoke(node.agentKeyId, actor.userId);
-    }
-
     this._eventBus.emit(
-      new WgNodeDeletedEvent(node.id, node.ownerId, node.createdById),
+      new WgNodeDeletedEvent(
+        node.id,
+        node.ownerId,
+        node.createdById,
+        node.agentId,
+        actor.userId,
+      ),
     );
   }
 
@@ -298,128 +266,120 @@ export class WgNodeService {
     return filter;
   }
 
-  /** Нода по scopes агентского api-ключа; чужой/не агентский ключ — 403. */
-  async findByAgentScopes(scopes: string[]): Promise<WgNode> {
-    const nodeId = nodeIdFromScopes(scopes);
-    const node = nodeId
-      ? await this._repo.findOne({ where: { id: nodeId } })
-      : null;
-
-    if (!node) throw WgNodeError.AGENT_SCOPE_INVALID();
-
-    return node;
-  }
-
-  /** Отметить активность агента; молчавшая нода возвращается в online. */
-  async touchAgent(node: WgNode, remoteIp?: string): Promise<void> {
-    const becameOnline = node.status !== EWgNodeStatus.Online;
-    const ipChanged = !!remoteIp && remoteIp !== node.agentRemoteIp;
-
-    node.lastSeenAt = new Date();
-    node.status = EWgNodeStatus.Online;
-    if (ipChanged) node.agentRemoteIp = remoteIp;
-    await this._repo.update(
-      { id: node.id },
-      {
-        lastSeenAt: node.lastSeenAt,
-        status: node.status,
-        ...(ipChanged ? { agentRemoteIp: remoteIp } : {}),
-      },
-    );
-
-    if (becameOnline) {
-      this._eventBus.emit(
-        new WgNodeStatusChangedEvent(
-          WgNodeDto.fromEntity(await this._findOrFail(node.id)),
-        ),
-      );
-    }
-  }
-
-  /** Принять отчёт агента о применённой конфигурации и системе. */
-  async reportAgentState(
-    node: WgNode,
-    report: IWgAgentStateReport,
+  /**
+   * Состояние ноды от агента: пишутся только изменившиеся колонки (полный
+   * save затёр бы `configVersion`, поднятый параллельной транзакцией);
+   * `appliedVersion` только растёт. Изменилось — событие ноды.
+   */
+  async applyAgentState(
+    nodeId: string,
+    state: IWgNodeAgentState,
   ): Promise<void> {
-    const patch: Partial<WgNode> = {
-      // Версия только растёт: устаревший отчёт не откатывает прогресс.
-      ...(report.appliedVersion !== undefined &&
-        report.appliedVersion > node.appliedVersion && {
-          appliedVersion: report.appliedVersion,
-        }),
-      ...(report.applyError !== undefined && { applyError: report.applyError }),
-      ...(report.agentVersion !== undefined && {
-        agentVersion: report.agentVersion,
-      }),
-      ...(report.wgVersion !== undefined && { wgVersion: report.wgVersion }),
-      ...(report.codeHash !== undefined && { agentCodeHash: report.codeHash }),
-      ...(report.osInfo !== undefined && { osInfo: report.osInfo }),
-    };
+    const node = await this._repo.findOne({ where: { id: nodeId } });
 
-    // Только поля отчёта: полный save сущности, загруженной в начале
-    // запроса, затирал configVersion, поднятый параллельной транзакцией.
-    if (Object.keys(patch).length > 0) {
-      await this._repo.update({ id: node.id }, patch);
+    if (!node) return;
+
+    const patch: Partial<WgNode> = {};
+
+    for (const [key, value] of Object.entries(state) as [
+      keyof IWgNodeAgentState,
+      unknown,
+    ][]) {
+      if (value === undefined) continue;
+      if (
+        key === "appliedVersion" &&
+        (value as number) <= node.appliedVersion
+      ) {
+        continue;
+      }
+      if (!sameValue(node[key], value)) {
+        (patch as Record<string, unknown>)[key] = value;
+      }
     }
 
-    Object.assign(node, await this._findOrFail(node.id));
-    this._eventBus.emit(new WgNodeUpdatedEvent(WgNodeDto.fromEntity(node)));
+    const changed = Object.keys(patch);
+    const quiet =
+      changed.length > 0 && changed.every(key => key === "lastSeenAt");
+
+    if (changed.length === 0) return;
+
+    await this._repo.update({ id: nodeId }, patch);
+    // Одна отметка «последний раз на связи» не стоит события.
+    if (quiet) return;
+
+    const dto = WgNodeDto.fromEntity(await this._findOrFail(nodeId));
+
+    this._eventBus.emit(
+      patch.status !== undefined
+        ? new WgNodeStatusChangedEvent(dto)
+        : new WgNodeUpdatedEvent(dto),
+    );
   }
 
-  /** Молчащие ноды — в offline; события — по каждой изменённой. */
-  async sweepSilentAgents(offlineAfterSec: number): Promise<number> {
-    const silentSince = new Date(Date.now() - offlineAfterSec * 1000);
+  /** Ноды с агентами: id ноды и агента. */
+  boundNodes(): Promise<Array<{ id: string; agentId: string }>> {
+    return this._repo.findBound();
+  }
 
-    return (await this._markOffline(silentSince)).length;
+  /** Нода без агента с этим именем или `null`. */
+  findUnboundByName(name: string): Promise<WgNode | null> {
+    return this._repo.findOne({ where: { name, agentId: IsNull() } });
+  }
+
+  /** Нода агента или `null`. */
+  findByAgentId(agentId: string): Promise<WgNode | null> {
+    return this._repo.findByAgentId(agentId);
   }
 
   /**
-   * Нода молчит с момента `silentSince` — в offline (разорвано постоянное
-   * соединение агента и новое не появилось).
+   * Привязать агента к ноде (прежняя привязка агента к другой ноде
+   * снимается); возвращает прежнего агента ноды, если он был другим.
    */
-  async markOfflineIfSilent(
-    nodeId: string,
-    silentSince: Date,
-  ): Promise<boolean> {
-    return (await this._markOffline(silentSince, nodeId)).length > 0;
+  async bindAgent(nodeId: string, agentId: string): Promise<string | null> {
+    const node = await this._findOrFail(nodeId);
+    const previous = node.agentId;
+
+    if (previous === agentId) return null;
+
+    await this._repo.manager.transaction(async manager => {
+      const repo = this._repo.getRepository(manager);
+
+      await repo.update(
+        { agentId },
+        { agentId: null, status: EWgNodeStatus.Created, statusMessage: null },
+      );
+      await repo.update(
+        { id: nodeId },
+        { agentId, statusMessage: null, applyError: null },
+      );
+      // Новому агенту — всё состояние заново.
+      await this._repo.markDirty(nodeId, manager);
+    });
+
+    this._eventBus.emit(
+      new WgNodeUpdatedEvent(
+        WgNodeDto.fromEntity(await this._findOrFail(nodeId)),
+      ),
+    );
+
+    return previous;
   }
 
-  private async _markOffline(
-    silentSince: Date,
-    nodeId?: string,
-  ): Promise<string[]> {
-    const ids = await this._repo.markSilentOffline(silentSince, nodeId);
+  /** Агент отозван или удалён: нода — без агента (`created`). */
+  async unbindAgent(agentId: string): Promise<void> {
+    const nodeId = await this._repo.clearAgent(agentId);
 
-    if (ids.length === 0) return ids;
+    if (!nodeId) return;
 
-    // Событие — полной нодой из БД (UPDATE … RETURNING отдаёт сырые колонки).
-    for (const node of await this._repo.findManyWithOwners(ids)) {
-      this._eventBus.emit(
-        new WgNodeStatusChangedEvent(WgNodeDto.fromEntity(node)),
-      );
-    }
-
-    return ids;
+    this._eventBus.emit(
+      new WgNodeStatusChangedEvent(
+        WgNodeDto.fromEntity(await this._findOrFail(nodeId)),
+      ),
+    );
   }
 
   async setStatus(id: string, status: EWgNodeStatus): Promise<void> {
     await this._applyStatus(await this._findOrFail(id), status);
-  }
-
-  /**
-   * Агент удалён с VPS: ключ отозван, нода — снова `created` (можно
-   * установить заново), версия кода агента сброшена.
-   */
-  async detachAgent(id: string, actorId: string): Promise<void> {
-    const node = await this._findOrFail(id);
-
-    if (node.agentKeyId) await this._apiKeys.revoke(node.agentKeyId, actorId);
-
-    node.agentKeyId = null;
-    node.agentCodeHash = null;
-    await this._repo.update({ id }, { agentKeyId: null, agentCodeHash: null });
-    await this._applyStatus(node, EWgNodeStatus.Created);
-    this._eventBus.emit(new WgNodeUpdatedEvent(WgNodeDto.fromEntity(node)));
   }
 
   /** Установка агента провалилась: `provisioning` → `error`, иначе без изменений. */
@@ -454,18 +414,6 @@ export class WgNodeService {
     this._eventBus.emit(new WgNodeUpdatedEvent(dto, previous));
 
     return dto;
-  }
-
-  private async _issueAgentKey(actorId: string, node: WgNode): Promise<string> {
-    const created = await this._apiKeys.create(actorId, {
-      name: `wg-agent:${node.name}`.slice(0, 100),
-      scopes: [wgAgentScope(node.id)],
-    });
-
-    node.agentKeyId = created.apiKey.id;
-    await this._repo.update({ id: node.id }, { agentKeyId: node.agentKeyId });
-
-    return created.key;
   }
 
   private async _applyStatus(

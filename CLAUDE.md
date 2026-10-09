@@ -7,11 +7,14 @@
 ## Проект
 
 WG Admin — админка WireGuard: бэкенд (модульный монолит на Node.js + TypeScript) и
-агент нод на Go (`agent/`). Бэкенд: Koa + tsoa (маршруты и OpenAPI из декораторов),
+воркеры узла на Go (`agent/workers`: `wg`, `socks`), которые запускает агент 1.0.1
+([github.com/epifanovmd/agent](https://github.com/epifanovmd/agent)) на нодах; на
+бэкенде связь с агентами — пакет `agent-sdk` в модуле `agent`. Бэкенд: Koa + tsoa (маршруты и OpenAPI из декораторов),
 Inversify (DI), TypeORM + PostgreSQL, pg-boss (очередь задач на Postgres), Redis
 (между процессами), Socket.IO, Zod, pino, prom-client, Sentry; тесты —
 Mocha, Chai, Sinon; сборка `tsc`. Node >= 24. Роль процесса — `APP_ROLE=api|worker|all`.
-Устройство системы — `docs/WIREGUARD.md`, агент — `agent/README.md`.
+Устройство системы — `docs/WIREGUARD.md`, воркеры, выпуск и установка —
+`agent/README.md`, связь с агентами — `src/modules/agent/README.md`.
 
 ## Команды
 
@@ -27,15 +30,18 @@ yarn test                 # юнит, src/**/*.test.ts (один файл: yarn 
 yarn test:e2e             # интеграционный набор test/e2e/*.e2e.ts (нужен dev-compose)
 yarn gen:module <name>    # каркас модуля по конвенциям (--dry-run — список файлов)
 yarn migration:generate src/migrations/<Name> | migration:run | migration:revert
-scripts/go-agent.sh test | vet | tidy | build   # агент: Go в контейнере (версия из go.mod)
-bash test/smoke/wg-smoke.sh   # smoke WG-домена в Docker, вручную (сборка образов — README)
+yarn agent:release        # воркеры wg, socks в agent/release (агента бэкенд берёт с GitHub сам)
+yarn agent:fetch [версия] # выпуск агента с GitHub в agent/dist (локальный агент, e2e)
+yarn agent                # локальный агент (agent/dev.sh run; agent:start|stop|status|logs)
+scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]   # воркеры: Go в контейнере
 ```
 
 Перед завершением задачи обязательны: `yarn generate`, `yarn lint`, `yarn typecheck`,
 `yarn test`; при изменении API, схемы БД или инфраструктуры — ещё `yarn test:e2e`; при
-изменении агента — gofmt, `go vet`, `go test` и поднять `agent/VERSION` (протокол
-`agent/internal/protocol` — зеркало `src/modules/wg-agent/wg-agent-protocol.ts`, менять
-синхронно).
+изменении воркеров (`agent/`) — gofmt, `go vet`, `go test` и поднять
+`agent/workers/<имя>/VERSION` изменённого воркера (общий код `agent/internal`, `go.mod`,
+`go.sum` — оба). Формат настроек, ответов и метрик воркеров (`agent/internal/desired`, манифесты
+воркеров) — зеркало `src/modules/wg-agent/wg-worker.contract.ts`, менять синхронно.
 
 ## Никогда не редактировать вручную
 
@@ -135,5 +141,5 @@ bash test/smoke/wg-smoke.sh   # smoke WG-домена в Docker, вручную 
 modules, patterns, reference. Загружай тематический файл, когда работаешь в
 соответствующей области. Внутри каждого модуля есть `README.md` с описанием его
 сущностей, эндпоинтов и событий — это часть кода модуля, а не общей документации.
-Устройство WG-домена — [docs/WIREGUARD.md](docs/WIREGUARD.md), агент —
+Устройство WG-домена — [docs/WIREGUARD.md](docs/WIREGUARD.md), воркеры узла —
 [agent/README.md](agent/README.md).

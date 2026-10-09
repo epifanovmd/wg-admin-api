@@ -12,3 +12,9 @@ yarn-error.log
 
 # Локальная память агента разработки
 .claude/memory/
+
+# Сборки воркеров, выпуск для узлов (agent/release.sh) и данные агента разработки (agent/dev.sh)
+agent/dist/
+agent/release/
+agent/release.new/
+.agent/

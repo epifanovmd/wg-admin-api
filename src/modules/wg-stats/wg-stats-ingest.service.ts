@@ -19,7 +19,6 @@ import {
 } from "./wg-stat.repositories";
 import { WgStatSample } from "./wg-stat-sample.entity";
 import {
-  EWgAgentTransport,
   IWgInterfaceLive,
   IWgNodeLive,
   IWgNodeSysMetrics,
@@ -49,21 +48,20 @@ export interface IWgAgentInterfaceStat {
   peers: IWgAgentPeerStat[];
 }
 
-/** Тик статистики агента: данные и (необязательно) нумерация и время сбора. */
+/**
+ * Точка статистики ноды: пиры от воркера wg, метрики узла от агента, момент
+ * сбора на узле. Повторы точек отсекает agent-sdk (нумерация потока).
+ */
 export interface IWgAgentStatsReport {
-  seq?: number;
-  bootId?: string;
+  /** Момент сбора по часам узла (unix ms); нет — момент приёма. */
   collectedAt?: number;
-  sentAt?: number;
   sys?: IWgNodeSysMetrics;
   interfaces: IWgAgentInterfaceStat[];
 }
 
-/** Итог приёма тика. */
+/** Итог приёма точки. */
 export interface IWgIngestResult {
-  /** Тик уже принимался (повтор при досылке) — данные не учтены. */
-  duplicate: boolean;
-  /** Тик досылки: учтён в истории, живых событий нет. */
+  /** Точка досылки: учтена в истории, живых событий нет. */
   backfill: boolean;
 }
 
@@ -71,12 +69,6 @@ export interface IWgIngestResult {
 interface IRawCounters {
   rx: number;
   tx: number;
-}
-
-/** Последний принятый тик ноды: повтор с тем же запуском и номером отбрасывается. */
-interface ILastTick {
-  bootId: string;
-  seq: number;
 }
 
 interface ILastWrite {
@@ -118,7 +110,6 @@ const PEER_MAP_TTL_MS = 60_000;
 const OVERVIEW_MIN_INTERVAL_MS = 1000;
 const LIVE_TTL_SEC = 300;
 const COUNTER_TTL_SEC = 3600;
-const TICK_TTL_SEC = 86_400;
 const WINDOW_TTL_SEC = 900;
 
 /**
@@ -138,25 +129,16 @@ const counterDelta = (
 };
 
 /**
- * Момент сбора тика по часам сервера: задержка доставки считается по часам
- * агента (`sentAt − collectedAt`), поэтому расхождение часов не влияет.
- * Без полей тика — момент приёма.
+ * Момент сбора точки: по часам узла, но не позже приёма (часы узла спешат)
+ * и не раньше часа назад (досылку старше истории не восстановить).
  */
 export const tickTime = (
-  report: Pick<IWgAgentStatsReport, "collectedAt" | "sentAt">,
+  collectedAt: number | undefined,
   now: number,
-): number => {
-  if (report.collectedAt === undefined || report.sentAt === undefined) {
-    return now;
-  }
-
-  const delay = Math.min(
-    Math.max(0, report.sentAt - report.collectedAt),
-    MAX_BACKFILL_MS,
-  );
-
-  return now - delay;
-};
+): number =>
+  collectedAt === undefined
+    ? now
+    : Math.min(now, Math.max(collectedAt, now - MAX_BACKFILL_MS - 1));
 
 const sum = <T>(items: T[], value: (item: T) => number): number =>
   items.reduce((total, item) => total + value(item), 0);
@@ -204,20 +186,12 @@ export class WgStatsIngestService {
   async ingest(
     node: WgNode,
     report: IWgAgentStatsReport,
-    transport: EWgAgentTransport | null = null,
   ): Promise<IWgIngestResult> {
     const now = Date.now();
-
-    if (await this._isDuplicate(node.id, report)) {
-      return { duplicate: true, backfill: false };
-    }
-
-    const at = tickTime(report, now);
+    const at = tickTime(report.collectedAt, now);
     const fresh = now - at <= FRESH_MS;
 
-    if (now - at > MAX_BACKFILL_MS) {
-      return { duplicate: false, backfill: true };
-    }
+    if (now - at > MAX_BACKFILL_MS) return { backfill: true };
 
     // При открытой админке события уходят каждый тик, без порога.
     const everyTick = fresh && (await this._demand.isWatched());
@@ -258,7 +232,6 @@ export class WgStatsIngestService {
       node,
       interfaceLives,
       report.sys ?? null,
-      transport,
       at,
       fresh,
       everyTick,
@@ -266,30 +239,7 @@ export class WgStatsIngestService {
 
     if (fresh) await this._maybeRebuildOverview(now, everyTick);
 
-    return { duplicate: false, backfill: !fresh };
-  }
-
-  /** Повтор тика того же запуска агента (досылка после разрыва связи). */
-  private async _isDuplicate(
-    nodeId: string,
-    report: IWgAgentStatsReport,
-  ): Promise<boolean> {
-    if (report.seq === undefined || !report.bootId) return false;
-
-    const key = `tick:${nodeId}`;
-    const last = await this._live.getJson<ILastTick>(key);
-
-    if (last && last.bootId === report.bootId && report.seq <= last.seq) {
-      return true;
-    }
-
-    await this._live.setJson(
-      key,
-      { bootId: report.bootId, seq: report.seq },
-      TICK_TTL_SEC,
-    );
-
-    return false;
+    return { backfill: !fresh };
   }
 
   private async _ingestPeers(
@@ -575,7 +525,6 @@ export class WgStatsIngestService {
     node: WgNode,
     interfaceLives: IWgInterfaceLive[],
     sys: IWgNodeSysMetrics | null,
-    transport: EWgAgentTransport | null,
     at: number,
     fresh: boolean,
     everyTick: boolean,
@@ -590,7 +539,6 @@ export class WgStatsIngestService {
       rxBps: sum(interfaceLives, iface => iface.rxBps),
       txBps: sum(interfaceLives, iface => iface.txBps),
       sys,
-      transport,
       ts: new Date(at).toISOString(),
     };
 

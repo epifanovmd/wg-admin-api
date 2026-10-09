@@ -4,6 +4,8 @@ import { Redis } from "ioredis";
 import { createServer } from "net";
 import { Client } from "pg";
 
+import { closeAgentReleases, prepareAgentReleases } from "./agent-release";
+
 /**
  * Интеграционный стенд: настоящий сервер (`APP_ROLE=all`) поверх Postgres,
  * Redis и SMTP (Mailpit). Параметры — из окружения E2E_*, по умолчанию —
@@ -77,6 +79,9 @@ const resetRedis = async (): Promise<void> => {
   redis.disconnect();
 };
 
+/** Общий токен регистрации агентов стенда. */
+export const E2E_BOOTSTRAP_TOKEN = "e2e-bootstrap-token-0123456789abcdef";
+
 let server: ChildProcess | undefined;
 
 export let BASE_URL = "";
@@ -86,6 +91,7 @@ export const startServer = async (): Promise<void> => {
   await resetRedis();
 
   const port = await freePort();
+  const releases = await prepareAgentReleases();
 
   BASE_URL = `http://127.0.0.1:${port}`;
   server = spawn(process.execPath, ["--import", "tsx", "src/main.ts"], {
@@ -116,11 +122,14 @@ export const startServer = async (): Promise<void> => {
       JWT_SECRET_KEY: "e2e-secret-key-0123456789abcdef0123456789",
       ADMIN_EMAIL: E2E.admin.email,
       ADMIN_PASSWORD: E2E.admin.password,
-      // Релиз агента — фикстура с известным sha256 (обновление агента).
-      WG_AGENT_DIST_DIR: "test/e2e/fixtures/agent-release",
-      // Канал агента: быстрые проверки разрыва и отзыва ключа.
-      WG_AGENT_LINK_OFFLINE_GRACE_SEC: "1",
-      WG_AGENT_LINK_KEY_CHECK_MS: "1000",
+      // Агенты: общий токен регистрации, выпуск стенда (agent-release.ts:
+      // агент — с сервера стенда, не с GitHub; воркеры проекта с подписью
+      // ключом стенда), быстрый статус и отметка offline.
+      AGENT_BOOTSTRAP_TOKEN: E2E_BOOTSTRAP_TOKEN,
+      ...releases,
+      AGENT_STATUS_INTERVAL_MS: "2000",
+      AGENT_METRICS_INTERVAL_MS: "2000",
+      AGENT_OFFLINE_GRACE_MS: "1000",
     },
   });
 
@@ -143,8 +152,9 @@ export const startServer = async (): Promise<void> => {
 };
 
 export const stopServer = async (): Promise<void> => {
-  if (!server || server.exitCode !== null) return;
-
-  server.kill("SIGTERM");
-  await once(server, "exit");
+  if (server && server.exitCode === null) {
+    server.kill("SIGTERM");
+    await once(server, "exit");
+  }
+  await closeAgentReleases();
 };

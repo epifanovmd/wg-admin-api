@@ -2,7 +2,7 @@ import { inject } from "inversify";
 
 import { config } from "../../config";
 import { Injectable } from "../../core";
-import { WgAgentBinaryService } from "../wg-agent";
+import { AgentService } from "../agent";
 import { IAppVersionDto } from "./app-info.dto";
 
 /** Сведения о запущенном бэкенде. */
@@ -13,20 +13,18 @@ export class AppInfoService {
   ).toISOString();
 
   constructor(
-    @inject(WgAgentBinaryService)
-    private readonly _agentBinaries: Pick<WgAgentBinaryService, "release">,
+    @inject(AgentService)
+    private readonly _agents: Pick<AgentService, "releaseVersion">,
     private readonly _app: typeof config.app = config.app,
   ) {}
 
   async version(): Promise<IAppVersionDto> {
-    const agent = await this._agentBinaries.release();
-
     return {
       version: this._app.version,
       commit: this._app.commit,
       builtAt: this._app.builtAt,
       startedAt: this._startedAt,
-      agentVersion: agent.version,
+      agentVersion: await this._agents.releaseVersion(),
     };
   }
 }

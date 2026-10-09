@@ -1,0 +1,14 @@
+# Агент узла smoke-стенда (test/smoke/Dockerfile.agent). Адрес бэкенда, токен регистрации,
+# имя и метки — переменными окружения контейнера: AGENT_SERVER_URL, AGENT_ENROLL_TOKEN,
+# AGENT_NAME, AGENT_LABELS (nodeId=<id ноды>).
+update:
+  mode: external
+log:
+  level: info
+  forward: warn
+workers:
+  # Конфиги wg-quick — /etc/wireguard, что создал воркер — /var/lib/wg-admin/state.json.
+  - name: wg
+    command: ["/usr/local/bin/wg-worker"]
+  - name: socks
+    command: ["/usr/local/bin/socks-worker"]

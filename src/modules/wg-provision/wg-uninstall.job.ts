@@ -8,18 +8,18 @@ import {
   JobError,
   logger,
 } from "../../core";
-import { WgNodeService, WgSecretBox } from "../wg-node";
-import { renderInstallScript } from "./install-script";
-import { buildUninstallPlan, workFiles } from "./provision-plan";
-import { createWorkDir, removeWorkDir, runSshPlan } from "./ssh-plan";
+import { WgNodeAgentService, WgSecretBox } from "../wg-node";
+import { buildUninstallPlan } from "./provision-plan";
+import { runSshPlan } from "./ssh-plan";
 import { SshRunner, SshRunnerFactory } from "./ssh-runner";
 import { SSH_RUNNER_FACTORY } from "./wg-provision.job";
 import { IWgUninstallJobData, WG_UNINSTALL_QUEUE } from "./wg-provision.types";
 
 /**
- * Удаление агента с VPS: остановка с откатом созданного агентом, cleanup,
- * удаление контейнера и конфигурации. Успех — ключ агента отозван, нода
- * снова `created` (можно установить заново).
+ * Удаление агента с VPS: `agent uninstall --purge` экземпляра проекта —
+ * воркеры убирают созданное ими, служба, программа, настройки, данные и
+ * поставленные установкой пакеты удаляются. Успех — агент отозван и удалён,
+ * нода снова `created` (можно установить заново).
  */
 @Injectable()
 export class WgUninstallNodeJob implements IJobHandler<IWgUninstallJobData> {
@@ -31,7 +31,7 @@ export class WgUninstallNodeJob implements IJobHandler<IWgUninstallJobData> {
   };
 
   constructor(
-    @inject(WgNodeService) private readonly _nodes: WgNodeService,
+    @inject(WgNodeAgentService) private readonly _agents: WgNodeAgentService,
     @inject(WgSecretBox) private readonly _secrets: WgSecretBox,
     @inject(SSH_RUNNER_FACTORY)
     @optional()
@@ -41,7 +41,6 @@ export class WgUninstallNodeJob implements IJobHandler<IWgUninstallJobData> {
   async handle(ctx: JobContext<IWgUninstallJobData>): Promise<void> {
     const data = ctx.data;
     const runner = this._sshFactory();
-    let workDir: string | null = null;
 
     try {
       await ctx.progress(0.05, "Подключение по SSH");
@@ -57,20 +56,13 @@ export class WgUninstallNodeJob implements IJobHandler<IWgUninstallJobData> {
           : undefined,
       });
 
-      workDir = await createWorkDir(runner);
-      // Бэкенд для удаления не нужен — адрес в установщике не используется.
-      await runner.upload(
-        workFiles(workDir).script,
-        Buffer.from(renderInstallScript(""), "utf8"),
-      );
-
-      const plan = buildUninstallPlan(workDir);
+      const plan = buildUninstallPlan(this._agents.instance());
 
       await runSshPlan(ctx, runner, plan, data.username, {
         from: 0.1,
         to: 0.9,
       });
-      await this._nodes.detachAgent(data.nodeId, data.actorId);
+      await this._agents.detach(data.nodeId, data.actorId);
       await ctx.progress(1, "Агент удалён");
     } catch (err) {
       logger.error({ err, nodeId: data.nodeId }, "[WG] uninstall failed");
@@ -82,7 +74,6 @@ export class WgUninstallNodeJob implements IJobHandler<IWgUninstallJobData> {
             false,
           );
     } finally {
-      if (workDir) await removeWorkDir(runner, workDir);
       runner.end();
     }
   }

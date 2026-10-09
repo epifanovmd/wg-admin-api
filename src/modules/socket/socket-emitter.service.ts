@@ -36,6 +36,15 @@ export class SocketEmitterService {
     this.server.io.to(room).emit<any>(event, ...args);
   }
 
+  /** Событие нескольким комнатам: сокет в нескольких из них получит его один раз. */
+  toRooms<K extends keyof ISocketEmitEvents>(
+    rooms: string[],
+    event: K,
+    ...args: Parameters<ISocketEmitEvents[K]>
+  ): void {
+    if (rooms.length) this.server.io.to(rooms).emit<any>(event, ...args);
+  }
+
   /**
    * Событие комнате, кроме сокетов, которые состоят в комнатах `except`
    * (например, получили то же содержимое более полной рассылкой).

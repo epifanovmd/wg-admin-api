@@ -65,8 +65,6 @@ export interface IWgNodeLive {
   rxBps: number;
   txBps: number;
   sys: IWgNodeSysMetrics | null;
-  /** Канал связи агента; `null` — неизвестен. */
-  transport: EWgAgentTransport | null;
   ts: string;
 }
 
@@ -88,14 +86,6 @@ export enum EWgSeriesGroupBy {
   Node = "node",
   Interface = "interface",
   Peer = "peer",
-}
-
-/** Канал связи агента с бэкендом. */
-export enum EWgAgentTransport {
-  /** Постоянное WebSocket-соединение. */
-  Link = "link",
-  /** Запасной путь: long-poll и отдельные HTTP-запросы. */
-  Http = "http",
 }
 
 /** Точка короткой истории скорости (кольцевой ряд последних минут). */

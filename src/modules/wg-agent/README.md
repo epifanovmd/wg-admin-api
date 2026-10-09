@@ -1,81 +1,70 @@
 # Модуль wg-agent
 
-Связь с агентами нод: постоянный канал (WebSocket) и HTTP-протокол
-(`/api/v1/wg-agent`, тег WgAgent) как запасной путь. Аутентификация —
-api-ключ со scope `wg-agent:<nodeId>` (выпускается модулем wg-node); контакт
-обновляет `lastSeenAt` ноды и возвращает её в online. Общая логика обоих
-путей (аутентификация, отчёт, приём статистики с пробами, маршрутами и
-прокси) — `WgAgentSessionService`.
+Связь WG-домена с агентами нод. Агент (github.com/epifanovmd/agent, модуль
+[agent](../agent/README.md)) держит связь, хранит настройки воркеров и шлёт метрики;
+работу на ноде делают воркеры проекта `wg` и `socks` ([agent/README.md](../../../agent/README.md)).
+Модуль собирает их настройки из БД, принимает итоги, метрики и события. Своих маршрутов
+и таблиц нет; контракт воркеров — `wg-worker.contract.ts` (менять вместе с воркерами).
 
-## Канал постоянной связи
+## Настройки воркеров ноды
 
-`WgAgentLinkGateway` (IBootstrap, некритичный, только при HTTP — роль
-`api|all`) принимает upgrade на `/api/v1/wg-agent/link` (остальные upgrade
-достаются Socket.IO), ключ проверяется до установки соединения (401/403 —
-отказ). Соединение — `WgAgentLinkConnection`; протокол v1 —
-`wg-agent-link.protocol.ts`, JSON-сообщения с полем `type`:
+| Воркер/ключ     | Значение                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `wg/state`      | желаемое состояние: `version` (= `wg_nodes.config_version`), интерфейсы с пирами и ключами, IPIP-туннели, пробросы релея |
+| `wg/probes`     | `targets` — другие ноды с `publicHost` для проб связности (`WgMeshService.probeTargetsFor`)                              |
+| `socks/proxies` | `proxies` — SOCKS5-прокси ноды (`WgSocksAppService.agentConfigs`)                                                        |
 
-- агент → сервер: `hello {knownVersion}`, `report`, `stats` (с `seq`,
-  `bootId`, `collectedAt`, `sentAt`), `command.ack|output|complete`;
-- сервер → агент: `welcome {protocol, statsIntervalMs, serverTime}`,
-  `state`, `rate {statsIntervalMs}`, `ack {seq}`, `error {message}`;
-- закрытие: 1012 — рестарт сервера, 4000 — нет `hello` за 10 с, 4401 — ключ
-  отозван или заменён.
+`WgAgentSyncService.sync(nodeId)` собирает все три и пишет в хранилище агентов
+(`AgentWorkerService.putConfig`) только те, чьё значение изменилось: агент на связи
+получает новую версию сразу, без связи — при подключении (и применяет без связи с
+бэкендом после перезагрузки). Когда:
 
-Сообщения соединения обрабатываются по очереди. Состояние уходит после
-`hello`, если версия агента устарела или есть команды, и по сигналу
-`wg_node_changed` (`WgNodeSignals`, debounce 50 мс) — только при новой версии
-или новых командах. Частота статистики — по спросу зрителей
-(`WgViewerDemandService` модуля wg-stats): `WG_AGENT_LINK_LIVE_STATS_MS`
-(1000) или `WG_AGENT_LINK_IDLE_STATS_MS` (10000), пересмотр раз в 2 с.
-Ping — `WG_AGENT_LINK_HEARTBEAT_MS`; ключи открытых соединений
-перепроверяются раз в `WG_AGENT_LINK_KEY_CHECK_MS`. Разрыв без другого
-соединения ноды в процессе — задача `wg.agent-link-lost` с отсрочкой
-`WG_AGENT_LINK_OFFLINE_GRACE_SEC`: нода, не выходившая на связь с момента
-разрыва, — offline. Живая статистика ноды несёт `transport: link|http`.
+- **изменение домена** — `WgNodeService.markDirty` в транзакции поднимает
+  `config_version`, триггер БД шлёт NOTIFY `wg_node_changed` после коммита
+  (`WgNodeSignals`), процесс с соединениями агентов (роли `api|all`) собирает настройки
+  (изменения одной ноды склеиваются за 50 мс, сборки одной ноды не пересекаются);
+- **нода создана, удалена, сменила адрес** — меняются цели проб у всех: сверка всех нод;
+- **привязка агента** — нода получает новую версию (`bindAgent`);
+- **старт процесса** и cron `wg.agent-sync` (раз в 10 мин) — сверка всех нод с агентами.
 
-## HTTP-протокол (запасной путь)
-
-- `GET state?knownVersion&waitMs` — long-poll желаемого состояния: полный
-  снимок (интерфейсы с расшифрованными ключами и пирами, IPIP-туннели обоих
-  ролей, пробросы UDP для релея, невыполненные команды, настройки). Ответ
-  приходит раньше таймаута при росте `configVersion` или появлении команд:
-  триггеры БД (миграция `WgNodeChangedNotify`) шлют NOTIFY `wg_node_changed`
-  с id ноды после коммита, `WgNodeSignals` (LISTEN, `PgSignals` ядра) будит
-  ожидание сразу. Без LISTEN — опрос раз в секунду, с LISTEN — страховочная
-  перепроверка раз в 10 с.
-- `POST state` — отчёт: `appliedVersion`/`applyError`, версии агента и wg,
-  сведения об ОС, фактические статусы интерфейсов.
-- `POST stats` — статистика `wg show all dump` + метрики хоста (частота —
-  `settings.statsIntervalMs` состояния), уходит в модуль wg-stats.
-- `POST commands/{id}/ack|output|complete` — жизненный цикл императивных
-  команд (перезапуск интерфейса, журнал агента, обновление).
-
-- `GET binary/{arch}` (amd64, arm64) — бинарь агента своим ключом, sha256 в
-  заголовке `X-Agent-Sha256`; `GET install.sh` — публичный установщик
-  (`renderInstallScript` модуля wg-provision, адрес — `APP_PUBLIC_URL`), секретов
-  не содержит.
-
-Контракт типов — `wg-agent-protocol.ts`; зеркало в
-`agent/internal/protocol/protocol.go` (менять синхронно).
-
-`WgAgentStateService` собирает состояние из wg-interface/wg-peer/wg-endpoint:
+`WgAgentStateService` собирает `state` из wg-interface/wg-peer/wg-endpoint:
 туннели строятся из релей-линков (`wgt<index>`, /30 из `WG_RELAY_TUNNEL_CIDR`,
 MTU 1480), пробросы — из интерфейсов, обслуживаемых relay-точками ноды, и
 включённых пробросов модуля wg-forward. Для интерфейса — список кандидатов
 по копиям (основная, затем поднятые реплики по приоритету; закреплённая —
 единственная): `dnat` и `route=direct` — прямой адрес копии, `route=tunnel` —
 только туннель, `route=auto` — туннель копии, затем её прямой адрес, затем
-следующая копия. Агент берёт первого живого кандидата.
+следующая копия. Воркер wg берёт первого живого кандидата.
 
-## Обновление агента
+## Итоги, метрики, события (`WgAgentTelemetryService`)
 
-`WgAgentBinaryService` читает `wg-admin-agent-linux-<arch>` и `VERSION` из
-каталога `WG_AGENT_DIST_DIR` (по умолчанию `agent/dist`; бинари собираются в
-образе бэкенда) и считает sha256. `GET /api/v1/wg/agent/release` (право `wg:node:view[:own]`) —
-версия и хэши по архитектурам; нода, чей `agentCodeHash` отличается от хэша
-её архитектуры, — кандидат на обновление. `POST
-/api/v1/wg/agent/nodes/{nodeId}/update` (право `wg:node:agent[:own]`, с
-областью «свои» — только своя нода) — команда
-`agent-update` с `hash` бинаря архитектуры ноды (`osInfo.arch`); архитектура
-неизвестна или бинаря нет — 404 `WG_AGENT_BINARY_NOT_BUILT`.
+- **Итог `wg/state`** — тело ответа воркера на `PUT /config/state` (статус настройки
+  `applied`, `AgentConfigChangedEvent`) или событие `state.result` (повтор после ошибки,
+  смена маршрута, долгое применение): `{ version, appliedAt, interfaces, routes, errors }`
+  → `appliedVersion` (только растёт; итог старой версии ошибку новой не перетирает),
+  `applyError` (ошибки через «; »; нет — `null`), статусы интерфейсов и реплик, маршруты
+  пробросов. Без `appliedAt` (ответ 202 — применение ещё идёт) итог пропускается.
+  Отказ агента или воркера (`failed`) — `applyError` с текстом ошибки.
+- **Метрики** (`AgentMetricsReceivedEvent`, каждая точка): `workers.wg.interfaces` (wg show
+  dump) и метрики узла `host` (sysmetrics агента: CPU, нагрузка, память, диск, аптайм,
+  сетевые интерфейсы, conntrack) → `WgStatsIngestService`; из свежей точки ещё пробы
+  туннелей (`WgLinkHealthService`), маршруты пробросов (wg-forward, обслуживающая копия),
+  пробы нод (`WgMeshService`), прокси (`workers.socks.proxies`).
+- **Событие `route.changed`** — маршруты пробросов по пробам воркера, сразу.
+
+События воркера обрабатываются до подтверждения агенту (`AgentService.onWorkerEvent`):
+ошибка — агент пришлёт событие снова.
+
+## Живая статистика по спросу
+
+`WgAgentWatchService`: пока админку кто-то смотрит (`WgViewerDemandService` — сокеты в
+любом процессе), агенты нод на связи с этим процессом получают `watch` — метрики раз в
+секунду (продление раз в 15 с, срок 30 с); зрителей нет — наблюдатель снимается, частота —
+`AGENT_METRICS_INTERVAL_MS`.
+
+## Тесты
+
+Юнит: сборка и запись настроек (`wg-agent-sync.service.test.ts`), итоги и метрики
+(`wg-agent-telemetry.service.test.ts`). E2E: сценарии домена с фейковым агентом
+(`test/e2e/fake-agent.ts`, `node-agent.ts`) и настоящий агент с воркером wg в режиме
+`WG_DRY_RUN` (`test/e2e/agents.e2e.ts`).

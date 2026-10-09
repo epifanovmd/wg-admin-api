@@ -1,7 +1,7 @@
 {
   "name": "wg-admin",
   "version": "1.0.1",
-  "description": "WG Admin — админка WireGuard: бэкенд (Koa, tsoa, TypeORM, pg-boss) и агент нод на Go",
+  "description": "WG Admin — админка WireGuard: бэкенд (Koa, tsoa, TypeORM, pg-boss) и воркеры агента нод на Go",
   "private": true,
   "license": "MIT",
   "engines": {
@@ -33,6 +33,13 @@
     "migration:revert": "NODE_ENV=development tsx ./node_modules/typeorm/cli.js migration:revert -d src/data-source.ts",
     "typecheck": "tsc --noEmit",
     "gen:module": "node scripts/gen-module.mjs",
+    "agent": "agent/dev.sh run",
+    "agent:start": "agent/dev.sh start",
+    "agent:stop": "agent/dev.sh stop",
+    "agent:status": "agent/dev.sh status",
+    "agent:logs": "agent/dev.sh logs",
+    "agent:release": "agent/release.sh",
+    "agent:fetch": "agent/fetch-agent.sh",
     "prepare": "lefthook install"
   },
   "dependencies": {
@@ -44,6 +51,7 @@
     "@simplewebauthn/server": "^14",
     "@socket.io/redis-adapter": "^8.3.0",
     "@tsoa/runtime": "6.6.0",
+    "agent-sdk": "https://github.com/epifanovmd/agent/releases/download/v1.1.0/agent-sdk-1.1.0.tgz",
     "bcrypt": "^6.0.0",
     "ejs": "^6",
     "helmet": "^8",

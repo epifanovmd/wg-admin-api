@@ -1,24 +1,28 @@
 import { asJobHandler, Module } from "../../core";
-import { WgAgentController } from "./wg-agent.controller";
-import { WgAgentBinaryService } from "./wg-agent-binary.service";
-import { WgAgentLinkGateway } from "./wg-agent-link.gateway";
-import { WgAgentLinkLostJob } from "./wg-agent-link-lost.job";
-import { WgAgentSessionService } from "./wg-agent-session.service";
+import { asSocketListener } from "../socket";
+import { WgAgentBootstrap } from "./wg-agent.bootstrap";
+import { WgAgentListener } from "./wg-agent.listener";
 import { WgAgentStateService } from "./wg-agent-state.service";
-import { WgAgentUpdateController } from "./wg-agent-update.controller";
-import { WgNodeSignals, WgNodeSignalsBootstrap } from "./wg-node-signals";
+import { WgAgentSyncJob } from "./wg-agent-sync.job";
+import { WgAgentSyncService } from "./wg-agent-sync.service";
+import { WgAgentTelemetryService } from "./wg-agent-telemetry.service";
+import { WgAgentWatchService } from "./wg-agent-watch.service";
+import { WgNodeSignals } from "./wg-node-signals";
 
+/**
+ * Связь WG-домена с агентами нод (agent-sdk): настройки воркеров `wg` и
+ * `socks` из БД, их итоги, метрики и события — обратно в домен.
+ */
 @Module({
   providers: [
     WgNodeSignals,
-    WgAgentBinaryService,
     WgAgentStateService,
-    WgAgentSessionService,
-    WgAgentController,
-    WgAgentUpdateController,
-    WgAgentLinkGateway,
-    asJobHandler(WgAgentLinkLostJob),
+    WgAgentSyncService,
+    WgAgentTelemetryService,
+    WgAgentWatchService,
+    asSocketListener(WgAgentListener),
+    asJobHandler(WgAgentSyncJob),
   ],
-  bootstrappers: [WgNodeSignalsBootstrap, WgAgentLinkGateway],
+  bootstrappers: [WgAgentBootstrap],
 })
 export class WgAgentModule {}

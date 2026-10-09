@@ -24,19 +24,19 @@ describe("платформа", () => {
   });
 
   describe("API-ключи и задачи", () => {
-    it("API-ключ: выдаётся один раз, чужой scope — 403, отзыв — 401", async () => {
+    it("API-ключ: выдаётся один раз, чужой scope — 403, отзыв", async () => {
       expectStatus(
         await call(alice, "POST", "/api/v1/api-keys", {
           name: "x",
-          scopes: ["wg-agent:*"],
+          scopes: ["integration:*"],
         }),
         403,
       );
 
       const created = expectStatus(
         await call(admin, "POST", "/api/v1/api-keys", {
-          name: "stray-agent",
-          scopes: ["wg-agent:00000000-0000-4000-8000-000000000000"],
+          name: "integration",
+          scopes: ["integration:reports"],
         }),
         201,
       );
@@ -51,14 +51,6 @@ describe("платформа", () => {
 
       expect(JSON.stringify(list.data)).to.not.include(key.split(".")[1]);
 
-      // Ключ агента без существующей ноды — отказ протокола агента.
-      expectStatus(
-        await call(key, "GET", "/api/v1/wg-agent/state?waitMs=0", undefined, {
-          scheme: "ApiKey",
-        }),
-        403,
-        "WG_NODE_AGENT_SCOPE_INVALID",
-      );
       expectStatus(
         await call(
           admin,
@@ -67,12 +59,12 @@ describe("платформа", () => {
         ),
         204,
       );
-      expectStatus(
-        await call(key, "GET", "/api/v1/wg-agent/state?waitMs=0", undefined, {
-          scheme: "ApiKey",
-        }),
-        401,
-      );
+      const revoked = expectStatus(
+        await call(admin, "GET", "/api/v1/api-keys"),
+        200,
+      ).data.items.find((k: any) => k.id === created.data.apiKey.id);
+
+      expect(revoked.revokedAt).to.be.a("string");
     });
 
     it("видимая задача: владелец видит и отменяет, чужой — нет", async () => {

@@ -7,34 +7,13 @@ export enum EWgNodeStatus {
   Error = "error",
 }
 
-/** Типы команд, исполняемых агентом на ноде. */
-export enum EWgNodeCommandType {
-  /** Перезапуск интерфейса `wg-quick down && up`. */
-  InterfaceRestart = "interface-restart",
-  /** Последние строки журнала агента. */
-  AgentLogs = "agent-logs",
-  /** Обновить код агента с бэкенда и перезапуститься. */
-  AgentUpdate = "agent-update",
-}
-
-export enum EWgNodeCommandStatus {
-  Pending = "pending",
-  Running = "running",
-  Succeeded = "succeeded",
-  Failed = "failed",
-  Timeout = "timeout",
-}
-
-/** Сведения об ОС ноды, которые сообщает агент. */
-/**
- * Реализация WireGuard на ноде. `userspace` (wireguard-go) живёт в процессе
- * агента: перезапуск контейнера агента роняет интерфейсы.
- */
+/** Реализация WireGuard на ноде: модуль ядра или wireguard-go. */
 export enum EWgMode {
   Kernel = "kernel",
   Userspace = "userspace",
 }
 
+/** Сведения об ОС ноды: от агента (узел) и воркера wg (режим, порты). */
 export interface IWgNodeOsInfo {
   platform?: string;
   release?: string;
@@ -50,32 +29,31 @@ export interface IWgNodeOsInfo {
   tcpPorts?: number[];
 }
 
-/** Полезная нагрузка команды агенту. */
-export interface IWgNodeCommandPayload {
-  /** interface-restart: имя интерфейса. */
-  interfaceName?: string;
-  /** agent-logs: сколько последних строк вернуть. */
-  lines?: number;
-  /** agent-update: sha256 бинаря, который агент должен установить. */
-  hash?: string;
-}
-
 export const WG_NODE_NAME_MAX = 120;
 export const WG_NODE_DESCRIPTION_MAX = 2000;
 export const WG_NODE_HOST_MAX = 255;
 export const WG_AGENT_LOGS_DEFAULT_LINES = 200;
-export const WG_AGENT_LOGS_MAX_LINES = 1000;
+export const WG_AGENT_LOGS_MAX_LINES = 5000;
 
-/** Домен scope агентского api-ключа: `wg-agent:<nodeId>`. */
-export const WG_AGENT_SCOPE_DOMAIN = "wg-agent";
+/** Метка агента, по которой он привязывается к ноде (токен установки). */
+export const WG_NODE_ID_LABEL = "nodeId";
 
-export const wgAgentScope = (nodeId: string): string =>
-  `${WG_AGENT_SCOPE_DOMAIN}:${nodeId}`;
+/** Воркер WireGuard на агенте ноды: интерфейсы, туннели, пробросы, пробы. */
+export const WG_WORKER = "wg";
 
-/** nodeId из scopes агентского ключа; ключ не агентский — `null`. */
-export const nodeIdFromScopes = (scopes: string[]): string | null => {
-  const prefix = `${WG_AGENT_SCOPE_DOMAIN}:`;
-  const scope = scopes.find(item => item.startsWith(prefix));
+/** Воркер SOCKS5-прокси на агенте ноды. */
+export const SOCKS_WORKER = "socks";
 
-  return scope ? scope.slice(prefix.length) : null;
-};
+/** Воркеры агента ноды — ставятся из выпуска при установке. */
+export const WG_NODE_WORKERS = [WG_WORKER, SOCKS_WORKER] as const;
+
+/** Ключи настроек воркеров: желаемое состояние, цели проб, прокси. */
+export const WG_STATE_CONFIG = "state";
+export const WG_PROBES_CONFIG = "probes";
+export const SOCKS_PROXIES_CONFIG = "proxies";
+
+/** Срок токена установки агента вручную, минут. */
+export const WG_NODE_INSTALL_TOKEN_TTL_MINUTES = 24 * 60;
+
+/** Длина id агента (SDK выдаёт 32 шестнадцатеричных символа). */
+export const WG_NODE_AGENT_ID_MAX = 64;

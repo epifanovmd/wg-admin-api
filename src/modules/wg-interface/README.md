@@ -59,17 +59,17 @@ customPostUp/Down (право `wg:interface:hooks`), enabled, status/statusMessa
 (только интерфейсы за точками через релей — что и куда пересылают релеи),
 `enabled`, `query`.
 
-| Право                         | Что даёт                                                                               |
-| ----------------------------- | -------------------------------------------------------------------------------------- |
-| `wg:interface:view[:own]`     | `GET /`, `/options`, `/{id}`                                                           |
-| `wg:interface:create`         | `POST /`                                                                               |
-| `wg:interface:update[:own]`   | `PATCH /{id}`                                                                          |
-| `wg:interface:delete[:own]`   | `DELETE /{id}`                                                                         |
-| `wg:interface:control[:own]`  | `POST {id}/enable\|disable` (желаемое состояние), `POST {id}/restart` (команда агенту) |
-| `wg:interface:move[:own]`     | `POST {id}/move`                                                                       |
-| `wg:interface:replicas[:own]` | `POST {id}/replicas`, `DELETE {id}/replicas/{nodeId}`                                  |
-| `wg:interface:hooks[:own]`    | задавать `customPostUp`/`customPostDown` при создании и изменении                      |
-| `wg:interface:assign[:own]`   | `POST {id}/assign` `{ userId }`, `POST {id}/revoke` — владелец                         |
+| Право                         | Что даёт                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `wg:interface:view[:own]`     | `GET /`, `/options`, `/{id}`                                                                                 |
+| `wg:interface:create`         | `POST /`                                                                                                     |
+| `wg:interface:update[:own]`   | `PATCH /{id}`                                                                                                |
+| `wg:interface:delete[:own]`   | `DELETE /{id}`                                                                                               |
+| `wg:interface:control[:own]`  | `POST {id}/enable\|disable` (желаемое состояние), `POST {id}/restart` (запрос к воркеру wg, итог — в ответе) |
+| `wg:interface:move[:own]`     | `POST {id}/move`                                                                                             |
+| `wg:interface:replicas[:own]` | `POST {id}/replicas`, `DELETE {id}/replicas/{nodeId}`                                                        |
+| `wg:interface:hooks[:own]`    | задавать `customPostUp`/`customPostDown` при создании и изменении                                            |
+| `wg:interface:assign[:own]`   | `POST {id}/assign` `{ userId }`, `POST {id}/revoke` — владелец                                               |
 
 Без `wg:interface:hooks` или права изменять ноду тело с произвольными
 PostUp/PostDown (а также перенос и копия интерфейса с хуками) — 403

@@ -8,8 +8,12 @@ import {
   JobError,
   logger,
 } from "../../core";
-import { EWgNodeStatus, WgNodeService, WgSecretBox } from "../wg-node";
-import { renderInstallScript } from "./install-script";
+import {
+  EWgNodeStatus,
+  WgNodeAgentService,
+  WgNodeService,
+  WgSecretBox,
+} from "../wg-node";
 import {
   buildProvisionPlan,
   isInsecureBackendUrl,
@@ -23,10 +27,11 @@ import { IWgProvisionJobData, WG_PROVISION_QUEUE } from "./wg-provision.types";
 export const SSH_RUNNER_FACTORY = Symbol("SshRunnerFactory");
 
 /**
- * Установка агента на VPS: установщик (он же — для ручной установки)
- * ставит зависимости, скачивает бинарь агента с бэкенда по ключу и включает
- * службу systemd. Прогресс и лог — в записи задачи (`track`), финальный
- * статус ноды подтверждает сам агент, выйдя на связь.
+ * Установка агента на VPS: команда установки с бэкенда (та же, что для
+ * ручной установки) ставит агента службой systemd, воркеры wg и socks из
+ * выпуска, пакеты и параметры ядра. Прогресс и лог — в записи задачи
+ * (`track`); ноду к агенту привязывает его регистрация по токену с меткой
+ * ноды, статус `online` — его выход на связь.
  */
 @Injectable()
 export class WgProvisionNodeJob implements IJobHandler<IWgProvisionJobData> {
@@ -39,6 +44,7 @@ export class WgProvisionNodeJob implements IJobHandler<IWgProvisionJobData> {
 
   constructor(
     @inject(WgNodeService) private readonly _nodes: WgNodeService,
+    @inject(WgNodeAgentService) private readonly _agents: WgNodeAgentService,
     @inject(WgSecretBox) private readonly _secrets: WgSecretBox,
     @inject(SSH_RUNNER_FACTORY)
     @optional()
@@ -69,30 +75,38 @@ export class WgProvisionNodeJob implements IJobHandler<IWgProvisionJobData> {
           : undefined,
       });
 
-      await ctx.progress(0.08, "Загрузка установщика");
+      await ctx.progress(0.08, "Токен регистрации");
       workDir = await createWorkDir(runner);
 
       const files = workFiles(workDir);
+      const node = await this._nodes.findEntity(data.nodeId);
 
       await runner.upload(
-        files.script,
-        Buffer.from(renderInstallScript(data.backendUrl), "utf8"),
-      );
-      await runner.upload(
-        files.key,
-        Buffer.from(this._secrets.open(data.agentKeyEnc), "utf8"),
+        files.token,
+        Buffer.from(this._secrets.open(data.tokenEnc), "utf8"),
       );
 
-      const plan = buildProvisionPlan(workDir);
+      const plan = buildProvisionPlan(
+        workDir,
+        this._agents.commandFor(
+          node,
+          { tokenFile: files.token },
+          data.backendUrl,
+        ),
+      );
 
       await runSshPlan(ctx, runner, plan, data.username, {
         from: 0.1,
         to: 0.95,
       });
 
-      await ctx.progress(1, "Агент запущен, ждём выхода на связь");
+      await ctx.progress(
+        1,
+        "Агент запущен, ждём регистрации и выхода на связь",
+      );
     } catch (err) {
       logger.error({ err, nodeId: data.nodeId }, "[WG] provision failed");
+      await this._agents.revokeToken(data.tokenId);
       await this._nodes.setStatus(data.nodeId, EWgNodeStatus.Error);
       throw err instanceof JobError
         ? err

@@ -19,8 +19,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/scrypt"
-
-	"wgadmin/agent/internal/protocol"
 )
 
 type pair struct {
@@ -73,7 +71,7 @@ func issue(t *testing.T, cn string, parent *pair, isCA bool, usage x509.ExtKeyUs
 
 type fixture struct {
 	ca, server, client, stranger *pair
-	config                       protocol.Socks
+	config                       Config
 	proxies                      *Proxies
 	addr                         string
 	echo                         net.Listener
@@ -92,10 +90,10 @@ func setup(t *testing.T) *fixture {
 	salt := []byte("0123456789abcdef")
 	hash, _ := scrypt.Key([]byte("secret-pass"), salt, scryptN, scryptR, scryptP, scryptKeyLen)
 
-	f.config = protocol.Socks{
+	f.config = Config{
 		ID: "s1", ListenPort: 1, CertPem: f.server.certPem, KeyPem: f.server.keyPem, CaPem: f.ca.certPem,
 		AllowedFingerprints: []string{Fingerprint(f.client.cert.Raw)},
-		Users:               []protocol.SocksUser{{Username: "tg", Salt: hex.EncodeToString(salt), Hash: hex.EncodeToString(hash)}},
+		Users:               []User{{Username: "tg", Salt: hex.EncodeToString(salt), Hash: hex.EncodeToString(hash)}},
 	}
 
 	var err error
@@ -121,8 +119,8 @@ func setup(t *testing.T) *fixture {
 		}
 		return listener, err
 	}
-	if errs := f.proxies.Apply([]protocol.Socks{f.config}); len(errs) != 0 {
-		t.Fatal(errs)
+	if statuses := f.proxies.Apply([]Config{f.config}); len(statuses) != 1 || statuses[0].Status != "listening" {
+		t.Fatalf("%+v", statuses)
 	}
 
 	t.Cleanup(func() {
@@ -249,7 +247,7 @@ func TestRevokeDropsConnection(t *testing.T) {
 
 	revoked := f.config
 	revoked.AllowedFingerprints = []string{}
-	f.proxies.Apply([]protocol.Socks{revoked})
+	f.proxies.Apply([]Config{revoked})
 
 	if read(conn, 1) != nil {
 		t.Fatal("отозванный клиент теряет соединение сразу")
@@ -264,9 +262,9 @@ func TestBusyPort(t *testing.T) {
 	proxies.Listen = func(int) (net.Listener, error) { return net.Listen("tcp", busy.Addr().String()) }
 	f := setup(t)
 
-	errs := proxies.Apply([]protocol.Socks{f.config})
-	if len(errs) != 1 || !strings.Contains(errs[0], "address already in use") {
-		t.Fatalf("%v", errs)
+	statuses := proxies.Apply([]Config{f.config})
+	if len(statuses) != 1 || statuses[0].Status != "error" || !strings.Contains(statuses[0].Message, "address already in use") {
+		t.Fatalf("%+v", statuses)
 	}
 }
 

@@ -17,13 +17,6 @@ export interface RateLimitOptions {
 }
 
 /**
- * Протокол агентов нод: доступ ограничен api-ключом, а статистика и
- * long-poll идут постоянно — общий лимит API они не расходуют.
- */
-export const isRateLimitExempt = (path: string): boolean =>
-  path.startsWith("/api/v1/wg-agent/");
-
-/**
  * Глобальный лимит запросов по IP клиента (`ctx.ip` учитывает `trustProxy`).
  * Память годится для одного инстанса; за балансировщиком счётчики в Redis.
  * Недоступный Redis не блокирует трафик: лимит пропускает запрос с
@@ -72,5 +65,4 @@ export const createRateLimitMiddleware = ({
 export const rateLimitMiddleware = createRateLimitMiddleware({
   ...config.rateLimit,
   redis: getRedis(),
-  skip: ctx => isRateLimitExempt(ctx.path),
 });

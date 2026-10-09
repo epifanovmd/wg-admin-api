@@ -1,6 +1,7 @@
 # Модуль wg-node
 
-Корень WG-домена: ноды (VPS с агентом), команды агентам, общие сервисы домена
+Корень WG-домена: ноды (VPS с агентом), их агенты (привязка, установка, состояние,
+журнал, обновления, запросы к воркеру wg), общие сервисы домена
 (шифрование секретов, генерация ключей WireGuard, проверка прав по userId,
 конфигурация `wg.config.ts`).
 
@@ -14,35 +15,42 @@
   ограничиваются своими нодами; невидимая нода по id — 404, видимая без права на
   действие — 403.
 - `wg:node:update|delete|agent|logs|provision|assign[:own]` — изменение,
-  удаление, ключ и обновление агента, журнал агента, установка/удаление агента
+  удаление, команда установки, привязка и обновление агента и воркеров, журнал агента,
+  установка/удаление агента
   по SSH, назначение и снятие владельца.
 - `wg:node:create` — создание (без области); создатель — автор запроса.
   Владелец при создании (`ownerId`), отличный от себя, — только с правом
   назначения (любая область).
 - Проверка для других модулей домена — `WgNodeService.findFor(actor, id,
 permission)` и `viewFilter(actor)`; методы без актора (`findEntity`,
-  `reissueAgentKey`, `markDirty`, …) — внутренние, без проверки прав.
+  `markDirty`, …) — внутренние, без проверки прав.
 
-Ключ агента — api-key со scope `wg-agent:<nodeId>`, владелец ключа — тот, кто
-его выпустил; доступ агента от прав пользователей не зависит.
+Агент ноды доступен через модуль agent тем, у кого есть право на ноду
+(`WgNodeAgentAccessPolicy`, `AGENT_ACCESS_POLICY`): `wg:node:view` — просмотр,
+`wg:node:logs` — журнал, `wg:node:agent` — действия, настройки и запросы к воркерам.
 
 ## Модель
 
 - **WgNode** (`wg_nodes`) — VPS с установленным агентом; `ownerId` —
-  назначенный владелец, `createdById` — создатель (оба FK users SET NULL). Желаемая конфигурация
-  версионируется: `configVersion` растёт при любом изменении домена
-  (`WgNodeService.markDirty`, вызывается в транзакции изменения), агент
-  применяет её и сообщает `appliedVersion`/`applyError`. `status`:
-  `created | provisioning | online | offline | error` — живость агента
-  (`lastSeenAt`, cron `wg.node-offline`). Ключ агента — api-key со scope
-  `wg-agent:<nodeId>` (`agentKeyId`), выдаётся при создании ноды и при ротации,
-  секрет возвращается один раз.
-- **WgNodeCommand** (`wg_node_commands`) — императивные команды агенту из
-  фиксированного набора: `interface-restart`, `agent-logs`, `agent-update`.
-  Статусы
-  `pending → running → succeeded | failed | timeout`; вывод копится в `output`
-  (предел `WG_COMMAND_OUTPUT_MAX_BYTES`). Агент берёт и завершает только
-  команды своей ноды.
+  назначенный владелец, `createdById` — создатель (оба FK users SET NULL). Желаемая
+  конфигурация версионируется: `configVersion` растёт при любом изменении домена
+  (`WgNodeService.markDirty`, вызывается в транзакции изменения); модуль wg-agent
+  отдаёт её воркеру wg настройкой `state`, итог применения даёт `appliedVersion` и
+  `applyError` (`inSync` — применённая версия не меньше желаемой).
+- **Агент** — `agentId` (уникален; id агента в модуле agent). Привязка — при
+  регистрации агента (`AgentEnrolledEvent`, `WgNodeAgentListener`): метка `nodeId`
+  одноразового токена установки; при общем токене окружения — метка `nodeId` самого
+  агента; без метки — нода без агента с тем же именем; иначе агент остаётся без ноды
+  (привязка вручную). Новый агент ноды — прежний отзывается, нода получает новую версию.
+  Агент удалён — нода без агента (`created`); нода удалена — её агент отзывается и
+  удаляется.
+- **Статус** (`status`, `statusMessage`) — по записи агента (`AgentUpdatedEvent`,
+  `wgNodeStatusOf`): нет агента или отозван — `created`, без связи — `offline`, воркер
+  wg или socks не зарегистрирован, упал или не в порядке — `error` с пояснением, иначе
+  `online`; `provisioning` и `error` ставит ещё установка по SSH. Оттуда же
+  `agentVersion`, `agentRemoteIp`, `lastSeenAt`, ОС (`osInfo`: узел — от агента, режим wg,
+  дистрибутив и занятые порты — из `health.info` воркера wg) и `wgVersion`; пишутся
+  только изменившиеся колонки.
 
 ## Эндпоинты (`/api/v1/wg/nodes`, тег WgNode)
 
@@ -53,19 +61,31 @@ permission)` и `viewFilter(actor)`; методы без актора (`findEnti
 пользователи присоединяются join-ом (`joinUserName`) в `findPage`, `findWithOwners` и `findManyWithOwners`, поэтому те же
 поля — и в событии `wg:node:updated`.
 
-| Метод  | Путь                     | Право                                                   |
-| ------ | ------------------------ | ------------------------------------------------------- |
-| POST   | `/`                      | `wg:node:create` (ответ содержит `agentKey` — один раз) |
-| GET    | `/`, `/options`, `/{id}` | `wg:node:view[:own]`                                    |
-| PATCH  | `/{id}`                  | `wg:node:update[:own]`                                  |
-| DELETE | `/{id}`                  | `wg:node:delete[:own]` (при интерфейсах — 409)          |
-| POST   | `/{id}/assign`           | `wg:node:assign[:own]` — `{ userId }`, владелец         |
-| POST   | `/{id}/revoke`           | `wg:node:assign[:own]` — снять владельца                |
-| POST   | `/{id}/agent-key`        | `wg:node:agent[:own]` — ротация ключа агента            |
-| GET    | `/{id}/logs`             | `wg:node:logs[:own]` — журнал агента (синхронно)        |
+| Метод  | Путь                             | Право                                                                    |
+| ------ | -------------------------------- | ------------------------------------------------------------------------ |
+| POST   | `/`                              | `wg:node:create` (ответ — нода и `install`: команда установки с токеном) |
+| GET    | `/`, `/options`, `/{id}`         | `wg:node:view[:own]`                                                     |
+| PATCH  | `/{id}`                          | `wg:node:update[:own]`                                                   |
+| DELETE | `/{id}`                          | `wg:node:delete[:own]` (при интерфейсах — 409)                           |
+| POST   | `/{id}/assign`                   | `wg:node:assign[:own]` — `{ userId }`, владелец                          |
+| POST   | `/{id}/revoke`                   | `wg:node:assign[:own]` — снять владельца                                 |
+| POST   | `/{id}/install-command`          | `wg:node:agent[:own]` — токен и команда установки агента                 |
+| POST   | `/{id}/agent`                    | `wg:node:agent[:own]` — `{ agentId }`, привязка агента                   |
+| POST   | `/{id}/agent/update`             | `wg:node:agent[:own]` — обновить агента до выпуска                       |
+| POST   | `/{id}/workers/{worker}/update`  | `wg:node:agent[:own]` — обновить воркер из выпуска                       |
+| POST   | `/{id}/workers/{worker}/restart` | `wg:node:agent[:own]` — перезапустить воркер                             |
+| GET    | `/{id}/logs?lines&worker`        | `wg:node:logs[:own]` — журнал агента или воркера с узла                  |
 
-`wg:node:agent` также даёт обновление агента (модуль wg-agent), `wg:node:provision` —
-установку и удаление агента по SSH (модуль wg-provision); оба — с той же областью.
+Команда установки (`WgNodeAgentService.commandFor`): `curl -fsSL <AGENT_PUBLIC_URL или
+APP_PUBLIC_URL>/api/v1/agent-link/install.sh | sudo sh -s -- --instance wg --token … --name
+<нода> --privileged --packages … --sysctl net.ipv4.ip_forward=1 --sysctl
+net.ipv6.conf.all.forwarding=1 --worker wg --worker socks` (экземпляр — `AGENT_INSTANCE`,
+пакеты — по менеджерам). Токен — одноразовый, с меткой ноды, сутки (10 минут — 30 дней,
+`expiresInMinutes`). Перезапуск интерфейса (модуль wg-interface) —
+`WgNodeAgentService.restartInterface`: запрос `POST /interfaces/{name}/restart` к воркеру
+wg основной ноды, итог — сразу; нет агента — 409 `WG_NODE_NO_AGENT`, отказ воркера — 502
+`WG_NODE_WORKER_FAILED`, агент без связи — 503 `AGENT_OFFLINE`. `wg:node:provision` —
+установка и удаление агента по SSH (модуль wg-provision), с той же областью.
 
 ## Сокет
 
@@ -104,6 +124,5 @@ previousOwnerId)`: `assign`/`revoke` передают прежнего влад�
 
 ## Конфигурация (`wg.config.ts`, секция `wg`)
 
-`WG_SECRETS_KEY` (обязателен в production), `WG_AGENT_POLL_WAIT_MS`,
-`WG_AGENT_OFFLINE_AFTER_SEC`, `WG_COMMAND_TIMEOUT_SEC`, `WG_COMMAND_*`,
-`WG_STATS_*_RETENTION_*`, `WG_NODE_METRIC_RETENTION_DAYS`.
+`WG_SECRETS_KEY` (обязателен в production), `WG_STATS_*_RETENTION_*`,
+`WG_NODE_METRIC_RETENTION_DAYS`, `WG_RELAY_TUNNEL_CIDR`. Агенты — `AGENT_*` (модуль agent).

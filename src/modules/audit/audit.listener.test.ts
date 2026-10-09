@@ -3,6 +3,7 @@ import "reflect-metadata";
 import { expect } from "chai";
 import sinon from "sinon";
 
+import { AgentActionAuditedEvent, AgentActionFinishedEvent } from "../agent";
 import { ApiKeyCreatedEvent, ApiKeyRevokedEvent } from "../api-key";
 import {
   AccountLockedEvent,
@@ -116,6 +117,38 @@ describe("AuditListener", () => {
       type: AuditEventType.API_KEY_REVOKED,
       actorId: "admin",
       subjectId: "k1",
+    });
+  });
+
+  it("records an agent action and its result; log reads are skipped", async () => {
+    await fire(
+      new AgentActionAuditedEvent("agent.revoke", "u1", "a1", "a1", {}),
+    );
+    const finished = (name: string) =>
+      new AgentActionFinishedEvent({
+        id: "x1",
+        agentId: "a1",
+        name: name as never,
+        actor: "u1",
+        status: "done",
+        createdAt: 1,
+        finishedAt: 2,
+      });
+
+    await fire(finished("agent.logs"));
+    await fire(finished("worker.restart"));
+
+    expect(record.callCount).to.equal(2);
+    expect(record.firstCall.args[0]).to.deep.equal({
+      type: AuditEventType.AGENT_ACTION,
+      actorId: "u1",
+      subjectId: "a1",
+      meta: { action: "agent.revoke", agentId: "a1" },
+    });
+    expect(record.secondCall.args[0]).to.deep.include({
+      type: AuditEventType.AGENT_ACTION_RESULT,
+      actorId: "u1",
+      subjectId: "a1",
     });
   });
 });

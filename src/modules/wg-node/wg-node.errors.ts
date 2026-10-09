@@ -22,24 +22,20 @@ export const WgNodeError = defineErrors("WG_NODE", {
     status: HttpStatus.CONFLICT,
     message: "Сначала удалите WireGuard-интерфейсы ноды",
   },
-  AGENT_SCOPE_INVALID: {
-    status: HttpStatus.FORBIDDEN,
-    message: "Ключ агента не привязан к ноде",
+  NO_AGENT: {
+    status: HttpStatus.CONFLICT,
+    message: "На ноде не установлен агент",
   },
-  COMMAND_NOT_FOUND: {
+  AGENT_BOUND: {
+    status: HttpStatus.CONFLICT,
+    message: "Агент уже привязан к другой ноде",
+  },
+  AGENT_NOT_FOUND: {
     status: HttpStatus.NOT_FOUND,
-    message: "Команда не найдена",
+    message: "Агент не найден",
   },
-  COMMAND_WAIT_TIMEOUT: {
-    status: HttpStatus.GATEWAY_TIMEOUT,
-    message: "Агент не ответил на команду вовремя",
-  },
-  COMMAND_NOT_PENDING: {
-    status: HttpStatus.CONFLICT,
-    message: "Команда уже завершена",
-  },
-  AGENT_OFFLINE: {
-    status: HttpStatus.CONFLICT,
-    message: "Агент ноды не на связи",
+  WORKER_FAILED: {
+    status: HttpStatus.BAD_GATEWAY,
+    message: "Воркер агента не выполнил запрос",
   },
 });

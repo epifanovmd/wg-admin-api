@@ -4,10 +4,7 @@ import { createServer, Server } from "http";
 import Koa from "koa";
 import { AddressInfo } from "net";
 
-import {
-  createRateLimitMiddleware,
-  isRateLimitExempt,
-} from "./rate-limit.middleware";
+import { createRateLimitMiddleware } from "./rate-limit.middleware";
 
 describe("createRateLimitMiddleware", () => {
   let server: Server;
@@ -124,11 +121,5 @@ describe("createRateLimitMiddleware", () => {
 
     srv.close();
     expect(statuses).to.deep.equal([200, 200, 200, 200, 429]);
-  });
-
-  it("протокол агентов (/api/v1/wg-agent) не расходует общий лимит", () => {
-    expect(isRateLimitExempt("/api/v1/wg-agent/stats")).to.equal(true);
-    expect(isRateLimitExempt("/api/v1/wg/nodes")).to.equal(false);
-    expect(isRateLimitExempt("/api/v1/wg-agentx")).to.equal(false);
   });
 });

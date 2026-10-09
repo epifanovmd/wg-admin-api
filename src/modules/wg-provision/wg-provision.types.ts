@@ -8,8 +8,13 @@ export interface IWgProvisionJobData {
   privateKeyEnc?: string;
   /** Пароль SSH, зашифрован. */
   passwordEnc?: string;
-  /** Ключ агента для этой ноды, зашифрован (выпускается при постановке). */
-  agentKeyEnc: string;
+  /**
+   * Одноразовый токен регистрации агента с меткой ноды, зашифрован
+   * (выпускается при постановке).
+   */
+  tokenEnc: string;
+  /** id токена: провал установки — токен отзывается. */
+  tokenId: string;
   /** Публичный URL бэкенда, до которого агент будет достукиваться. */
   backendUrl: string;
 }
@@ -25,7 +30,7 @@ export const WG_NODE_JOB_SCOPE = "wg-node";
 /** Данные задачи `wg.uninstall-node` (секреты зашифрованы `WgSecretBox`). */
 export interface IWgUninstallJobData {
   nodeId: string;
-  /** Кто запустил: от его имени отзывается ключ агента. */
+  /** Кто запустил: от его имени отзывается агент. */
   actorId: string;
   host: string;
   port: number;

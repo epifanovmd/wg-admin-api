@@ -1,10 +1,10 @@
 import { inject } from "inversify";
 
-import { config } from "../../config";
 import { Injectable, JobQueue } from "../../core";
 import type { AuthContext } from "../../types/koa";
 import {
   EWgNodeStatus,
+  WgNodeAgentService,
   WgNodePermissions,
   WgNodeService,
   WgSecretBox,
@@ -23,12 +23,16 @@ import {
   WG_UNINSTALL_QUEUE,
 } from "./wg-provision.types";
 
+/** Срок токена установки по SSH, минут: задача идёт сразу. */
+const WG_PROVISION_TOKEN_TTL_MINUTES = 60;
+
 /** Постановка установки агента: секреты шифруются до записи в очередь. */
 @Injectable()
 export class WgProvisionService {
   constructor(
     @inject(JobQueue) private readonly _jobs: JobQueue,
     @inject(WgNodeService) private readonly _nodes: WgNodeService,
+    @inject(WgNodeAgentService) private readonly _agents: WgNodeAgentService,
     @inject(WgSecretBox) private readonly _secrets: WgSecretBox,
   ) {}
 
@@ -43,15 +47,19 @@ export class WgProvisionService {
       nodeId,
       WgNodePermissions.NODE_PROVISION,
     );
-    const backendUrl = body.backendUrl ?? config.app.publicUrl;
+    const backendUrl = body.backendUrl ?? this._agents.publicUrl();
 
     if (!body.privateKey && !body.password) {
       throw WgProvisionError.AUTH_REQUIRED();
     }
     if (!backendUrl) throw WgProvisionError.BACKEND_URL_REQUIRED();
 
-    // Свежий ключ агента: прежний отзывается, VPS получает только новый.
-    const { agentKey } = await this._nodes.reissueAgentKey(actorId, node.id);
+    // Одноразовый токен с меткой ноды: агент привяжется к ней при регистрации.
+    const token = await this._agents.issueToken(
+      actorId,
+      node,
+      WG_PROVISION_TOKEN_TTL_MINUTES,
+    );
     const data: IWgProvisionJobData = {
       nodeId: node.id,
       host: body.host,
@@ -63,7 +71,8 @@ export class WgProvisionService {
       passwordEnc: body.password
         ? this._secrets.seal(body.password)
         : undefined,
-      agentKeyEnc: this._secrets.seal(agentKey),
+      tokenEnc: this._secrets.seal(token.token),
+      tokenId: token.tokenId,
       backendUrl,
     };
     const jobId = await this._jobs.enqueue(WG_PROVISION_QUEUE, data, {
@@ -74,7 +83,10 @@ export class WgProvisionService {
       scope: { type: WG_NODE_JOB_SCOPE, id: node.id },
     });
 
-    if (!jobId) throw WgProvisionError.ALREADY_RUNNING();
+    if (!jobId) {
+      await this._agents.revokeToken(token.tokenId);
+      throw WgProvisionError.ALREADY_RUNNING();
+    }
 
     await this._nodes.setStatus(node.id, EWgNodeStatus.Provisioning);
 
@@ -82,8 +94,8 @@ export class WgProvisionService {
   }
 
   /**
-   * Удалить агента с VPS по SSH: агент откатывает созданное им, контейнер,
-   * образ и конфигурация удаляются, ключ отзывается.
+   * Удалить агента с VPS по SSH: воркеры убирают созданное ими, агент
+   * удаляется с узла, его запись отзывается и удаляется.
    */
   async uninstall(
     actor: AuthContext,

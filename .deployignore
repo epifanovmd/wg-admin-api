@@ -9,3 +9,6 @@ coverage
 *.dump
 backup_*.sql.gz
 agent/dist
+agent/release
+agent/release.new
+.agent

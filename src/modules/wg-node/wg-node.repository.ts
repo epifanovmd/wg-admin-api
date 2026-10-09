@@ -50,8 +50,9 @@ export class WgNodeRepository extends BaseRepository<WgNode> {
   }
 
   /**
-   * Поднять желаемую версию конфигурации ноды — агент увидит изменение в
-   * ближайший long-poll. Вызывается в транзакции изменения домена.
+   * Поднять желаемую версию конфигурации ноды — после коммита она уходит
+   * воркеру wg агента (сигнал `wg_node_changed`). Вызывается в транзакции
+   * изменения домена.
    */
   async markDirty(nodeId: string, manager?: EntityManager): Promise<void> {
     const repo = manager ? this.getRepository(manager) : this;
@@ -68,24 +69,46 @@ export class WgNodeRepository extends BaseRepository<WgNode> {
     }
   }
 
-  /** Ноды, чей агент молчит дольше порога, — в offline; возвращает изменённые. */
-  async markSilentOffline(
-    silentSince: Date,
-    nodeId?: string,
-  ): Promise<string[]> {
-    const query = this.createQueryBuilder()
+  /** Нода агента. */
+  findByAgentId(agentId: string): Promise<WgNode | null> {
+    return this.findOne({ where: { agentId } });
+  }
+
+  /** Агенты нод: всех или своих (владелец или создатель). */
+  async findAgentIds(ownedBy?: string): Promise<string[]> {
+    const qb = this.createQueryBuilder("node")
+      .select("node.agentId", "agentId")
+      .where("node.agentId IS NOT NULL");
+
+    if (ownedBy) qb.andWhere(WgNodeAccess.ownedCondition("node"), { ownedBy });
+
+    return (await qb.getRawMany<{ agentId: string }>()).map(row => row.agentId);
+  }
+
+  /** Ноды с агентами: id ноды и агента. */
+  async findBound(): Promise<Array<{ id: string; agentId: string }>> {
+    const rows = await this.createQueryBuilder("node")
+      .select(["node.id AS id", 'node.agentId AS "agentId"'])
+      .where("node.agentId IS NOT NULL")
+      .getRawMany<{ id: string; agentId: string }>();
+
+    return rows;
+  }
+
+  /** Отвязать агента от ноды, где он был; возвращает id ноды. */
+  async clearAgent(agentId: string): Promise<string | null> {
+    const result = await this.createQueryBuilder()
       .update(WgNode)
-      .set({ status: EWgNodeStatus.Offline })
-      .where("status = :online", { online: EWgNodeStatus.Online })
-      .andWhere("(last_seen_at IS NULL OR last_seen_at < :silentSince)", {
-        silentSince,
-      });
+      .set({
+        agentId: null,
+        status: EWgNodeStatus.Created,
+        statusMessage: null,
+      })
+      .where("agent_id = :agentId", { agentId })
+      .returning(["id"])
+      .execute();
 
-    if (nodeId) query.andWhere("id = :nodeId", { nodeId });
-
-    const result = await query.returning(["id"]).execute();
-
-    return ((result.raw as { id: string }[]) ?? []).map(row => row.id);
+    return ((result.raw as { id: string }[]) ?? [])[0]?.id ?? null;
   }
 
   private _withOwners() {

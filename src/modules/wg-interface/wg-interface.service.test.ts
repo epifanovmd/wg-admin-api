@@ -63,7 +63,7 @@ describe("WgInterfaceService", () => {
   let endpoints: { findEntity: sinon.SinonStub };
   let relaySync: { syncRelaySafe: sinon.SinonStub };
   let secrets: { seal: sinon.SinonStub; open: sinon.SinonStub };
-  let commands: { createInterfaceRestart: sinon.SinonStub };
+  let nodeAgents: { restartInterface: sinon.SinonStub };
   let txRepo: ReturnType<typeof createMockRepository>;
   let dataSource: { transaction: sinon.SinonStub };
 
@@ -112,7 +112,9 @@ describe("WgInterfaceService", () => {
       seal: sinon.stub().callsFake((v: string) => `enc:${v}`),
       open: sinon.stub().callsFake((v: string) => v.replace("enc:", "")),
     };
-    commands = { createInterfaceRestart: sinon.stub().resolves({}) };
+    nodeAgents = {
+      restartInterface: sinon.stub().resolves({ name: "wg0", status: "up" }),
+    };
     dataSource = {
       transaction: sinon.stub().callsFake((cb: any) => cb({})),
     };
@@ -121,7 +123,7 @@ describe("WgInterfaceService", () => {
     service = new WgInterfaceService(
       repo as any,
       nodes as any,
-      commands as any,
+      nodeAgents as any,
       endpoints as any,
       relaySync as any,
       secrets as any,
@@ -477,18 +479,19 @@ describe("WgInterfaceService", () => {
     expect(nodes.markDirty.called).to.be.false;
   });
 
-  it("restart: создаёт команду агенту", async () => {
+  it("restart: запрос к воркеру wg основной ноды, итог — в ответе", async () => {
     const iface = makeIface();
 
     repo.findWithRelations.resolves(iface);
 
-    await service.restart(superUser as any, iface.id);
+    const result = await service.restart(superUser as any, iface.id);
 
+    expect(result).to.deep.equal({ name: "wg0", status: "up" });
     expect(
-      commands.createInterfaceRestart.calledWith(
+      nodeAgents.restartInterface.calledWith(
         iface.nodeId,
-        sinon.match.string,
         "wg0",
+        sinon.match.string,
       ),
     ).to.be.true;
   });

@@ -1,26 +1,55 @@
 # syntax=docker/dockerfile:1.7
 # Один образ на все роли процесса (APP_ROLE=api|worker|all) и миграции.
-# Бинари агента нод (Go, linux/amd64 и arm64) собираются здесь же — бэкенд
-# раздаёт их при установке и обновлении агентов. Стадии сборки идут на
-# платформе сборщика (кросс-компиляция, без эмуляции); платформа образа
-# влияет только на production-зависимости и runtime.
+# Воркеры проекта для узлов (agent/release: wg, socks и их manifest.json)
+# собираются здесь же — бэкенд раздаёт их (AGENT_RELEASES_DIR) вместе с
+# агентом и netprobe, которые берёт из выпусков GitHub (AGENT_RELEASES_GITHUB).
+# Стадии сборки идут на платформе сборщика (кросс-компиляция, без эмуляции);
+# платформа образа влияет только на production-зависимости и runtime.
 ARG NODE_VERSION=24-alpine
-ARG GO_VERSION=1.26-bookworm
+ARG GO_VERSION=1.26.9-bookworm
 
-# ── Агент нод: статические бинари под обе архитектуры ───────────────────────
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS agent
+# ── Воркеры узла (linux и darwin × amd64 и arm64) и утилита выпуска ─────────
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS agent-workers
 WORKDIR /agent
 COPY agent/go.mod agent/go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
-COPY agent/ ./
+COPY agent/internal ./internal
+COPY agent/workers ./workers
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    version=$(cat VERSION) && \
-    for arch in amd64 arm64; do \
-      CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
-        -ldflags "-s -w -X main.version=$version" \
-        -o dist/wg-admin-agent-linux-$arch ./cmd/wg-admin-agent; \
-    done && cp VERSION dist/VERSION
+    for name in wg socks; do \
+      version=$(tr -d '[:space:]' < workers/$name/VERSION); \
+      for p in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do \
+        CGO_ENABLED=0 GOOS=${p%-*} GOARCH=${p#*-} go build -trimpath -buildvcs=false \
+          -ldflags "-s -w -X main.version=$version" -o /out/workers/$name-$version-$p ./workers/$name; \
+      done; \
+    done
+# agent-release той же версии, что agent-sdk в package.json: manifest.json воркеров.
+COPY package.json /tmp/package.json
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    version=$(sed -n 's|.*agent-sdk-\([^/"]*\)\.tgz".*|\1|p' /tmp/package.json) && \
+    test -n "$version" && \
+    CGO_ENABLED=0 GOBIN=/out/bin go install github.com/epifanovmd/agent/cmd/agent-release@v$version
+
+# ── Воркеры проекта для узлов: сборки + manifest.json (без агента) ──────────
+# Ключ подписи — необязательный секрет agent_signing_key (base64 из
+# `agent-release keygen`): docker build --secret id=agent_signing_key,env=AGENT_SIGNING_KEY …
+# С ним воркеры подписаны ключом проекта (бэкенду — AGENT_UPDATE_PUBLIC_KEY пары),
+# без него не подписаны (agent/README.md, «Воркеры проекта»).
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION} AS agent-release
+RUN apk add --no-cache bash
+WORKDIR /src
+COPY package.json ./
+COPY agent/go.mod agent/release.sh ./agent/
+COPY agent/workers ./agent/workers
+COPY --from=agent-workers /out/workers /workers
+COPY --from=agent-workers /out/bin/agent-release /usr/local/bin/agent-release
+RUN --mount=type=secret,id=agent_signing_key \
+    if [ -s /run/secrets/agent_signing_key ]; then \
+      AGENT_SIGNING_KEY="$(cat /run/secrets/agent_signing_key)"; export AGENT_SIGNING_KEY; \
+    fi && \
+    WORKERS_PREBUILT=/workers AGENT_RELEASE_TOOL=agent-release bash agent/release.sh
 
 # ── Все зависимости для сборки ───────────────────────────────────────────────
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION} AS deps
@@ -67,8 +96,8 @@ COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/build ./build
 # Ассеты рантайма (шаблоны писем) лежат вне build/ и читаются по пути от корня.
 COPY --chown=node:node templates ./templates
-# Бинари агента: раздаются по ключу агента (установка и обновление).
-COPY --from=agent --chown=node:node /agent/dist ./agent/dist
+# Воркеры проекта для узлов (AGENT_RELEASES_DIR=/app/agent/release).
+COPY --from=agent-release --chown=node:node /src/agent/release ./agent/release
 
 # Версия сборки (GET /api/v1/app/version) — последним слоем: меняется при
 # каждой сборке и не сбрасывает кэш слоёв выше.

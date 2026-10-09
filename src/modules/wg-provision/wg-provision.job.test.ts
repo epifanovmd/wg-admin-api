@@ -9,6 +9,25 @@ import { WgUninstallNodeJob } from "./wg-uninstall.job";
 
 const WORK_DIR = "/tmp/wg-admin.Ab3dEf9h";
 
+/** Команда установки, как её собирает SDK (`installCommand`). */
+const installCommand = (tokenFile: string, baseUrl = "http://api") =>
+  `curl -fsSL '${baseUrl}/api/v1/agent-link/install.sh' | sudo sh -s -- --instance 'wg' --token-file '${tokenFile}' --worker 'wg' --worker 'socks'`;
+
+const makeAgents = () => ({
+  commandFor: sinon
+    .stub()
+    .callsFake((_node: unknown, auth: { tokenFile: string }, url: string) =>
+      installCommand(auth.tokenFile, url),
+    ),
+  revokeToken: sinon.stub().resolves(),
+  instance: () => "wg",
+});
+
+const makeNodes = () => ({
+  setStatus: sinon.stub().resolves(),
+  findEntity: sinon.stub().resolves({ id: uuid(), name: "node-1" }),
+});
+
 describe("WgProvisionNodeJob", () => {
   const makeRunner = () => {
     const calls: string[] = [];
@@ -40,17 +59,20 @@ describe("WgProvisionNodeJob", () => {
       username: "root",
       privateKeyEnc: "key",
       passwordEnc: undefined,
-      agentKeyEnc: "agent-key",
+      tokenEnc: "enroll-token",
+      tokenId: "t1",
       backendUrl: "http://api",
     },
     progress: sinon.stub().resolves(),
     log: sinon.stub().resolves(),
   });
 
-  it("установщик и ключ — файлами в свой каталог mktemp; ключа нет ни в одной команде", async () => {
+  it("токен — файлом в свой каталог mktemp; токена нет ни в одной команде", async () => {
     const runner = makeRunner();
+    const agents = makeAgents();
     const job = new WgProvisionNodeJob(
-      { setStatus: sinon.stub().resolves() } as any,
+      makeNodes() as any,
+      agents as any,
       { open: (v: string) => v } as any,
       () => runner as any,
     );
@@ -58,31 +80,56 @@ describe("WgProvisionNodeJob", () => {
     await job.handle(makeCtx() as any);
 
     const mktemp = runner.calls.findIndex(call => call.includes("mktemp -d"));
-    const script = runner.calls.indexOf(`upload:${WORK_DIR}/install.sh`);
-    const key = runner.calls.indexOf(`upload:${WORK_DIR}/agent.key`);
+    const token = runner.calls.indexOf(`upload:${WORK_DIR}/agent.token`);
     const install = runner.calls.findIndex(call =>
       call.includes(
-        `sh ${WORK_DIR}/install.sh --key-file ${WORK_DIR}/agent.key`,
+        `| sh -s -- --instance 'wg' --token-file '${WORK_DIR}/agent.token'`,
       ),
     );
 
     expect(mktemp).to.be.greaterThan(-1);
-    expect(script).to.be.greaterThan(mktemp);
-    expect(key).to.be.greaterThan(mktemp);
-    expect(install).to.be.greaterThan(Math.max(script, key));
-    expect(runner.upload.firstCall.args[1].toString()).to.include(
-      "BACKEND_URL='http://api'",
-    );
-    expect(runner.upload.secondCall.args[1].toString()).to.equal("agent-key");
+    expect(token).to.be.greaterThan(mktemp);
+    expect(install).to.be.greaterThan(token);
+    expect(runner.calls[install]).to.not.include("sudo sh");
+    expect(agents.commandFor.firstCall.args[2]).to.equal("http://api");
+    expect(runner.upload.firstCall.args[1].toString()).to.equal("enroll-token");
 
     const commands = runner.calls.filter(call => call.startsWith("exec:"));
 
-    expect(commands.join("\n")).to.not.include("agent-key");
-    expect(commands.join("\n")).to.not.include(
-      Buffer.from("agent-key").toString("base64"),
-    );
+    expect(commands.join("\n")).to.not.include("enroll-token");
+    expect(commands.some(c => c.includes("wg-admin-agent.service"))).to.be.true;
     expect(runner.calls.at(-1)).to.equal(`exec:rm -rf ${WORK_DIR}`);
     expect(runner.end.calledOnce).to.be.true;
+  });
+
+  it("провал установки — токен отозван, нода в error", async () => {
+    const runner = makeRunner();
+    const agents = makeAgents();
+    const nodes = makeNodes();
+
+    runner.exec.callsFake(async (command: string) =>
+      command.startsWith("mktemp")
+        ? { code: 0, stdout: WORK_DIR, stderr: "" }
+        : command.includes("agent-link")
+          ? { code: 1, stdout: "", stderr: "boom" }
+          : { code: 0, stdout: "", stderr: "" },
+    );
+
+    const job = new WgProvisionNodeJob(
+      nodes as any,
+      agents as any,
+      { open: (v: string) => v } as any,
+      () => runner as any,
+    );
+
+    try {
+      await job.handle(makeCtx() as any);
+      expect.fail("должно было упасть");
+    } catch (err: any) {
+      expect(err.code).to.equal("WG_PROVISION_STEP_FAILED");
+    }
+    expect(agents.revokeToken.calledOnceWith("t1")).to.be.true;
+    expect(nodes.setStatus.firstCall.args[1]).to.equal("error");
   });
 
   it("mktemp вернул неожиданный путь — установка не запускается", async () => {
@@ -95,7 +142,8 @@ describe("WgProvisionNodeJob", () => {
     });
 
     const job = new WgProvisionNodeJob(
-      { setStatus: sinon.stub().resolves() } as any,
+      makeNodes() as any,
+      makeAgents() as any,
       { open: (v: string) => v } as any,
       () => runner as any,
     );
@@ -127,7 +175,7 @@ describe("WgProvisionNodeJob", () => {
         if (command.startsWith("mktemp")) {
           return { code: 0, stdout: WORK_DIR, stderr: "" };
         }
-        if (command.startsWith("rm -rf")) {
+        if (!command.includes("agent-link")) {
           return { code: 0, stdout: "", stderr: "" };
         }
         onLine?.("▶ [0s] Зависимости");
@@ -144,7 +192,8 @@ describe("WgProvisionNodeJob", () => {
     );
 
     const job = new WgProvisionNodeJob(
-      { setStatus: sinon.stub().resolves() } as any,
+      makeNodes() as any,
+      makeAgents() as any,
       { open: (v: string) => v } as any,
       () => runner as any,
     );
@@ -160,7 +209,8 @@ describe("WgProvisionNodeJob", () => {
   it("http до бэкенда — предупреждение в логе задачи", async () => {
     const runner = makeRunner();
     const job = new WgProvisionNodeJob(
-      { setStatus: sinon.stub().resolves() } as any,
+      makeNodes() as any,
+      makeAgents() as any,
       { open: (v: string) => v } as any,
       () => runner as any,
     );
@@ -193,7 +243,7 @@ describe("WgUninstallNodeJob", () => {
     log: sinon.stub().resolves(),
   });
 
-  it("выполняет план удаления и отвязывает агента от ноды", async () => {
+  it("удаляет агента экземпляра проекта и отвязывает его от ноды", async () => {
     const commands: string[] = [];
     const runner = {
       connect: sinon.stub().resolves(),
@@ -209,22 +259,22 @@ describe("WgUninstallNodeJob", () => {
       upload: sinon.stub().resolves(),
       end: sinon.stub(),
     };
-    const nodes = { detachAgent: sinon.stub().resolves() };
+    const agents = { detach: sinon.stub().resolves(), instance: () => "wg" };
     const job = new WgUninstallNodeJob(
-      nodes as any,
+      agents as any,
       { open: (v: string) => v } as any,
       () => runner as any,
     );
 
     await job.handle(ctx() as any);
 
-    expect(runner.upload.firstCall.args[0]).to.equal(`${WORK_DIR}/install.sh`);
-    expect(runner.upload.callCount).to.equal(1);
+    expect(runner.upload.called).to.be.false;
     expect(
-      commands.some(c => c.includes(`sh ${WORK_DIR}/install.sh --uninstall`)),
+      commands.some(c =>
+        c.includes("/opt/agent-wg/bin/agent uninstall --instance wg --purge"),
+      ),
     ).to.be.true;
-    expect(nodes.detachAgent.calledOnceWith(data.nodeId, data.actorId)).to.be
-      .true;
+    expect(agents.detach.calledOnceWith(data.nodeId, data.actorId)).to.be.true;
     expect(runner.end.calledOnce).to.be.true;
   });
 
@@ -241,9 +291,9 @@ describe("WgUninstallNodeJob", () => {
       upload: sinon.stub().resolves(),
       end: sinon.stub(),
     };
-    const nodes = { detachAgent: sinon.stub().resolves() };
+    const agents = { detach: sinon.stub().resolves(), instance: () => "wg" };
     const job = new WgUninstallNodeJob(
-      nodes as any,
+      agents as any,
       { open: (v: string) => v } as any,
       () => runner as any,
     );
@@ -254,6 +304,6 @@ describe("WgUninstallNodeJob", () => {
     } catch (err: any) {
       expect(err.code).to.equal("WG_PROVISION_STEP_FAILED");
     }
-    expect(nodes.detachAgent.called).to.be.false;
+    expect(agents.detach.called).to.be.false;
   });
 });

@@ -1,17 +1,23 @@
 # WG Admin
 
-Админка WireGuard: бэкенд (панель управления) и агент нод на Go. Бэкенд хранит
-желаемое состояние каждой ноды — интерфейсы и пиры, точки подключения через
-релей, реплики интерфейсов, пробросы портов, SOCKS5-прокси через mTLS, — агент
-на VPS забирает его по исходящему соединению (WebSocket, запасной путь — HTTP;
-в продакшене — через HTTPS), приводит сервер в соответствие и шлёт
-статистику. Входящие порты агенту не нужны; агент ставится одной командой или
-из админки по SSH и обновляется бинарём с бэкенда.
+Админка WireGuard: бэкенд (панель управления) и воркеры узлов на Go. Бэкенд
+хранит желаемое состояние каждой ноды — интерфейсы и пиры, точки подключения
+через релей, реплики интерфейсов, пробросы портов, SOCKS5-прокси через mTLS.
+На ноде (VPS) работает универсальный агент
+[github.com/epifanovmd/agent](https://github.com/epifanovmd/agent) 1.0.1: он
+держит исходящее соединение с бэкендом (WebSocket; в продакшене — через HTTPS),
+хранит настройки, присылает метрики узла и обновляется сам. Работу с WireGuard
+делают воркеры проекта `wg` и `socks`, которые запускает агент: бэкенд передаёт
+им желаемое состояние настройками, воркеры приводят сервер в соответствие и
+отдают метрики. Входящие порты агенту не нужны; агент ставится одной командой
+или из админки по SSH.
 
-Как устроена система (агенты, версии состояния, релей, реплики, пробросы,
-прокси, статистика, доступ, задачи, диагностика) — [docs/WIREGUARD.md](docs/WIREGUARD.md).
-Агент — [agent/README.md](agent/README.md). Модули бэкенда описаны в
-`README.md` внутри каждого `src/modules/<модуль>`.
+Как устроена система (агенты и воркеры, версии состояния, релей, реплики,
+пробросы, прокси, статистика, доступ, задачи, диагностика) —
+[docs/WIREGUARD.md](docs/WIREGUARD.md). Воркеры, выпуск, установка на узел и
+локальный запуск агента — [agent/README.md](agent/README.md). Модули бэкенда
+описаны в `README.md` внутри каждого `src/modules/<модуль>`; связь с агентами —
+`src/modules/agent/README.md`.
 
 ## Стек
 
@@ -19,8 +25,11 @@
   декораторов), Inversify (DI), TypeORM + PostgreSQL, pg-boss (очередь задач
   на Postgres), Redis (между процессами), Socket.IO, Zod, pino, prom-client,
   Sentry, Nodemailer + EJS; сборка `tsc`.
-- Агент: Go (статический бинарь linux/amd64 и arm64), служба systemd.
-- Тесты: Mocha + Chai + Sinon (юнит и e2e), `go test`, smoke-стенд в Docker.
+- Агенты: agent 1.0.1 на узлах (служба systemd), на бэкенде — пакет `agent-sdk`
+  той же версии (зависимость из GitHub Release).
+- Воркеры узла: Go 1.26.9 (toolchain в `agent/go.mod`), сборки linux и darwin ×
+  amd64 и arm64.
+- Тесты: Mocha + Chai + Sinon (юнит и e2e), `go test`.
 
 ## Структура
 
@@ -35,11 +44,11 @@ src/
   routing/           ← сгенерированные маршруты и спецификация (не править вручную)
   migrations/        ← миграции и их упорядоченный список (index.ts)
   modules/           ← платформа (auth, user, role, jobs, …) и домен WireGuard (wg-*)
-agent/               ← агент нод (Go)
-templates/           ← шаблоны писем и установщика агента
+agent/               ← воркеры узла wg и socks (Go), сборка выпуска, локальный агент
+templates/           ← шаблоны писем
 test/e2e/            ← интеграционный набор (настоящий сервер + Postgres, Redis, Mailpit)
-test/smoke/          ← smoke-стенд WG-домена в Docker (бэкенд + агенты в контейнерах)
-scripts/             ← генератор модуля, Go в контейнере, проверка версии агента, дамп БД
+test/smoke/          ← образ узла для smoke-стенда
+scripts/             ← генератор модуля, Go в контейнере, проверка версий воркеров, дамп БД
 deploy/              ← конфиг Caddy (HTTPS)
 docs/                ← устройство системы
 ```
@@ -70,11 +79,19 @@ yarn dev                                         # генерация маршр
 `/ping`, `/ready`, `/health`, `/metrics`. Роль процесса — `APP_ROLE`: `api`
 (HTTP и сокеты), `worker` (задачи и cron), `all`.
 
-Агент без установки Go — в контейнере golang (версия из `agent/go.mod`):
+Агент на этой машине (подробно — [agent/README.md](agent/README.md), «Локальный
+запуск»): регистрируется общим токеном `AGENT_BOOTSTRAP_TOKEN` из
+`.env.development`, метка ноды — `AGENT_NODE_ID`; воркер wg — в имитации
+(`WG_DRY_RUN`), системные команды не выполняются.
 
 ```sh
-scripts/go-agent.sh test | vet | tidy | build [amd64|arm64]
+yarn agent:release      # один раз: воркеры wg и socks в agent/release
+yarn agent              # агент на переднем плане (agent/dev.sh run; программу агента
+                        # скачает с GitHub в agent/dist, если её там нет)
 ```
+
+Воркеры без установки Go — в контейнере golang (версия — toolchain из
+`agent/go.mod`): `scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]`.
 
 ## Команды
 
@@ -109,15 +126,16 @@ scripts/go-agent.sh test | vet | tidy | build [amd64|arm64]
 | `yarn migration:generate src/migrations/<Имя>` | миграция из разницы сущностей и схемы БД                      |
 | `yarn migration:run` / `migration:revert`      | применить ожидающие миграции / откатить последнюю             |
 
-**Агент нод (Go в контейнере, версия из `agent/go.mod`)**
+**Агент и воркеры узла**
 
-| Команда                                    | Что делает                                        |
-| ------------------------------------------ | ------------------------------------------------- |
-| `scripts/go-agent.sh test`                 | тесты агента                                      |
-| `scripts/go-agent.sh vet`                  | статический анализ `go vet`                       |
-| `scripts/go-agent.sh tidy`                 | привести `go.mod` / `go.sum` в порядок            |
-| `scripts/go-agent.sh build [amd64\|arm64]` | собрать бинарь агента под архитектуру             |
-| `bash test/smoke/wg-smoke.sh`              | smoke WG-домена в Linux-контейнерах (см. «Тесты») |
+| Команда                                                           | Что делает                                                                       |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `yarn agent:release`                                              | воркеры проекта в `agent/release`: сборки wg и socks, `manifest.json`            |
+| `yarn agent:fetch [версия…]`                                      | выпуск агента с GitHub в `agent/dist/agent-<версия>` (разработка и e2e)          |
+| `yarn agent`                                                      | локальный агент на переднем плане (воркер wg — в имитации)                       |
+| `yarn agent:start` / `agent:stop` / `agent:status` / `agent:logs` | локальный агент в фоне: запуск, остановка, состояние, журнал                     |
+| `scripts/go-agent.sh test` / `vet` / `tidy` / `fmt`               | тесты, `go vet`, `go mod tidy`, `gofmt` воркеров (Go в контейнере)               |
+| `scripts/go-agent.sh build [os [arch]]`                           | сборки воркеров в `agent/dist` (без аргументов — linux и darwin × amd64 и arm64) |
 
 **Makefile — сервер по SSH** (настройки — `.env.deploy`, образец `.env.deploy.example`;
 любое значение переопределяется в команде: `make deploy SSH_HOST=…`)
@@ -152,17 +170,17 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
   Postgres, Redis и Mailpit, сценарии всех эндпоинтов по HTTP и сокетам;
   последний тест проверяет, что вызван каждый эндпоинт спецификации. Стенд
   пересоздаёт базу (только с `e2e`/`test` в имени) и чистит отдельную базу
-  Redis. Параметры — `E2E_*`.
-- **Smoke** — `test/smoke/wg-smoke.sh`, запускается вручную: бэкенд и агенты в
-  Linux-контейнерах с настоящим WireGuard, релей, пробросы через IPIP с
-  аварийным путём, SOCKS5 через mTLS, реплики с переключением, обновление
-  агента, автономный старт, откат. Хост не затрагивается.
-
-  ```sh
-  docker build -t wg-admin-api:test .
-  docker build -f test/smoke/Dockerfile.agent --build-arg AGENT_VERSION=2.0.0-smoke -t wg-admin-agent:test .
-  bash test/smoke/wg-smoke.sh
-  ```
+  Redis. Параметры — `E2E_*`. Сценарии домена идут с фейковым агентом на
+  WebSocket (`test/e2e/fake-agent.ts`, `node-agent.ts`); `agents.e2e.ts` и
+  `agent-update.e2e.ts` — настоящий агент и воркеры. Агент — выпуск с GitHub,
+  скачанный заранее (`yarn agent:fetch` и `yarn agent:fetch 1.0.1` — для
+  обновления агента): стенд раздаёт его бэкенду со своего сервера, в GitHub
+  тесты не ходят. Воркеры — сборки из `agent/release` или `agent/dist`, стенд
+  подписывает их своим ключом проекта. Чего нет — сценарии пропускаются.
+- **Воркеры** — `go test` в `agent/` (`scripts/go-agent.sh test`); воркер wg на
+  настоящем Linux — `agent/workers/wg/linux-check.sh`.
+- **Smoke** — `test/smoke`: образ узла (`Dockerfile.agent`, `agent.yaml`) готов,
+  сценарий `wg-smoke.sh` написан под прежний API бэкенда и сейчас не работает.
 
 ### Миграции
 
@@ -176,8 +194,15 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
 ## Docker и деплой
 
 `Dockerfile` — один образ для ролей `api`, `worker` и миграций; в нём же
-собираются бинари агента (amd64 и arm64), которые бэкенд раздаёт при установке
-и обновлении. Стадии сборки кросс-компилируют на платформе сборщика;
+собираются воркеры проекта для узлов (`/app/agent/release`, стадии
+`agent-workers` и `agent-release`): wg, socks и их `manifest.json`. Агента в
+образе нет: бэкенд берёт его и `install.sh` из выпусков GitHub
+(`AGENT_RELEASES_GITHUB`, диапазон `^1`) и сам замечает новые версии — ради
+новой версии агента образ не пересобирают. Подписать воркеры ключом проекта —
+необязательный секрет BuildKit `agent_signing_key`
+(`docker build --secret id=agent_signing_key,env=AGENT_SIGNING_KEY .`; в
+`release.yml` — секрет репозитория `AGENT_SIGNING_KEY`; бэкенду —
+`AGENT_UPDATE_PUBLIC_KEY`); без него обновить воркеры с бэкенда нельзя. Стадии сборки кросс-компилируют на платформе сборщика;
 production-зависимости, непривилегированный пользователь, `tini` как PID 1,
 read-only файловая система. Версию сборки (`APP_VERSION`, `APP_COMMIT`,
 `APP_BUILT_AT`) передают build-аргументами `make` и `release.yml`; она видна в
@@ -187,14 +212,16 @@ read-only файловая система. Версию сборки (`APP_VERSI
 Redis; по профилю `https` — Caddy с сертификатом для `APP_DOMAIN`
 (`deploy/Caddyfile`). Postgres — `docker-compose.postgres.yml` или внешний
 (`POSTGRES_HOST`). Секреты — `.env.production`; обязателен `WG_SECRETS_KEY`
-(`openssl rand -hex 32`): им шифруются ключи WireGuard в БД.
+(`openssl rand -hex 32`): им шифруются ключи WireGuard в БД; значения настроек
+воркеров шифруются ключом `AGENT_CONFIGS_KEY`. В compose одна копия `api` —
+пересылка вызовов агентов между копиями (`AGENT_RELAY_*`) не нужна.
 
 ```sh
 export COMPOSE_FILE=docker-compose.yml:docker-compose.postgres.yml
 TAG=v1.2.3 docker compose pull          # или: docker compose build api
 docker compose run --rm migrate
 docker compose up -d
-docker compose up -d --scale api=3      # реплики API (API_PORTS=8181-8183)
+docker compose up -d --scale api=3      # реплики API (API_PORTS=8181-8183; агентам — AGENT_RELAY_*)
 ```
 
 Остановка по SIGTERM: `/ready` → 503, пауза для балансировщика, дожидание
@@ -214,10 +241,12 @@ docker compose up -d --scale api=3      # реплики API (API_PORTS=8181-818
 ## CI
 
 - `ci.yml` (push и pull request в `main`): generate и сверка `src/routing`,
-  lint, typecheck, юнит-тесты, сборка; агент — поднята ли `agent/VERSION` при
-  изменении его кода и совпадает ли Go в Dockerfile-ах с `go.mod`
-  (`scripts/check-agent-version.sh`), `go mod tidy`, gofmt, vet,
-  `go test -race`, сборка под amd64/arm64; shellcheck скриптов; миграции на
+  lint, typecheck, юнит-тесты, сборка; воркеры узла — подняты ли
+  `agent/workers/<имя>/VERSION` при изменении их кода с последнего тега и
+  совпадает ли Go в Dockerfile-ах с toolchain `go.mod`
+  (`scripts/check-agent-version.sh`), `go mod tidy`, gofmt, vet под linux и
+  darwin, `go test -race`, сборка linux и darwin × amd64 и arm64; shellcheck
+  скриптов; миграции на
   чистой БД, дрейф схемы и интеграционный тест очереди задач; e2e; аудит
   зависимостей; образ + Trivy. После всех проверок `main` — деплой
   (`deploy.yml`, если задана переменная репозитория `DEPLOY_ENV` и секрет

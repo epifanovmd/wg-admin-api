@@ -1,118 +1,125 @@
-// Package apply — приведение ноды к желаемому состоянию.
+// Package apply — приведение узла к желаемому состоянию: конфиги wg-quick,
+// интерфейсы, IPIP-туннели и пробросы. Вызовы не должны пересекаться:
+// очередь применений держит вызывающий.
 package apply
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
 	"time"
 
+	"wgadmin/agent/internal/desired"
 	"wgadmin/agent/internal/failover"
 	"wgadmin/agent/internal/logx"
 	"wgadmin/agent/internal/netcfg"
-	"wgadmin/agent/internal/protocol"
 	"wgadmin/agent/internal/shell"
 	"wgadmin/agent/internal/state"
 	"wgadmin/agent/internal/sysinfo"
 	"wgadmin/agent/internal/wg"
 )
 
-const wgQuickTimeout = 60 * time.Second
+// WgQuickTimeout — срок одной команды wg-quick: итог применения должен
+// успеть к сроку агента (30 с на PUT /config).
+const WgQuickTimeout = 20 * time.Second
 
-// Socks — прокси агента (применяются вместе с остальным).
-type Socks interface {
-	Apply(configs []protocol.Socks) []string
-}
-
-// Result — итог применения.
+// Result — итог применения: ошибки отдельных частей не прерывают остальные.
 type Result struct {
-	// ApplyError — nil, если всё применилось.
-	ApplyError *string
-	Interfaces []protocol.InterfaceStatus
-	Routes     []protocol.ForwardStatus
+	Interfaces []desired.InterfaceStatus
+	Routes     []desired.ForwardStatus
+	Errors     []string
 }
 
-// Applier применяет состояние последовательно (конфиг-цикл, переключение
-// маршрута и откат не пересекаются) и помнит последние пробросы.
+// Applier — применение на узле; помнит последние цели пробросов (сброс
+// потоков conntrack при их смене).
 type Applier struct {
-	mu        sync.Mutex
 	configDir string
 	stateFile string
-	socks     Socks
 	applied   []failover.Resolved
 	lookup    func(string) string
 }
 
-// New — применятор для каталога конфигов.
-func New(configDir, stateFile string, socks Socks) *Applier {
-	return &Applier{configDir: configDir, stateFile: stateFile, socks: socks, lookup: failover.LookupIPv4}
+// New — применение с конфигами wg-quick в configDir и состоянием в stateFile.
+func New(configDir, stateFile string) *Applier {
+	return &Applier{configDir: configDir, stateFile: stateFile, lookup: failover.LookupIPv4}
 }
 
-// Lock — занять применятор (откат при остановке ждёт текущее применение).
-func (a *Applier) Lock() { a.mu.Lock() }
+// ConfPath — файл конфига интерфейса.
+func ConfPath(configDir, name string) string {
+	return filepath.Join(configDir, name+".conf")
+}
 
-// Unlock — освободить.
-func (a *Applier) Unlock() { a.mu.Unlock() }
+func (a *Applier) confPath(name string) string { return ConfPath(a.configDir, name) }
 
-func (a *Applier) confPath(name string) string {
-	return filepath.Join(a.configDir, name+".conf")
+// Routes — активные маршруты пробросов с id.
+func Routes(resolved []failover.Resolved) []desired.ForwardStatus {
+	routes := []desired.ForwardStatus{}
+
+	for _, forward := range resolved {
+		if forward.ID == "" {
+			continue
+		}
+
+		status := desired.ForwardStatus{ID: forward.ID, ActiveRoute: forward.ActiveRoute}
+		if forward.ActiveCandidate != nil {
+			status.ActiveCandidate = forward.ActiveCandidate
+			status.ActiveNodeID = forward.Candidates[*forward.ActiveCandidate].NodeID
+		}
+		routes = append(routes, status)
+	}
+
+	return routes
 }
 
 // Apply — конфиги интерфейсов (атомарно, 0600), wg-quick up/down, `wg
-// syncconf` для пиров, туннели и пробросы. Ошибки отдельных интерфейсов не
-// прерывают остальные.
-func (a *Applier) Apply(desired protocol.DesiredState, health *failover.Health) Result {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
+// syncconf` для пиров, туннели и пробросы.
+func (a *Applier) Apply(target desired.State, health *failover.Health) Result {
 	owned := state.LoadOwned(a.stateFile)
-	statuses := []protocol.InterfaceStatus{}
-
-	var errs []string
+	result := Result{Interfaces: []desired.InterfaceStatus{}, Routes: []desired.ForwardStatus{}, Errors: []string{}}
 
 	egress := wg.DefaultEgress()
 	want := map[string]bool{}
-	for _, iface := range desired.Interfaces {
+	for _, iface := range target.Interfaces {
 		want[iface.Name] = true
 	}
 
-	_ = os.MkdirAll(a.configDir, 0o700)
+	if err := os.MkdirAll(a.configDir, 0o700); err != nil {
+		result.Errors = append(result.Errors, "каталог конфигов: "+err.Error())
+	}
 
-	// Интерфейсы, которых больше нет в желаемом состоянии, — вниз и удалить.
+	// Интерфейсы воркера, которых больше нет в желаемом состоянии, — вниз и удалить.
 	for name := range owned.Fingerprints {
 		if want[name] {
 			continue
 		}
 
 		logx.Info("Интерфейс %s удалён из конфигурации — останавливаю", name)
-		shell.Run(fmt.Sprintf("wg-quick down %s 2>/dev/null || true", a.confPath(name)), wgQuickTimeout)
+		shell.Run(fmt.Sprintf("wg-quick down %s 2>/dev/null || true", a.confPath(name)), WgQuickTimeout)
 		_ = os.Remove(a.confPath(name))
 		delete(owned.Fingerprints, name)
 	}
 
-	for _, iface := range desired.Interfaces {
+	for _, iface := range target.Interfaces {
 		status, err := a.applyInterface(&owned, iface, egress)
 		if err != nil {
 			message := err.Error()
-			errs = append(errs, iface.Name+": "+message)
-			statuses = append(statuses, protocol.InterfaceStatus{Name: iface.Name, Status: "error", Message: &message})
+			result.Errors = append(result.Errors, iface.Name+": "+message)
+			result.Interfaces = append(result.Interfaces, desired.InterfaceStatus{Name: iface.Name, Status: "error", Message: message})
 			logx.Error("Интерфейс %s: %s", iface.Name, message)
 
 			continue
 		}
 
-		statuses = append(statuses, status)
+		result.Interfaces = append(result.Interfaces, status)
 	}
 
-	tunnels, forwards := withoutConflicts(desired, &errs)
-	var routes []protocol.ForwardStatus
+	tunnels, forwards := withoutConflicts(target, &result.Errors)
 
 	if len(tunnels) > 0 || len(owned.Tunnels) > 0 {
 		if err := netcfg.ApplyTunnels(tunnels, owned.Tunnels); err != nil {
-			errs = append(errs, err.Error())
+			result.Errors = append(result.Errors, err.Error())
 		} else {
 			owned.Tunnels = make([]string, 0, len(tunnels))
 			for _, tunnel := range tunnels {
@@ -122,65 +129,43 @@ func (a *Applier) Apply(desired protocol.DesiredState, health *failover.Health) 
 	}
 
 	resolved := failover.Resolve(failover.ResolveHosts(forwards, a.lookup), health)
-
-	for _, forward := range resolved {
-		if forward.ID == "" {
-			continue
-		}
-
-		status := protocol.ForwardStatus{ID: forward.ID, ActiveRoute: forward.ActiveRoute}
-		if forward.ActiveCandidate != nil {
-			status.ActiveCandidate = forward.ActiveCandidate
-			status.ActiveNodeID = forward.Candidates[*forward.ActiveCandidate].NodeID
-		}
-		routes = append(routes, status)
-	}
+	result.Routes = Routes(resolved)
 
 	if netcfg.HasIptables() {
-		plain := make([]protocol.Forward, len(resolved))
+		plain := make([]desired.Forward, len(resolved))
 		for i, forward := range resolved {
 			plain[i] = forward.Forward
 		}
 
 		if err := netcfg.ApplyForwards(plain); err != nil {
-			errs = append(errs, err.Error())
+			result.Errors = append(result.Errors, err.Error())
 		} else {
 			for _, args := range failover.StaleFlowArgs(a.applied, resolved) {
-				result := shell.Exec(30*time.Second, "conntrack", args...)
-				logx.Info("Цель %s/%s сменилась — сброшены её потоки (код %d)", args[2], args[4], result.Code)
+				code := shell.Exec(10*time.Second, "conntrack", args...).Code
+				logx.Info("Цель %s/%s сменилась — сброшены её потоки (код %d)", args[2], args[4], code)
 			}
 			a.applied = resolved
 		}
 	} else if len(forwards) > 0 {
-		errs = append(errs, "iptables недоступен — пробросы не применены")
-	}
-
-	if a.socks != nil {
-		errs = append(errs, a.socks.Apply(desired.Socks)...)
+		result.Errors = append(result.Errors, "iptables недоступен — пробросы не применены")
 	}
 
 	if err := state.SaveOwned(a.stateFile, owned); err != nil {
-		errs = append(errs, "состояние агента: "+err.Error())
-	}
-
-	result := Result{Interfaces: statuses, Routes: routes}
-	if len(errs) > 0 {
-		joined := strings.Join(errs, "; ")
-		result.ApplyError = &joined
+		result.Errors = append(result.Errors, "состояние воркера: "+err.Error())
 	}
 
 	return result
 }
 
-// withoutConflicts — туннели и пробросы без конфликтов с чужим на хосте:
+// withoutConflicts — туннели и пробросы без конфликтов с чужим на узле:
 // лучше не поднять релей, чем перехватить чужой трафик.
-func withoutConflicts(desired protocol.DesiredState, errs *[]string) ([]protocol.Tunnel, []protocol.Forward) {
+func withoutConflicts(wanted desired.State, errs *[]string) ([]desired.Tunnel, []desired.Forward) {
 	host := netcfg.ReadHostNetwork()
 	ports := netcfg.HostPorts{UDP: sysinfo.UDPPorts(), TCP: sysinfo.TCPPorts()}
 	refused := map[string]bool{}
 
-	tunnels := []protocol.Tunnel{}
-	for _, tunnel := range desired.Tunnels {
+	tunnels := []desired.Tunnel{}
+	for _, tunnel := range wanted.Tunnels {
 		if conflict := netcfg.TunnelConflict(tunnel, host); conflict != "" {
 			*errs = append(*errs, conflict)
 			logx.Error("%s", conflict)
@@ -191,8 +176,8 @@ func withoutConflicts(desired protocol.DesiredState, errs *[]string) ([]protocol
 		tunnels = append(tunnels, tunnel)
 	}
 
-	forwards := []protocol.Forward{}
-	for _, forward := range desired.Forwards {
+	forwards := []desired.Forward{}
+	for _, forward := range wanted.Forwards {
 		conflict := netcfg.ForwardConflict(forward, ports)
 		if refused[forward.TargetIP] {
 			conflict = fmt.Sprintf("%s/%d: туннель до %s не поднят — проброс не установлен", forward.Proto, forward.ListenPort, forward.TargetIP)
@@ -209,63 +194,108 @@ func withoutConflicts(desired protocol.DesiredState, errs *[]string) ([]protocol
 	return tunnels, forwards
 }
 
-func (a *Applier) applyInterface(owned *state.Owned, iface protocol.Interface, egress string) (protocol.InterfaceStatus, error) {
+// ForeignConfig — причина не трогать интерфейс, которого воркер не создавал:
+// в каталоге уже лежит другой конфиг с этим именем или интерфейс поднят без
+// конфига. Совпадающий конфиг воркер принимает как свой.
+func ForeignConfig(name string, existing []byte, exists bool, rendered []byte, up bool) error {
+	switch {
+	case exists && !bytes.Equal(existing, rendered):
+		return fmt.Errorf("чужой конфиг: %s.conf уже есть и создан не воркером — не перезаписываю", name)
+	case !exists && up:
+		return fmt.Errorf("интерфейс %s уже есть на узле и создан не воркером", name)
+	}
+
+	return nil
+}
+
+func writeAtomic(file string, data []byte) error {
+	tmp := file + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+
+	return os.Rename(tmp, file)
+}
+
+func (a *Applier) applyInterface(owned *state.Owned, iface desired.Interface, egress string) (desired.InterfaceStatus, error) {
 	file := a.confPath(iface.Name)
 	rendered := []byte(wg.RenderConfig(iface, egress))
-	existing, _ := os.ReadFile(file)
-	changed := !bytes.Equal(existing, rendered)
+	existing, readErr := os.ReadFile(file)
+	exists := readErr == nil
+	up := wg.IsUp(iface.Name)
 
-	if changed {
-		tmp := file + ".tmp"
-		if err := os.WriteFile(tmp, rendered, 0o600); err != nil {
-			return protocol.InterfaceStatus{}, err
+	if _, ours := owned.Fingerprints[iface.Name]; !ours {
+		if err := ForeignConfig(iface.Name, existing, exists, rendered, up); err != nil {
+			return desired.InterfaceStatus{}, err
 		}
-		if err := os.Rename(tmp, file); err != nil {
-			return protocol.InterfaceStatus{}, err
+		// Отметка «свой» — до записи файла: иначе прерванное применение
+		// оставило бы конфиг, который следующее сочтёт чужим.
+		owned.Fingerprints[iface.Name] = ""
+		if err := state.SaveOwned(a.stateFile, *owned); err != nil {
+			return desired.InterfaceStatus{}, err
 		}
 	}
 
-	up := wg.IsUp(iface.Name)
+	changed := !bytes.Equal(existing, rendered)
+	if changed {
+		if err := writeAtomic(file, rendered); err != nil {
+			return desired.InterfaceStatus{}, err
+		}
+	}
+
 	fingerprint := wg.Fingerprint(iface, egress)
 	fingerprintChanged := owned.Fingerprints[iface.Name] != fingerprint
 
 	if !iface.Enabled {
 		if up {
 			logx.Info("Интерфейс %s выключен — опускаю", iface.Name)
-			shell.Run("wg-quick down "+file, wgQuickTimeout)
+			shell.Run("wg-quick down "+file, WgQuickTimeout)
 		}
 		owned.Fingerprints[iface.Name] = fingerprint
 
-		return protocol.InterfaceStatus{Name: iface.Name, Status: "down"}, nil
+		return desired.InterfaceStatus{Name: iface.Name, Status: "down"}, nil
 	}
 
 	switch {
 	case !up:
 		logx.Info("Поднимаю интерфейс %s", iface.Name)
-		if err := shell.MustRun("wg-quick up "+file, wgQuickTimeout); err != nil {
-			return protocol.InterfaceStatus{}, err
+		if err := shell.MustRun("wg-quick up "+file, WgQuickTimeout); err != nil {
+			return desired.InterfaceStatus{}, err
 		}
 	case fingerprintChanged:
 		logx.Info("Interface-секция %s изменилась — перезапуск", iface.Name)
-		shell.Run("wg-quick down "+file+" || true", wgQuickTimeout)
-		if err := shell.MustRun("wg-quick up "+file, wgQuickTimeout); err != nil {
-			return protocol.InterfaceStatus{}, err
+		shell.Run("wg-quick down "+file+" || true", WgQuickTimeout)
+		if err := shell.MustRun("wg-quick up "+file, WgQuickTimeout); err != nil {
+			return desired.InterfaceStatus{}, err
 		}
 	case changed:
 		logx.Info("Пиры %s изменились — wg syncconf", iface.Name)
 
 		stripped := file + ".sync"
 		if err := os.WriteFile(stripped, []byte(wg.RenderStripped(iface)), 0o600); err != nil {
-			return protocol.InterfaceStatus{}, err
+			return desired.InterfaceStatus{}, err
 		}
-		err := shell.MustRun(fmt.Sprintf("wg syncconf %s %s", iface.Name, stripped), wgQuickTimeout)
+		err := shell.MustRun(fmt.Sprintf("wg syncconf %s %s", iface.Name, stripped), WgQuickTimeout)
 		_ = os.Remove(stripped)
 		if err != nil {
-			return protocol.InterfaceStatus{}, err
+			return desired.InterfaceStatus{}, err
 		}
 	}
 
 	owned.Fingerprints[iface.Name] = fingerprint
 
-	return protocol.InterfaceStatus{Name: iface.Name, Status: "up"}, nil
+	return desired.InterfaceStatus{Name: iface.Name, Status: "up"}, nil
+}
+
+// Restart — wg-quick down и up интерфейса воркера.
+func (a *Applier) Restart(name string) error {
+	if _, ours := state.LoadOwned(a.stateFile).Fingerprints[name]; !ours {
+		return errors.New("интерфейс " + name + " не создан воркером")
+	}
+
+	file := a.confPath(name)
+	logx.Info("Перезапуск интерфейса %s", name)
+	shell.Run("wg-quick down "+file+" 2>/dev/null || true", WgQuickTimeout)
+
+	return shell.MustRun("wg-quick up "+file, WgQuickTimeout)
 }
