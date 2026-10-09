@@ -27,7 +27,7 @@ export class AgentNodes1791548803242 implements MigrationInterface {
         await queryRunner.query(`DROP TYPE "public"."wg_node_commands_status_enum"`);
         await queryRunner.query(`DROP TYPE "public"."wg_node_commands_type_enum"`);
         await queryRunner.query(`UPDATE "api_keys" SET "revoked_at" = now() WHERE "revoked_at" IS NULL AND EXISTS (SELECT 1 FROM unnest("scopes") AS scope WHERE scope LIKE 'wg-agent:%')`);
-        await queryRunner.query(`UPDATE "wg_nodes" SET "status" = 'created', "applied_version" = 0, "apply_error" = NULL, "agent_version" = NULL, "wg_version" = NULL`);
+        await queryRunner.query(`UPDATE "wg_nodes" SET "status" = 'created', "applied_version" = 0, "apply_error" = NULL, "agent_version" = NULL, "wg_version" = NULL, "os_info" = NULL, "agent_remote_ip" = NULL, "last_seen_at" = NULL`);
         await queryRunner.query(`UPDATE "wg_interfaces" SET "status" = 'unknown', "status_message" = NULL`);
         await queryRunner.query(`UPDATE "wg_interface_replicas" SET "status" = 'unknown', "status_message" = NULL`);
         await queryRunner.query(`ALTER TABLE "wg_nodes" DROP COLUMN "agent_key_id"`);
