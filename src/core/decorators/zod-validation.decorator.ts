@@ -5,6 +5,22 @@ import { z } from "zod";
 import { ValidationException } from "../http";
 
 /**
+ * Даты из схемы (`z.coerce.date()`) — обратно в ISO-строки: дальше вход проверяет
+ * tsoa, а он ждёт дату строкой и сам отдаёт контроллеру `Date`.
+ */
+export const datesToIso = (value: unknown): unknown => {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(datesToIso);
+  if (value && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, datesToIso(item)]),
+    );
+  }
+
+  return value;
+};
+
+/**
  * Фабрика для создания middleware валидации Zod
  */
 const createZodValidationMiddleware = (
@@ -37,9 +53,9 @@ const createZodValidationMiddleware = (
     }
 
     if (source === "body") {
-      ctx.request.body = _data;
+      ctx.request.body = datesToIso(_data);
     } else if (source === "query") {
-      ctx.query = _data;
+      ctx.query = datesToIso(_data) as typeof ctx.query;
     } else if (source === "params") {
       ctx.params = _data;
     }

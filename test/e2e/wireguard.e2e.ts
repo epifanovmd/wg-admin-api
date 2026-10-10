@@ -883,6 +883,25 @@ describe("wireguard", () => {
       );
 
       expect(updated.data.clientAllowedIPs).to.equal("10.10.0.0/24");
+
+      // Срок пира — ISO-строкой, как шлёт веб; снять — null.
+      const expiresAt = new Date(Date.now() + 30 * 86_400_000).toISOString();
+      const dated = expectStatus(
+        await call(admin, "PATCH", `/api/v1/wg/peers/${peer1.id}`, {
+          expiresAt,
+        }),
+        200,
+      );
+
+      expect(new Date(dated.data.expiresAt).toISOString()).to.equal(expiresAt);
+      expect(
+        expectStatus(
+          await call(admin, "PATCH", `/api/v1/wg/peers/${peer1.id}`, {
+            expiresAt: null,
+          }),
+          200,
+        ).data.expiresAt,
+      ).to.equal(null);
     });
 
     it("пользователь видит только свои пиры", async () => {
