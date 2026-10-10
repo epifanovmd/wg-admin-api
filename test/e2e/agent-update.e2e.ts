@@ -1,5 +1,7 @@
 import { expect } from "chai";
 import { execFileSync } from "child_process";
+import { createServer } from "http";
+import { AddressInfo } from "net";
 
 import {
   AGENT_PREVIOUS_VERSION,
@@ -190,6 +192,7 @@ describe("сборки агента: источник агента и ворке
     expect(candidate).to.include({
       current: AGENT_PREVIOUS_VERSION,
       target: AGENT_VERSION,
+      source: "server",
     });
 
     const updated = expectStatus(
@@ -213,5 +216,43 @@ describe("сборки агента: источник агента и ворке
     expect(mirrorRequests).to.include(
       `/download/v${AGENT_VERSION}/agent-${PLATFORM}`,
     );
+  });
+
+  it("новую версию нашёл сам агент: update агента и кандидат source=agent", async () => {
+    const next = AGENT_VERSION.replace(/(\d+)$/, p => `${Number(p) + 1}`);
+    // Свой каталог сборок агента: новее только для него — сервер её не видит.
+    const catalog = createServer((req, res) => {
+      if (!req.url?.endsWith("/latest/download/manifest.json")) {
+        res.writeHead(404).end();
+
+        return;
+      }
+      res
+        .writeHead(200, { "content-type": "application/json" })
+        .end(JSON.stringify({ version: next, artifacts: [] }));
+    });
+
+    await new Promise<void>(r => catalog.listen(0, "127.0.0.1", r));
+
+    try {
+      const agent = await RealAgent.start({
+        token: E2E_BOOTSTRAP_TOKEN,
+        name: "release-self-check",
+        updateReleases: `http://127.0.0.1:${(catalog.address() as AddressInfo).port}`,
+      });
+
+      agents.push(agent);
+      await eventually(
+        async () => (await agentRecord(agent.agentId)).update?.latest === next,
+        { timeoutMs: 30_000, what: "агент сообщил новую версию" },
+      );
+      expect(
+        (await release()).candidates.find(
+          (c: any) => c.agentId === agent.agentId,
+        ),
+      ).to.include({ current: AGENT_VERSION, target: next, source: "agent" });
+    } finally {
+      catalog.close();
+    }
   });
 });

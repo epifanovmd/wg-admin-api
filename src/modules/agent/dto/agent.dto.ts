@@ -273,6 +273,8 @@ export class AgentDto extends BaseDto {
   outbox?: number;
   /** Последняя точка метрик. */
   metrics?: IAgentMetricsPointDto;
+  /** Новая версия, которую агент нашёл в своём каталоге сборок сам; нет — новее нет или не проверял. */
+  update?: IAgentUpdateInfoDto;
   alerts: AgentAlertDto[];
   session?: IAgentSessionDto;
 
@@ -303,6 +305,12 @@ export class AgentDto extends BaseDto {
     if (agent.statusAt !== undefined) this.statusAt = agent.statusAt;
     if (agent.status) this.outbox = agent.status.outbox;
     if (agent.metrics) this.metrics = toMetricsPointDto(agent.metrics);
+    if (agent.update) {
+      this.update = {
+        latest: agent.update.latest,
+        checkedAt: agent.update.checkedAt,
+      };
+    }
     this.alerts = agent.alerts.map(AgentAlertDto.fromModel);
     if (agent.session) this.session = { ...agent.session };
   }
@@ -310,6 +318,13 @@ export class AgentDto extends BaseDto {
   static fromModel(agent: Agent): AgentDto {
     return new AgentDto(agent);
   }
+}
+
+/** Новая версия агента из его собственной проверки обновлений. */
+export interface IAgentUpdateInfoDto {
+  latest: string;
+  /** Когда агент проверял, мс. */
+  checkedAt: number;
 }
 
 /** Статус ключа настроек воркера на агенте. */

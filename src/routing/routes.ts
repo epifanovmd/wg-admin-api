@@ -260,6 +260,15 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "IAgentUpdateInfoDto": {
+        "dataType": "refObject",
+        "properties": {
+            "latest": {"dataType":"string","required":true},
+            "checkedAt": {"dataType":"double","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "AgentAlertDto": {
         "dataType": "refObject",
         "properties": {
@@ -306,6 +315,7 @@ const models: TsoaRoute.Models = {
             "statusAt": {"dataType":"double"},
             "outbox": {"dataType":"double"},
             "metrics": {"ref":"IAgentMetricsPointDto"},
+            "update": {"ref":"IAgentUpdateInfoDto"},
             "alerts": {"dataType":"array","array":{"dataType":"refObject","ref":"AgentAlertDto"},"required":true},
             "session": {"ref":"IAgentSessionDto"},
         },
@@ -504,6 +514,11 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "TAgentUpdateSource": {
+        "dataType": "refAlias",
+        "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["server"]},{"dataType":"enum","enums":["agent"]}],"validators":{}},
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "IAgentUpdateCandidateDto": {
         "dataType": "refObject",
         "properties": {
@@ -514,6 +529,7 @@ const models: TsoaRoute.Models = {
             "target": {"dataType":"string","required":true},
             "os": {"dataType":"string","required":true},
             "arch": {"dataType":"string","required":true},
+            "source": {"ref":"TAgentUpdateSource","required":true},
         },
         "additionalProperties": false,
     },

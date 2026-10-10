@@ -27,6 +27,7 @@ import {
   AgentHistoryService,
   IAgentEventFeedQuery,
 } from "./agent-history.service";
+import { mergeUpdateCandidates } from "./agent-update";
 import {
   AgentAlertDto,
   AgentConfigStatusDto,
@@ -163,9 +164,7 @@ export class AgentService {
   async update(actor: IAgentActor, id: string): Promise<IAgentUpdateResultDto> {
     await this._access.require(actor, id, "manage");
 
-    return callAgents(() =>
-      this._runtime.agents.by(actor.userId).updateAgent(id),
-    );
+    return this.updateAs(actor.userId, id);
   }
 
   /** Последние строки журнала агента или воркера (с узла). */
@@ -190,15 +189,18 @@ export class AgentService {
   async release(actor: IAgentActor): Promise<IAgentReleaseDto> {
     const scope = await this._access.scope(actor, "view");
     const agents = this._runtime.agents;
-    const [manifest, candidates, workerCandidates] = await Promise.all([
+    const [manifest, candidates, workerCandidates, all] = await Promise.all([
       agents.release(),
       agents.updateCandidates(),
       agents.workerUpdateCandidates(),
+      agents.listAgents(),
     ]);
 
     return {
       manifest,
-      candidates: candidates.filter(c => inScope(scope, c.agentId)),
+      candidates: mergeUpdateCandidates(candidates, all).filter(c =>
+        inScope(scope, c.agentId),
+      ),
       workerCandidates: workerCandidates.filter(c => inScope(scope, c.agentId)),
     };
   }
@@ -241,14 +243,31 @@ export class AgentService {
 
   /** Агенты, которых можно обновить до новой версии. */
   async updateCandidateIds(): Promise<Set<string>> {
-    const candidates = await this._runtime.agents.updateCandidates();
+    const agents = this._runtime.agents;
+    const [candidates, all] = await Promise.all([
+      agents.updateCandidates(),
+      agents.listAgents(),
+    ]);
 
-    return new Set(candidates.map(c => c.agentId));
+    return new Set(mergeUpdateCandidates(candidates, all).map(c => c.agentId));
   }
 
-  /** Обновить агента до новой версии от имени пользователя (без проверки прав). */
-  updateAs(actorId: string, id: string): Promise<IAgentUpdateResultDto> {
-    return callAgents(() => this._runtime.agents.by(actorId).updateAgent(id));
+  /**
+   * Обновить агента до новой версии от имени пользователя (без проверки прав): до версии с
+   * сервера или до найденной самим агентом — её он берёт из своего каталога сборок.
+   */
+  async updateAs(actorId: string, id: string): Promise<IAgentUpdateResultDto> {
+    const agents = this._runtime.agents;
+    const [candidate] = mergeUpdateCandidates(
+      (await agents.updateCandidates()).filter(c => c.agentId === id),
+      [await agents.getAgent(id)].filter(a => !!a),
+    );
+
+    return callAgents(() =>
+      candidate?.source === "agent"
+        ? agents.by(actorId).updateAgent(id, { version: candidate.target })
+        : agents.by(actorId).updateAgent(id),
+    );
   }
 
   /** Журнал агента или воркера с узла (без проверки прав). */

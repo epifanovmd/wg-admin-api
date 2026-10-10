@@ -42,6 +42,11 @@ export interface IRealAgentOptions {
   update?: boolean;
   /** Ещё ключи проверки сборок (`update.publicKeys`; агент 1.1 и новее). */
   updateKeys?: string[];
+  /**
+   * Каталог сборок агента (как релизы на GitHub) для его собственной проверки новой версии —
+   * сразу после запуска. Нет — агент текущей версии не проверяет: в GitHub стенд не ходит.
+   */
+  updateReleases?: string;
 }
 
 interface IManifestWorker {
@@ -124,6 +129,15 @@ export class RealAgent {
     const keys = options.updateKeys?.length
       ? [`  publicKeys: ${JSON.stringify(options.updateKeys)}`]
       : [];
+    // Проверка новой версии — с агента 1.2: прежний её не знает.
+    const check = options.updateReleases
+      ? [
+          `  releases: ${JSON.stringify(options.updateReleases)}`,
+          "  checkInterval: 1m",
+        ]
+      : (options.version ?? AGENT_VERSION) === AGENT_VERSION
+        ? ["  checkInterval: 0s"]
+        : [];
 
     writeFileSync(
       config,
@@ -138,6 +152,7 @@ export class RealAgent {
         "update:",
         `  mode: ${options.update ? "self" : "disabled"}`,
         ...keys,
+        ...check,
         "log:",
         "  forward: info",
         "workers:",

@@ -448,6 +448,25 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"IAgentUpdateInfoDto": {
+				"description": "Новая версия агента из его собственной проверки обновлений.",
+				"properties": {
+					"latest": {
+						"type": "string"
+					},
+					"checkedAt": {
+						"type": "number",
+						"format": "double",
+						"description": "Когда агент проверял, мс."
+					}
+				},
+				"required": [
+					"latest",
+					"checkedAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"AgentAlertDto": {
 				"description": "Проблема агента.",
 				"properties": {
@@ -585,6 +604,10 @@
 					"metrics": {
 						"$ref": "#/components/schemas/IAgentMetricsPointDto",
 						"description": "Последняя точка метрик."
+					},
+					"update": {
+						"$ref": "#/components/schemas/IAgentUpdateInfoDto",
+						"description": "Новая версия, которую агент нашёл в своём каталоге сборок сам; нет — новее нет или не проверял."
 					},
 					"alerts": {
 						"items": {
@@ -1092,6 +1115,14 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"TAgentUpdateSource": {
+				"type": "string",
+				"enum": [
+					"server",
+					"agent"
+				],
+				"description": "Откуда новая версия агента: `server` — сборки сервера (источник сборок агента), `agent` —\nагент нашёл её в своём каталоге сборок сам."
+			},
 			"IAgentUpdateCandidateDto": {
 				"description": "Агент, которого можно обновить до новой версии.",
 				"properties": {
@@ -1115,6 +1146,9 @@
 					},
 					"arch": {
 						"type": "string"
+					},
+					"source": {
+						"$ref": "#/components/schemas/TAgentUpdateSource"
 					}
 				},
 				"required": [
@@ -1124,7 +1158,8 @@
 					"current",
 					"target",
 					"os",
-					"arch"
+					"arch",
+					"source"
 				],
 				"type": "object",
 				"additionalProperties": false
