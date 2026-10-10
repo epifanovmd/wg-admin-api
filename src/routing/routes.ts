@@ -551,18 +551,6 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-    "IAgentPackagesByManagerDto": {
-        "dataType": "refObject",
-        "properties": {
-            "apt": {"dataType":"array","array":{"dataType":"string"}},
-            "dnf": {"dataType":"array","array":{"dataType":"string"}},
-            "yum": {"dataType":"array","array":{"dataType":"string"}},
-            "apk": {"dataType":"array","array":{"dataType":"string"}},
-            "zypper": {"dataType":"array","array":{"dataType":"string"}},
-        },
-        "additionalProperties": false,
-    },
-    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "ICreateAgentInstallCommandBody": {
         "dataType": "refObject",
         "properties": {
@@ -570,18 +558,6 @@ const models: TsoaRoute.Models = {
             "tokenFile": {"dataType":"string"},
             "baseUrl": {"dataType":"string"},
             "name": {"dataType":"string"},
-            "user": {"dataType":"string"},
-            "config": {"dataType":"string"},
-            "privileged": {"dataType":"boolean"},
-            "killMode": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["process"]},{"dataType":"enum","enums":["mixed"]}]},
-            "packages": {"dataType":"array","array":{"dataType":"string"}},
-            "packagesByManager": {"ref":"IAgentPackagesByManagerDto"},
-            "sysctl": {"ref":"Record_string.string_"},
-            "rwPaths": {"dataType":"array","array":{"dataType":"string"}},
-            "caFile": {"dataType":"string"},
-            "workers": {"dataType":"array","array":{"dataType":"string"}},
-            "stopTimeout": {"dataType":"string"},
-            "releases": {"dataType":"string"},
         },
         "additionalProperties": false,
     },

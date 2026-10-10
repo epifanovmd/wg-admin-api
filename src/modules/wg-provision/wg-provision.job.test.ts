@@ -9,9 +9,9 @@ import { WgUninstallNodeJob } from "./wg-uninstall.job";
 
 const WORK_DIR = "/tmp/wg-admin.Ab3dEf9h";
 
-/** Команда установки, как её собирает SDK (`installCommand`). */
+/** Команда установки, как её собирает `installCommand` модуля agent. */
 const installCommand = (tokenFile: string, baseUrl = "http://api") =>
-  `curl -fsSL '${baseUrl}/api/v1/agent-link/install.sh' | sudo sh -s -- --instance 'wg' --token-file '${tokenFile}' --worker 'wg' --worker 'socks'`;
+  `curl -fsSL '${baseUrl}/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token-file '${tokenFile}' --name 'node-a'`;
 
 const makeAgents = () => ({
   commandFor: sinon
@@ -82,9 +82,7 @@ describe("WgProvisionNodeJob", () => {
     const mktemp = runner.calls.findIndex(call => call.includes("mktemp -d"));
     const token = runner.calls.indexOf(`upload:${WORK_DIR}/agent.token`);
     const install = runner.calls.findIndex(call =>
-      call.includes(
-        `| sh -s -- --instance 'wg' --token-file '${WORK_DIR}/agent.token'`,
-      ),
+      call.includes(`| sh -s -- --token-file '${WORK_DIR}/agent.token'`),
     );
 
     expect(mktemp).to.be.greaterThan(-1);
@@ -110,7 +108,7 @@ describe("WgProvisionNodeJob", () => {
     runner.exec.callsFake(async (command: string) =>
       command.startsWith("mktemp")
         ? { code: 0, stdout: WORK_DIR, stderr: "" }
-        : command.includes("agent-link")
+        : command.includes("agent-bundle")
           ? { code: 1, stdout: "", stderr: "boom" }
           : { code: 0, stdout: "", stderr: "" },
     );
@@ -175,7 +173,7 @@ describe("WgProvisionNodeJob", () => {
         if (command.startsWith("mktemp")) {
           return { code: 0, stdout: WORK_DIR, stderr: "" };
         }
-        if (!command.includes("agent-link")) {
+        if (!command.includes("agent-bundle")) {
           return { code: 0, stdout: "", stderr: "" };
         }
         onLine?.("▶ [0s] Зависимости");

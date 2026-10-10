@@ -76,11 +76,13 @@ permission)` и `viewFilter(actor)`; методы без актора (`findEnti
 | POST   | `/{id}/workers/{worker}/restart` | `wg:node:agent[:own]` — перезапустить воркер                             |
 | GET    | `/{id}/logs?lines&worker`        | `wg:node:logs[:own]` — журнал агента или воркера с узла                  |
 
-Команда установки (`WgNodeAgentService.commandFor`): `curl -fsSL <AGENT_PUBLIC_URL или
-APP_PUBLIC_URL>/api/v1/agent-link/install.sh | sudo sh -s -- --instance wg --token … --name
-<нода> --privileged --packages … --sysctl net.ipv4.ip_forward=1 --sysctl
-net.ipv6.conf.all.forwarding=1 --worker wg --worker socks` (экземпляр — `AGENT_INSTANCE`,
-пакеты — по менеджерам). Токен — одноразовый, с меткой ноды, сутки (10 минут — 30 дней,
+Команда установки (`WgNodeAgentService.commandFor`): `curl -fsSL '<AGENT_PUBLIC_URL или
+APP_PUBLIC_URL>/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token '<токен>' --name
+'<нода>'` — скрипт ставит архив папки агента (`agent pack`) под машину ноды. Экземпляр `wg`
+(`WG_AGENT_INSTANCE`, как `instance` в `agent/agent.prod.yaml`), воркеры wg и socks, права
+root, пакеты и параметры ядра задаёт `agent/agent.prod.yaml` архива, флагов для них в
+команде нет. На ноде — служба `agent-wg`, `/opt/agent-wg/bin/agent`, `/etc/agent-wg`,
+`/var/lib/agent-wg`. Токен — одноразовый, с меткой ноды, сутки (10 минут — 30 дней,
 `expiresInMinutes`). Перезапуск интерфейса (модуль wg-interface) —
 `WgNodeAgentService.restartInterface`: запрос `POST /interfaces/{name}/restart` к воркеру
 wg основной ноды, итог — сразу; нет агента — 409 `WG_NODE_NO_AGENT`, отказ воркера — 502

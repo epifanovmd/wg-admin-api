@@ -1,7 +1,7 @@
 /**
  * Откуда сборка: `remote` — удалённый источник сборок агента (GitHub или
  * `AGENT_RELEASES_URL`), `local` — каталог воркеров проекта
- * (`AGENT_RELEASES_DIR`).
+ * (``release/` архивов `AGENT_BUNDLE_DIR``).
  */
 export type TAgentReleaseSource = "remote" | "local";
 
@@ -40,7 +40,7 @@ export interface IAgentRemoteReleaseDto {
 
 /**
  * Итоговый манифест сборок: агент и netprobe — из удалённого источника, воркеры
- * проекта (wg, socks) — из `AGENT_RELEASES_DIR`.
+ * проекта (wg, socks) — из ``release/` архивов `AGENT_BUNDLE_DIR``.
  */
 export interface IAgentReleaseManifestDto {
   version: string;
@@ -91,16 +91,7 @@ export interface IAgentReleaseDto {
   workerCandidates: IAgentWorkerUpdateCandidateDto[];
 }
 
-/** Параметры команды установки агента на узел (флаги `install.sh`). */
-/** Пакеты по менеджерам (`--packages-apt` и т. п.). */
-export interface IAgentPackagesByManagerDto {
-  apt?: string[];
-  dnf?: string[];
-  yum?: string[];
-  apk?: string[];
-  zypper?: string[];
-}
-
+/** Команда установки агента на ноду: архив папки агента с этого сервера и токен. */
 export interface ICreateAgentInstallCommandBody {
   /** Токен регистрации; ровно одно из `token` и `tokenFile`. */
   token?: string;
@@ -108,29 +99,11 @@ export interface ICreateAgentInstallCommandBody {
   tokenFile?: string;
   /** Адрес сервера; без него — `AGENT_PUBLIC_URL` или `APP_PUBLIC_URL`. */
   baseUrl?: string;
+  /** Имя агента (по умолчанию — имя машины). */
   name?: string;
-  /** Пользователь службы агента. */
-  user?: string;
-  /** Путь к `agent.yaml` на узле. */
-  config?: string;
-  privileged?: boolean;
-  /** `process` | `mixed`. */
-  killMode?: "process" | "mixed";
-  packages?: string[];
-  /** Свои имена пакетов для менеджера: на узле с ним заменяют `packages`. */
-  packagesByManager?: IAgentPackagesByManagerDto;
-  sysctl?: Record<string, string>;
-  rwPaths?: string[];
-  caFile?: string;
-  /** Воркеры с сервера. */
-  workers?: string[];
-  /** Например `30s`. */
-  stopTimeout?: string;
-  /** Другой источник сборок воркеров (`--releases`). */
-  releases?: string;
 }
 
 export interface IAgentInstallCommandDto {
-  /** `curl … | sudo sh -s -- …`. */
+  /** `curl …/api/v1/agent-bundle/install.sh | sudo sh -s -- --token …`. */
   command: string;
 }

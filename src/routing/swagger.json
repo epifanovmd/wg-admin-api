@@ -938,7 +938,7 @@
 					"remote",
 					"local"
 				],
-				"description": "Откуда сборка: `remote` — удалённый источник сборок агента (GitHub или\n`AGENT_RELEASES_URL`), `local` — каталог воркеров проекта\n(`AGENT_RELEASES_DIR`)."
+				"description": "Откуда сборка: `remote` — удалённый источник сборок агента (GitHub или\n`AGENT_RELEASES_URL`), `local` — каталог воркеров проекта\n(``release/` архивов `AGENT_BUNDLE_DIR``)."
 			},
 			"IAgentReleaseArtifactDto": {
 				"description": "Сборка агента.",
@@ -1060,7 +1060,7 @@
 				"additionalProperties": false
 			},
 			"IAgentReleaseManifestDto": {
-				"description": "Итоговый манифест сборок: агент и netprobe — из удалённого источника, воркеры\nпроекта (wg, socks) — из `AGENT_RELEASES_DIR`.",
+				"description": "Итоговый манифест сборок: агент и netprobe — из удалённого источника, воркеры\nпроекта (wg, socks) — из ``release/` архивов `AGENT_BUNDLE_DIR``.",
 				"properties": {
 					"version": {
 						"type": "string"
@@ -1207,7 +1207,7 @@
 				"properties": {
 					"command": {
 						"type": "string",
-						"description": "`curl … | sudo sh -s -- …`."
+						"description": "`curl …/api/v1/agent-bundle/install.sh | sudo sh -s -- --token …`."
 					}
 				},
 				"required": [
@@ -1216,44 +1216,8 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"IAgentPackagesByManagerDto": {
-				"description": "Пакеты по менеджерам (`--packages-apt` и т. п.).",
-				"properties": {
-					"apt": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array"
-					},
-					"dnf": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array"
-					},
-					"yum": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array"
-					},
-					"apk": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array"
-					},
-					"zypper": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array"
-					}
-				},
-				"type": "object",
-				"additionalProperties": false
-			},
 			"ICreateAgentInstallCommandBody": {
+				"description": "Команда установки агента на ноду: архив папки агента с этого сервера и токен.",
 				"properties": {
 					"token": {
 						"type": "string",
@@ -1268,63 +1232,8 @@
 						"description": "Адрес сервера; без него — `AGENT_PUBLIC_URL` или `APP_PUBLIC_URL`."
 					},
 					"name": {
-						"type": "string"
-					},
-					"user": {
 						"type": "string",
-						"description": "Пользователь службы агента."
-					},
-					"config": {
-						"type": "string",
-						"description": "Путь к `agent.yaml` на узле."
-					},
-					"privileged": {
-						"type": "boolean"
-					},
-					"killMode": {
-						"type": "string",
-						"enum": [
-							"process",
-							"mixed"
-						],
-						"description": "`process` | `mixed`."
-					},
-					"packages": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array"
-					},
-					"packagesByManager": {
-						"$ref": "#/components/schemas/IAgentPackagesByManagerDto",
-						"description": "Свои имена пакетов для менеджера: на узле с ним заменяют `packages`."
-					},
-					"sysctl": {
-						"$ref": "#/components/schemas/Record_string.string_"
-					},
-					"rwPaths": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array"
-					},
-					"caFile": {
-						"type": "string"
-					},
-					"workers": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"description": "Воркеры с сервера."
-					},
-					"stopTimeout": {
-						"type": "string",
-						"description": "Например `30s`."
-					},
-					"releases": {
-						"type": "string",
-						"description": "Другой источник сборок воркеров (`--releases`)."
+						"description": "Имя агента (по умолчанию — имя машины)."
 					}
 				},
 				"type": "object",
@@ -6880,7 +6789,7 @@
 						}
 					}
 				},
-				"description": "Обновить агента до новой версии (`AGENT_RELEASES_DIR`): итог — после\nзапуска новой версии. Агент в контейнере себя не обновляет.",
+				"description": "Обновить агента до новой версии из источника сборок агента: итог — после\nзапуска новой версии. Агент в контейнере себя не обновляет.",
 				"summary": "Обновление агента",
 				"tags": [
 					"Agent"
@@ -7140,7 +7049,7 @@
 						}
 					}
 				},
-				"description": "Сборки агента и кого из доступных агентов можно обновить до их версии:\nагент и netprobe — из релизов GitHub (`AGENT_RELEASES_GITHUB`) или\nадреса сборок (`AGENT_RELEASES_URL`), воркеры проекта wg и socks — из\n`AGENT_RELEASES_DIR`. Новую версию агента в источнике бэкенд замечает\nсам (сокет `agent:release`).",
+				"description": "Сборки агента и кого из доступных агентов можно обновить до их версии:\nагент и netprobe — из релизов GitHub (`AGENT_RELEASES_GITHUB`) или\nадреса сборок (`AGENT_RELEASES_URL`), воркеры проекта wg и socks — из\n`release/` архивов `AGENT_BUNDLE_DIR`. Новую версию агента в источнике бэкенд замечает\nсам (сокет `agent:release`).",
 				"summary": "Сборки агента",
 				"tags": [
 					"Agent"
@@ -7178,7 +7087,7 @@
 						}
 					}
 				},
-				"description": "Команда установки агента на новый узел одной строкой:\n`curl …/api/v1/agent-link/install.sh | sudo sh -s -- --token … [флаги]`\n(воркеры с сервера — `workers`, флаг `--worker`).",
+				"description": "Команда установки агента на новый узел одной строкой:\n`curl …/api/v1/agent-bundle/install.sh | sudo sh -s -- --token …` — скрипт\nставит архив папки агента (`agent pack`): экземпляр, воркеры, пакеты и права —\nиз неё.",
 				"summary": "Команда установки агента",
 				"tags": [
 					"Agent"

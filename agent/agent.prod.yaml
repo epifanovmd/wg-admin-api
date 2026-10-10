@@ -1,0 +1,37 @@
+# Узлы WireGuard: этот файл поверх agent.yaml (воркеры — оттуда же). Архив для узлов —
+# yarn agent:pack (его же раздаёт API), установка — sudo ./agent install --token <токен> из
+# архива или одной командой с API. Адрес API и токен узлу передаёт установка.
+extends: agent.yaml
+envFiles: [.env.prod]
+# Экземпляр агента проекта: служба agent-wg, /etc/agent-wg, /var/lib/agent-wg — рядом с агентами
+# других бэкендов на том же узле.
+instance: wg
+install:
+  # wg настраивает сам узел: интерфейсы, маршруты, iptables, sysctl.
+  privileged: true
+  packages: [wireguard-tools, iproute2, iptables, conntrack, iputils-ping]
+  packagesByManager:
+    dnf: [wireguard-tools, iproute, iptables, conntrack-tools, iputils]
+    yum: [wireguard-tools, iproute, iptables, conntrack-tools, iputils]
+    apk: [wireguard-tools, iproute2, iptables, conntrack-tools, iputils]
+    zypper: [wireguard-tools, iproute2, iptables, conntrack-tools, iputils]
+  sysctl:
+    net.ipv4.ip_forward: "1"
+    net.ipv6.conf.all.forwarding: "1"
+server:
+  url: "${AGENT_SERVER_URL}"
+enroll:
+  token: "${AGENT_ENROLL_TOKEN}"
+labels:
+  env: prod
+update:
+  mode: self
+log:
+  format: json
+workers:
+  # На узле — настоящая система: /etc/wireguard и /var/lib/wg-admin (значения воркера по умолчанию).
+  - path: workers/wg
+    env:
+      WG_DRY_RUN: "0"
+      WG_CONFIG_DIR: /etc/wireguard
+      WG_STATE_DIR: /var/lib/wg-admin

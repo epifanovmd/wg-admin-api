@@ -1,11 +1,35 @@
-# Воркеры узла: wg и socks
+# Папка агента
 
-На каждом узле (VPS) работает **агент** — готовая программа
-[github.com/epifanovmd/agent](https://github.com/epifanovmd/agent) версии 1.x. Агент держит
-связь с бэкендом, хранит настройки, присылает метрики узла (процессор, память, диск, сеть),
-пишет журнал и обновляет себя и воркеры. Своей предметной области у агента нет: всё, что
-касается WireGuard, делают **воркеры** этого каталога — небольшие программы на Go, которые агент
-запускает и с которыми говорит по HTTP через unix-сокет.
+Всё, что агент делает на машине разработчика и на узлах, — здесь: программа агента, её
+настройки и воркеры проекта `wg` и `socks`. Сам агент — отдельный проект
+([github.com/epifanovmd/agent](https://github.com/epifanovmd/agent), версия 1.x); здесь — то,
+что запускает на нём этот бэкенд.
+
+```
+agent/
+├── agent               программа агента (не в git: yarn agent скачивает её сам, yarn agent upgrade обновляет)
+├── agent.yaml          машина разработчика — yarn agent (воркер wg — в имитации)
+├── agent.prod.yaml     узлы WireGuard: поверх agent.yaml (экземпляр wg, root, пакеты, sysctl)
+├── .env.prod.example   образец .env.prod — если узел ставится не с API
+├── workers/wg/         воркер wg (Go): интерфейсы, туннели, пробросы, пробы
+├── workers/socks/      воркер socks (Go): SOCKS5-прокси через mTLS
+├── internal/, go.mod   общий Go-код воркеров
+├── go-worker.sh        сборка Go-воркера: Go на машине, иначе в контейнере (scripts/go-agent.sh)
+├── dev.mjs             yarn agent*: программа агента, порт и токен API из .env.development
+├── bundle/             архивы для узлов (yarn agent:pack, не в git) — их раздаёт API
+└── dist/               сборки агента для сквозных тестов (yarn agent:fetch) и воркеров (go-agent.sh build), не в git
+```
+
+## Кто есть кто
+
+- **Агент** — одна программа на узле. Держит связь с бэкендом, хранит настройки, присылает
+  метрики узла (процессор, память, диск, сеть), пишет журнал, обновляет себя и воркеры. Своей
+  предметной области у агента нет: всё, что касается WireGuard, делают воркеры.
+- **Воркер** — небольшая программа на Go, которую агент запускает и с которой говорит по HTTP
+  через unix-сокет. Воркеры проекта — папки в `workers/`: исходники, `VERSION` и два
+  исполняемых файла — `build` (сборка для архива узла) и `run` (запуск из исходников).
+- **Настройки** — `agent.yaml` и файлы поверх него (`extends`): что запускать и как. Итог и
+  откуда каждое значение — `yarn agent config check` (или `--env prod`).
 
 ```
 бэкенд ──WebSocket──► агент ──HTTP по unix-сокету──► воркер wg     (интерфейсы, туннели, пробросы)
@@ -21,8 +45,37 @@
 вызывает `PUT /config/<ключ>`. Ответ воркера — итог применения — агент возвращает бэкенду.
 После перезапуска агент сам передаёт воркерам последние сохранённые настройки: узел работает и
 без связи с бэкендом. Формат связи агента и воркеров — в
-[спецификации агента](https://github.com/epifanovmd/agent/blob/v1.1.0/sdk/spec/README.md)
-(§8 настройки, §9 самочувствие и метрики, §12 воркер и манифест, §13 жизнь воркера).
+[спецификации агента](https://github.com/epifanovmd/agent/blob/main/sdk/spec/README.md)
+(настройки, самочувствие и метрики, воркер и манифест, жизнь воркера). Со стороны бэкенда
+значения настроек, итоги, метрики и события воркеров описаны в
+`src/modules/wg-agent/wg-worker.contract.ts` — его меняют вместе с воркерами.
+
+## Агент на своей машине
+
+```bash
+yarn dev                          # API (в .env.development — AGENT_BOOTSTRAP_TOKEN)
+yarn agent                        # агент с воркерами wg и socks (agent.yaml); Ctrl+C — остановка
+yarn agent:start | agent:stop [--force] | agent:status | agent:logs   # то же в фоне
+yarn agent config check           # итоговые настройки и откуда каждое значение
+yarn agent worker list            # воркеры: откуда каждый, версия
+yarn agent upgrade --check        # есть ли новая версия агента (yarn agent upgrade — поставить)
+```
+
+`yarn agent` (это `agent/dev.mjs`) скачивает программу агента той же версии, что `agent-sdk` в
+`package.json`, если её ещё нет (со сверкой sha256), берёт `SERVER_PORT` и
+`AGENT_BOOTSTRAP_TOKEN` из `.env.development` (другой файл — `ENV_FILE=…`) и запускает
+`agent/agent run`. Токен — тот же, что у API, не короче 32 символов.
+
+- Воркеры идут прямо из исходников: `run` в папке воркера собирает его под эту машину в `.bin/`
+  и запускает (`go-worker.sh run`). Go нет — сборка в контейнере `golang`
+  (`scripts/go-agent.sh`), нужен Docker. Правки видны после перезапуска воркера.
+- Воркер wg — в имитации (`WG_DRY_RUN=1` в `agent.yaml`): системные команды не выполняются,
+  конфиги и `state.json` — в `.agent/data/wg/`.
+- Имя агента — `AGENT_NAME` (по умолчанию `dev-$USER`), привязать к ноде — `AGENT_NODE_ID=<id>`
+  (метка `nodeId`). Данные агента — `.agent/data`: удалить — агент зарегистрируется заново и
+  привяжется к ноде по метке или имени. Второй агент — `AGENT_DIR=.agent-2 AGENT_NAME=dev-2 yarn agent`.
+- Здесь агент не обновляет себя по команде сервера (`update: disabled`): новую версию ставит
+  `yarn agent upgrade`.
 
 ## Воркер wg
 
@@ -210,7 +263,8 @@ kernel, udpPorts, tcpPorts, stateVersion, interfaces, errors } }`. `ok: false` �
 
 Для разработки на macOS и проверки связки с бэкендом: ни одной системной команды. Конфиги
 интерфейсов для наглядности пишутся в `WG_CONFIG_DIR`, `state.json` — в `WG_STATE_DIR` (по
-умолчанию — `$TMPDIR/wg-admin-dry`). Включённые интерфейсы — `up`, выключенные — `down`,
+умолчанию — `$TMPDIR/wg-admin-dry`; у `yarn agent` — `.agent/data/wg/{wireguard,state}`, так
+задано в `agent.yaml`). Включённые интерфейсы — `up`, выключенные — `down`,
 туннели и пробросы принимаются, маршрут — первый кандидат. Метрики синтетические: счётчики пиров
 растут со временем, рукопожатие — только что, адрес пира — `203.0.113.<n>:51820`; пробы туннелей
 и узлов — 1–5 мс без потерь. В самочувствии — `dryRun: true`, `wgVersion: "dry-run"`,
@@ -248,119 +302,114 @@ errors }`. Новые прокси начинают слушать, удалён
 
 Прокси живут в процессе воркера: SIGTERM закрывает их. Работает на любой ОС, имитации нет.
 
-## Сборки для узлов
+## Воркеры: сборка и версии
 
-Узел получает от бэкенда сборки из двух мест:
+У каждого воркера в папке два исполняемых файла, оба вызывают `agent/go-worker.sh`:
 
-| Что                                    | Откуда                                                                         |
-| -------------------------------------- | ------------------------------------------------------------------------------ |
-| агент, `install.sh`, воркер `netprobe` | релизы агента на GitHub (`epifanovmd/agent`): бэкенд сам берёт новейший в `^1` |
-| воркеры `wg` и `socks`                 | каталог `agent/release` проекта (`AGENT_RELEASES_DIR`)                         |
+| Файл    | Кто вызывает                       | Что делает                                                                              |
+| ------- | ---------------------------------- | --------------------------------------------------------------------------------------- |
+| `build` | `agent pack`                       | программа воркера под платформу узла (`GOOS`, `GOARCH`, `OUT` задаёт pack) → `$OUT/run` |
+| `run`   | `agent run` на машине разработчика | сборка под эту машину в `.bin/` и запуск; на узле `run` — сама программа из архива      |
 
-**Агент.** Бэкенд при запуске и потом раз в час (`AGENT_RELEASES_CHECK_INTERVAL_MS`) спрашивает
-GitHub, есть ли новая версия агента в диапазоне `AGENT_RELEASES_RANGE` (по умолчанию `^1`).
-Нашёл — пишет в журнал, сообщает админке (сокет `agent:release`), и у агентов узлов появляется
-доступное обновление. Пересобирать или перезапускать бэкенд для этого не нужно. Узел скачивает
-программу агента прямо с GitHub: бэкенд отвечает перенаправлением. Узлам без доступа к GitHub —
-`AGENT_RELEASES_PROXY=true`, тогда бэкенд передаёт файл сам. Своё зеркало или одна закреплённая
-версия — `AGENT_RELEASES_URL` (каталог с `manifest.json`), без GitHub совсем —
-`AGENT_RELEASES_GITHUB=` (пусто).
+Go на машине не обязателен: без него `go-worker.sh` собирает в контейнере `golang` версии
+toolchain из `go.mod` (`scripts/go-agent.sh`).
 
-**Воркеры проекта.** `agent/release.sh` собирает каталог `agent/release` (в git не попадает):
+- **Версия** — файл `VERSION` воркера (вшивается в программу, `-X main.version`). Изменили код
+  воркера — поднимите его `VERSION` (общий код `internal/`, `go.mod`, `go.sum` — оба воркера):
+  `scripts/check-agent-version.sh` в CI сверяет это с последним тегом `v*`. Разные сборки под
+  одной версией агент не различит.
+- **Обновить воркер на узлах** — поднять `VERSION`, новый образ API (или `yarn agent:pack`) и
+  `POST /api/v1/wg/nodes/{id}/workers/<имя>/update` (кнопка на странице ноды).
 
-| Файл                                 | Что                                                                            |
-| ------------------------------------ | ------------------------------------------------------------------------------ |
-| `wg-<версия>-<os>-<arch>`, `socks-…` | сборки воркеров (linux и darwin × amd64 и arm64), версия — `workers/*/VERSION` |
-| `manifest.json`                      | утилита `agent-release` агента: файлы, sha256, подписи, `stopTimeout` воркеров |
+## Как агент попадает на узел
 
-Сборок агента в нём нет. В образе бэкенда каталог собирают стадии `agent-workers` и
-`agent-release` `Dockerfile` (`/app/agent/release`).
+Принцип один — вручную и с API: архив папки агента под машину узла и `agent install` из него.
 
 ```bash
-agent/release.sh                                  # воркеры в agent/release
-AGENT_SIGNING_KEY=… agent/release.sh              # подписанные ключом проекта
-docker build --secret id=agent_signing_key,env=AGENT_SIGNING_KEY .   # то же в образе
+yarn agent:pack                   # agent/bundle: agent-prod-<версия>-linux-{amd64,arm64}.tar.gz и release/
 ```
 
-Нужны `bash` и `node`; Go или Docker — для сборки воркеров и утилиты `agent-release` (Go нет —
-сборка в контейнере `golang`). Переменные: `RELEASE_OUT=каталог` — куда собрать;
-`WORKERS_PREBUILT=каталог` — готовые сборки воркеров; `AGENT_RELEASE_TOOL=путь` — готовая
-утилита `agent-release` (иначе `go run` той же версии, что `agent-sdk` в `package.json`).
+`agent pack --env prod` кладёт в архив программу агента под платформу узла, `agent.yaml` +
+`agent.prod.yaml`, воркеры `wg` и `socks`, собранные под эту платформу (их `build`), и их
+подписанные сборки (`release/`) — для обновления воркеров с API. `agent install` на узле ставит
+агента службой по `install:` из `agent.prod.yaml`:
 
-**Подпись.** Агент ставит обновление, только если подпись сборки сходится с одним из открытых
-ключей, которые он знает. Ключей два:
+- экземпляр `wg` — своя служба `agent-wg` и свои каталоги рядом с агентами других бэкендов;
+- `privileged: true` — агент и воркеры от root без ограничений systemd: воркер wg настраивает
+  сеть, iptables и пишет в `/etc/wireguard`;
+- пакеты `wireguard-tools iproute2 iptables conntrack iputils-ping` (имена для apt;
+  `packagesByManager` — для dnf, yum, apk, zypper, где пакеты называются иначе);
+- `sysctl`: `net.ipv4.ip_forward=1`, `net.ipv6.conf.all.forwarding=1`;
+- воркер wg — на настоящей системе (`WG_DRY_RUN=0`, `/etc/wireguard`, `/var/lib/wg-admin`).
 
-- **ключ автора агента** — им подписаны агент и `netprobe` на GitHub; он вшит в программу агента,
-  а бэкенд дополнительно передаёт его узлу (`AGENT_RELEASES_PUBLIC_KEY`, по умолчанию — ключ из
-  релизов `epifanovmd/agent`);
-- **ключ проекта** — им `agent/release.sh` подписывает воркеры `wg` и `socks`
-  (`AGENT_SIGNING_KEY` — закрытый ключ из `agent-release keygen`). Бэкенду нужен открытый ключ
-  этой пары (`AGENT_UPDATE_PUBLIC_KEY`): он вписывает его в `install.sh`, и узлы проверяют им
-  обновления воркеров.
+Адрес API и токен регистрации передаёт установка. Узел — Linux с systemd (Alpine без systemd
+не поддерживается); ядро без модуля WireGuard (старше 5.6) — поставьте `wireguard-go`, wg-quick
+сам возьмёт его.
 
-Без ключа проекта воркеры не подписаны: установка сверит их sha256, но обновить воркер с бэкенда
-не получится — агент ответит `UPDATE_NOT_VERIFIED`. Скрипт пишет об этом в конце.
+| Как                  | Что сделать                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| вручную, архивом     | `scp agent/bundle/agent-prod-…-linux-amd64.tar.gz узел:` → `tar xzf … && cd agent && sudo ./agent install --server https://<api> --token <токен>` |
+| одной командой с API | токен и команда — при создании ноды или `POST /api/v1/wg/nodes/{id}/install-command` (общая — `POST /api/v1/agent-releases/install-command`)      |
+| с API по SSH         | `POST /api/v1/wg/nodes/{id}/provision` — то же самое на узле, токен — файлом                                                                      |
+| удалить              | `sudo /opt/agent-wg/bin/agent uninstall --instance wg [--purge]` или `POST /api/v1/wg/nodes/{id}/uninstall`                                       |
 
-**Версии.** Изменили код воркера — поднимите его `VERSION` (общий код `internal/`, `go.mod`,
-`go.sum` — оба воркера): `scripts/check-agent-version.sh` в CI сверяет это с последним тегом
-`v*`. Разные сборки под одной версией агент не различит.
-
-## Установка на узел
-
-Команду выдаёт бэкенд (адрес, токен и ключи проверки уже вписаны). Узел — Linux с systemd,
-агент ставится отдельным экземпляром `wg` (свои пути и служба `agent-wg`, не мешает другим
-агентам на узле):
+Команда установки с API:
 
 ```bash
-curl -fsSL https://<бэкенд>/api/v1/agent-link/install.sh | sudo sh -s -- \
-  --instance wg --token <токен> --name <имя узла> \
-  --worker wg --worker socks --privileged \
-  --packages "wireguard-tools iproute2 iptables conntrack iputils-ping" \
-  --packages-dnf "wireguard-tools iproute iptables conntrack-tools iputils" \
-  --packages-yum "wireguard-tools iproute iptables conntrack-tools iputils" \
-  --packages-zypper "wireguard-tools iproute2 iptables conntrack-tools iputils" \
-  --sysctl net.ipv4.ip_forward=1 --sysctl net.ipv6.conf.all.forwarding=1
+curl -fsSL 'https://<api>/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token '<токен>' --name '<нода>'
 ```
 
-- `--worker wg --worker socks` — сборки воркеров с сервера (sha256 сверяется) и запись о них в
-  `/etc/agent-wg/agent.yaml` с `release: true` и `stopTimeout: 30s`;
-- `--privileged` — агент и воркеры от root без ограничений systemd: воркер wg настраивает сеть,
-  iptables и пишет в `/etc/wireguard`;
-- `--packages` — имена для apt (Debian, Ubuntu); `--packages-dnf`, `-yum`, `-zypper` — для
-  Fedora/RHEL и SUSE, где пакеты называются иначе. Узлы без systemd (Alpine) не поддерживаются;
-- ядро без модуля WireGuard (старше 5.6) — поставьте `wireguard-go`: wg-quick сам возьмёт его.
+Флагов экземпляра, воркеров, пакетов и прав в ней нет — всё это в `agent.prod.yaml` архива.
+`POST /api/v1/agent-releases/install-command` принимает `{ token | tokenFile, baseUrl?, name? }`.
+API раздаёт архивы из `AGENT_BUNDLE_DIR` (`/api/v1/agent-bundle/install.sh` и
+`/api/v1/agent-bundle/linux-<arch>.tar.gz`, без входа: секретов в архиве нет); в образе API
+(`/app/agent/bundle`) их собирает стадия `agent-bundle` `Dockerfile` (`agent pack --env prod`
+для linux/amd64 и linux/arm64), для разработки — `yarn agent:pack` (`AGENT_BUNDLE_DIR=agent/bundle`).
+Узел ставится не с API — адрес и токен можно положить в `agent/.env.prod` (образец —
+`.env.prod.example`) до `yarn agent:pack`.
 
-Что потом:
+На узле (экземпляр `wg`):
+
+| Что               | Где                                                   |
+| ----------------- | ----------------------------------------------------- |
+| программа         | `/opt/agent-wg/bin/agent` (ссылка — `agent-wg`)       |
+| настройки и токен | `/etc/agent-wg/agent.yaml`, `/etc/agent-wg/agent.env` |
+| данные и воркеры  | `/var/lib/agent-wg`                                   |
+| служба            | `agent-wg` (`systemctl status agent-wg`)              |
 
 ```bash
 sudo agent-wg status          # связь, воркеры, последняя ошибка
 sudo agent-wg logs -f         # журнал агента и воркеров (journalctl -u agent-wg)
-sudo wg show                  # интерфейсы WireGuard
-sudo agent uninstall --instance wg           # удалить: воркеры убирают за собой (POST /cleanup)
-sudo agent uninstall --instance wg --purge   # и настройки, данные, поставленные установкой пакеты
+sudo agent-wg upgrade         # новая версия агента
+sudo systemctl reload agent-wg                               # перечитать настройки
+sudo wg show                                                 # интерфейсы WireGuard
+sudo /opt/agent-wg/bin/agent uninstall --instance wg         # удалить: воркеры убирают за собой (POST /cleanup)
+sudo /opt/agent-wg/bin/agent uninstall --instance wg --purge # и настройки, данные, поставленные установкой пакеты
 ```
 
-## Локальный запуск
+## Обновления и подписи
 
-`agent/dev.sh` запускает агента на этой машине с бэкендом из `.env.development`:
+- **Агента** бэкенд берёт из релизов GitHub `epifanovmd/agent` сам (`AGENT_RELEASES_*`,
+  диапазон `^1`): проверяет при запуске и раз в час (`AGENT_RELEASES_CHECK_INTERVAL_MS`), новую
+  версию пишет в журнал и сообщает админке сокетом. Агент на узле тоже сам проверяет новые
+  версии (`update: self`) и сообщает о них. Обновить — из админки
+  (`POST /api/v1/wg/nodes/{id}/agent/update`) или `sudo agent-wg upgrade` на узле. Пересобирать
+  бэкенд ради новой версии агента не нужно. Узлам без доступа к GitHub —
+  `AGENT_RELEASES_PROXY=true` (бэкенд передаёт файл сам), своё зеркало или закреплённая версия —
+  `AGENT_RELEASES_URL`.
+- **Воркеры проекта** подписывает `agent pack` ключом проекта из `AGENT_SIGNING_KEY` (пара —
+  `yarn agent keygen`). Открытый ключ попадает в архив, и `agent install` добавляет его к ключам
+  узла. Без ключа воркеры ставятся, но с API не обновляются (агент ответит `UPDATE_NOT_VERIFIED`).
+- Агент, который после обновления три запуска подряд не вышел на связь, возвращается к прежней
+  версии; воркер, который после обновления не стал здоров, — тоже.
 
-```bash
-agent/release.sh       # один раз: воркеры (или их соберёт dev.sh под эту машину)
-agent/dev.sh run       # на переднем плане; Ctrl+C — остановка агента и воркеров
-agent/dev.sh start | stop [--force] | status | logs | check
-```
+| Где собираются архивы      | Как передать закрытый ключ                            |
+| -------------------------- | ----------------------------------------------------- |
+| `yarn agent:pack`          | `AGENT_SIGNING_KEY=… yarn agent:pack`                 |
+| образ в CI (`release.yml`) | секрет репозитория `AGENT_SIGNING_KEY`                |
+| `docker build`             | `--secret id=agent_signing_key,env=AGENT_SIGNING_KEY` |
 
-- Регистрация — `AGENT_BOOTSTRAP_TOKEN` из `.env.development` (тот же, что у бэкенда, не короче
-  32 символов), адрес — `http://localhost:$SERVER_PORT`. Имя — `AGENT_NAME` (по умолчанию
-  `dev-$USER`), метка `nodeId` — из `AGENT_NODE_ID`, если задана.
-- Воркер wg на macOS — всегда в имитации; на Linux — тоже, пока не задано `WG_DRY_RUN=0` (тогда
-  нужен root). Конфиги имитации — `.agent/wg/wireguard`.
-- Программа агента — `AGENT_BIN` или `agent/dist/agent-<версия>/agent-<os>-<arch>` той же версии,
-  что `agent-sdk` в `package.json`; её нет — `dev.sh` скачивает сборки с GitHub
-  (`agent/fetch-agent.sh`). Воркеры — `WG_WORKER_BIN`, `SOCKS_WORKER_BIN` или сборки под эту
-  машину из `agent/release` и `agent/dist` (нет — собираются).
-- Данные агента — `.agent/data`: удалите их, и агент зарегистрируется заново. Настройки агента —
-  `agent/local/agent.yaml`, обновления выключены.
+`make deploy` (сборка образа на хосте) секрета не передаёт — воркеры в нём без подписи.
 
 ## Разработка
 
@@ -368,21 +417,20 @@ agent/dev.sh start | stop [--force] | status | logs | check
 agent/
 ├── workers/wg/       воркер wg: HTTP, повторы и пробы (service.go), узел — настоящий или имитация (system_*.go)
 ├── workers/socks/    воркер socks
-├── internal/
-│   ├── desired/      настройки state и probes, итог применения
-│   ├── apply/        применение на узле: конфиги, wg-quick, туннели, пробросы, защита от чужого
-│   ├── wg/ netcfg/   конфиги wg-quick и дамп; IPIP-туннели, цепочки iptables, проверки чужого
-│   ├── failover/     выбор маршрута пробросов по пробам
-│   ├── probe/        ping туннелей, узлов и адресов
-│   ├── socks/        SOCKS5 через mTLS
-│   ├── cleanup/ state/  уборка созданного; что создал воркер (state.json)
-│   ├── sysinfo/      занятые порты, режим WireGuard, дистрибутив и ядро
-│   └── workerhttp/ shell/ logx/   HTTP на сокете агента и события, внешние команды, журнал
-├── release.sh  fetch-agent.sh  dev.sh  local/agent.yaml
+└── internal/
+    ├── desired/      настройки state и probes, итог применения
+    ├── apply/        применение на узле: конфиги, wg-quick, туннели, пробросы, защита от чужого
+    ├── wg/ netcfg/   конфиги wg-quick и дамп; IPIP-туннели, цепочки iptables, проверки чужого
+    ├── failover/     выбор маршрута пробросов по пробам
+    ├── probe/        ping туннелей, узлов и адресов
+    ├── socks/        SOCKS5 через mTLS
+    ├── cleanup/ state/  уборка созданного; что создал воркер (state.json)
+    ├── sysinfo/      занятые порты, режим WireGuard, дистрибутив и ядро
+    └── workerhttp/ shell/ logx/   HTTP на сокете агента и события, внешние команды, журнал
 ```
 
-Go на машине не нужен — `scripts/go-agent.sh` запускает его в контейнере `golang` (ветка — из
-`go.mod`):
+Go на машине не нужен — `scripts/go-agent.sh` запускает его в контейнере `golang` (версия —
+toolchain из `go.mod`):
 
 ```bash
 scripts/go-agent.sh test         # go test ./...
@@ -395,3 +443,7 @@ agent/workers/wg/linux-check.sh  # воркер wg на настоящем Linux
 `linux-check.sh` поднимает Debian с wireguard-tools и iptables, запускает воркер на сокете и
 проверяет интерфейс и пиров (`wg show`), смену пиров без пересоздания интерфейса, проброс в
 цепочках `WG_ADMIN_*`, чужой конфиг, перезапуск, метрики, SIGTERM без разборки и уборку.
+
+Сквозные тесты бэкенда с настоящим агентом (`agents.e2e.ts`, `agent-update.e2e.ts`) берут
+программу агента из `agent/dist` (`yarn agent:fetch`; прежняя версия для обновления —
+`yarn agent:fetch 1.0.1`) и собирают архив `agent pack` стенда с его ключом проекта.

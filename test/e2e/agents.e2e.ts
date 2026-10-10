@@ -41,7 +41,7 @@ describe("агент ноды: настоящий агент и воркер wg 
 
   before(async function () {
     if (!realAgentAvailable()) {
-      // Без агента (`agent/fetch-agent.sh`) и воркеров (`yarn agent:release`)
+      // Без агента (`yarn agent:fetch`) и архива папки агента (agent pack)
       // сценарии с настоящим агентом пропускаются.
       this.skip();
     }
@@ -383,12 +383,13 @@ describe("агент ноды: настоящий агент и воркер wg 
     const command = expectStatus(
       await call(admin, "POST", "/api/v1/agent-releases/install-command", {
         token: "abc.def",
-        workers: ["wg", "socks"],
       }),
       200,
     ).data;
 
-    expect(command.command).to.include("--instance 'wg'");
+    expect(command.command).to.equal(
+      `curl -fsSL '${BASE_URL}/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token 'abc.def'`,
+    );
 
     expectStatus(
       await call(admin, "POST", `/api/v1/agents/${agentId}/rotate-key`),

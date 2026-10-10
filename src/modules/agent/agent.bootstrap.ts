@@ -39,7 +39,7 @@ export class AgentBootstrap implements IBootstrap {
         instance: this._runtime.instanceId,
         relay: this._relay.address,
         bootstrapToken: !!agentConfig.bootstrapToken,
-        releasesDir: agentConfig.releasesDir ?? null,
+        bundleDir: agentConfig.bundleDir ?? null,
         validateEvents: agentConfig.validateEvents,
       },
       "[Agent] Канал агентов готов",

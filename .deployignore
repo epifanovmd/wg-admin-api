@@ -1,7 +1,7 @@
 # Не уходит на хост при `make sync`. Исключённое не удаляется на хосте (секреты там сохраняются).
 .git
 node_modules
-build
+/build
 coverage
 .env*
 .idea
@@ -9,6 +9,7 @@ coverage
 *.dump
 backup_*.sql.gz
 agent/dist
-agent/release
-agent/release.new
+agent/agent
+agent/bundle
+agent/.env.prod
 .agent

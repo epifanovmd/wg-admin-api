@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { execFileSync } from "child_process";
 
 import {
   AGENT_PREVIOUS_VERSION,
@@ -73,15 +74,32 @@ describe("сборки агента: источник агента и ворке
     expect(info.agentVersion).to.equal(AGENT_VERSION);
   });
 
-  it("install.sh из источника: адрес бэкенда, ключи проекта и автора агента; сборка агента — перенаправление на источник", async () => {
+  it("установка с сервера: скрипт и архив папки агента (ключ проекта — в нём); сборка агента — перенаправление на источник", async () => {
     const script = await (
-      await fetch(`${BASE_URL}/api/v1/agent-link/install.sh`)
+      await fetch(`${BASE_URL}/api/v1/agent-bundle/install.sh`)
     ).text();
 
-    expect(script).to.match(new RegExp(`^DEFAULT_SERVER="${BASE_URL}"$`, "m"));
-    expect(script).to.include(
-      `DEFAULT_UPDATE_KEYS="${PROJECT_PUBLIC_KEY} ${authorPublicKey()}"`,
+    expect(script).to.include(`SERVER='${BASE_URL}'`);
+    expect(script).to.include('install --server "$SERVER" "$@"');
+
+    const archive = await fetch(
+      `${BASE_URL}/api/v1/agent-bundle/${PLATFORM}.tar.gz`,
     );
+
+    expect(archive.status).to.equal(200);
+    const info = JSON.parse(
+      execFileSync("tar", ["-xzOf", "-", "agent/bundle.json"], {
+        input: Buffer.from(await archive.arrayBuffer()),
+      }).toString("utf8"),
+    );
+
+    expect(info).to.include({
+      version: AGENT_VERSION,
+      config: "agent.prod.yaml",
+      env: "prod",
+    });
+    expect(info.publicKeys).to.deep.equal([PROJECT_PUBLIC_KEY]);
+    expect(info.workers).to.have.members(["wg", "socks"]);
 
     const file = await fetch(
       `${BASE_URL}/api/v1/agent-link/releases/agent-${PLATFORM}`,
@@ -149,7 +167,7 @@ describe("сборки агента: источник агента и ворке
       AGENT_PREVIOUS_VERSION === AGENT_VERSION ||
       !agentBinary(AGENT_PREVIOUS_VERSION)
     ) {
-      // Прежний агент — agent/fetch-agent.sh <версия>.
+      // Прежний агент — yarn agent:fetch <версия>.
       this.skip();
     }
 

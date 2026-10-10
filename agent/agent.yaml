@@ -1,0 +1,31 @@
+# Агент на машине разработчика: yarn agent (порт API и токен регистрации — из .env.development).
+# Боевые узлы — agent.prod.yaml поверх этого файла. Что получилось и откуда каждое значение:
+# yarn agent config check.
+server:
+  url: "http://localhost:${SERVER_PORT}"
+enroll:
+  token: "${AGENT_BOOTSTRAP_TOKEN}"
+dataDir: ../.agent/data
+labels:
+  env: dev
+# Здесь агент не обновляет себя по команде сервера: новую версию ставит yarn agent upgrade.
+update:
+  mode: disabled
+log:
+  level: info
+  # Какие записи журнала уходят на сервер без наблюдения; пока клиент в комнате агента — подробнее.
+  forward: warn
+workers:
+  # WireGuard-интерфейсы, IPIP-туннели, пробросы портов и пробы связности (настройки state и
+  # probes). На своей машине — имитация (WG_DRY_RUN=1): конфиги и состояние — в .agent/.
+  - path: workers/wg
+    env:
+      WG_DRY_RUN: "1"
+      WG_CONFIG_DIR: "${AGENT_DATA_DIR}/wg/wireguard"
+      WG_STATE_DIR: "${AGENT_DATA_DIR}/wg/state"
+    lifecycle:
+      stopTimeout: 30s
+  # SOCKS5-прокси узла (настройка proxies).
+  - path: workers/socks
+    lifecycle:
+      stopTimeout: 30s

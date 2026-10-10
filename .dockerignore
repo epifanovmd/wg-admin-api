@@ -1,10 +1,11 @@
 # Контекст сборки образа: исходники бэкенда, воркеров узла и шаблоны писем.
 **/node_modules
-build
+/build
 agent/dist
-# Сборки для узлов образ собирает сам (стадия agent-release).
-agent/release
-agent/release.new
+# Архивы для узлов образ собирает сам (стадия agent-bundle).
+agent/agent
+agent/bundle
+agent/.env.prod
 .agent
 .git
 .github

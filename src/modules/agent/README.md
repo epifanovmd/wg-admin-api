@@ -27,6 +27,8 @@ src/modules/agent/
 ├── agent.bootstrap.ts          # старт: события, LISTEN; на ролях с HTTP — WebSocket и наблюдение
 ├── agent.signals.ts            # AgentSignals (PgSignals): канал agents_changed
 ├── agent-link.handler.ts       # RAW_HTTP_HANDLER: /api/v1/agent-link/* → agents.handle
+├── agent-bundle.handler.ts     # RAW_HTTP_HANDLER: /api/v1/agent-bundle/* — install.sh и архивы для нод
+├── agent-bundle.ts             # скрипт и команда установки, выбор архива из AGENT_BUNDLE_DIR
 ├── agent-relay.server.ts       # внутренний HTTP-сервер пересылки (AGENT_RELAY_PORT): POST /internal/agent-relay → handleRelay
 ├── store/agent.store.ts        # AgentStore implements Store (Postgres): агенты и настройки
 ├── store/stored-agent*.entity.ts
@@ -84,9 +86,16 @@ SDK историю не хранит: она приходит событиями
 
 ## Связь и регистрация
 
-- `/api/v1/agent-link/*` (регистрация, сборки агента, `install.sh`) — `RAW_HTTP_HANDLER`: до
+- `/api/v1/agent-link/*` (регистрация, сборки агента) — `RAW_HTTP_HANDLER`: до
   разбора тела, CORS и лимита запросов; в Swagger не входят. WebSocket того же пути —
   `agents.attach(HttpServer)` на ролях `api` и `all`.
+- `/api/v1/agent-bundle/*` — установка нод (`AgentBundleHandler`, тоже `RAW_HTTP_HANDLER`, без
+  входа: в архиве нет секретов): `install.sh` (архив под машину ноды → `agent install --server
+<API> "$@"`; `--uninstall [--purge]` — удалить) и `linux-<arch>.tar.gz` — архив папки агента
+  (`agent pack`) из `AGENT_BUNDLE_DIR`. Команда установки (`installCommand`,
+  `agent-bundle.ts`) — `curl -fsSL '<API>/api/v1/agent-bundle/install.sh' | sudo sh -s --
+--token '<токен>' --name '<нода>'`; экземпляр `wg`, воркеры, пакеты и права — в
+  `agent/agent.prod.yaml` архива.
 - Регистрация: общий токен окружения `AGENT_BOOTSTRAP_TOKEN` или созданный токен
   (`<prefix>.<secret>`, в БД — префикс и хеш; срок, отзыв, лимит использований). Метки
   токена сильнее меток агента. Новый агент — событие `AgentEnrolledEvent` с источником
@@ -258,15 +267,16 @@ actionId`, `deferred: true`); `force: true` — заменить сразу. О�
 (15000), `AGENT_EVENTS_RETENTION_DAYS` (14), `AGENT_OFFLINE_GRACE_MS` (3000),
 `AGENT_RELAY_SECRET` (пересылка между копиями), `AGENT_RELAY_PORT` (8182) и
 `AGENT_RELAY_HOST` (`127.0.0.1`) — внутренний сервер пересылки, `INSTANCE_URL` (адрес
-сервера пересылки копии), `AGENT_RELEASES_DIR` (`agent/release` — воркеры проекта),
-`AGENT_UPDATE_PUBLIC_KEY` (открытые ключи проекта через запятую — подпись воркеров проекта,
-попадают в `install.sh`), `AGENT_CONFIGS_KEY` (шифрование значений
-настроек в БД), `AGENT_INSTANCE` (`wg` — экземпляр агента проекта на узле, `--instance`;
-пусто — по умолчанию), `AGENT_PUBLIC_URL`, `AGENT_VALIDATE_EVENTS` (`log`; `off | log |
+сервера пересылки копии), `AGENT_BUNDLE_DIR` (`agent/bundle` — архивы папки агента для нод,
+`yarn agent:pack`; в образе — `/app/agent/bundle`), `AGENT_CONFIGS_KEY` (шифрование значений
+настроек в БД), `AGENT_PUBLIC_URL` (адрес API в скрипте и команде установки),
+`AGENT_VALIDATE_EVENTS` (`log`; `off | log |
 reject` — [выше](#строгость-манифеста)); `TRUST_PROXY` — адрес агента за прокси.
 
 **Откуда агент.** Агента и воркер `netprobe` SDK берёт из удалённого источника
-(`agentReleases`), воркеры проекта — из `AGENT_RELEASES_DIR`; вместе это итоговый манифест сборок
+(`agentReleases`), воркеры проекта — из `release/` каталога архивов `AGENT_BUNDLE_DIR`
+(`agent pack --release-out`: `manifest.json` и сборки, подписанные ключом проекта
+`AGENT_SIGNING_KEY`; нет каталога — воркеры с API не обновляются); вместе это итоговый манифест сборок
 (`GET /api/v1/agent-releases`, у каждой сборки — `source`: `remote` или `local`):
 
 - `AGENT_RELEASES_GITHUB` (`epifanovmd/agent`; пусто — без GitHub) и `AGENT_RELEASES_RANGE`
@@ -277,8 +287,11 @@ reject` — [выше](#строгость-манифеста)); `TRUST_PROXY` �
 - `AGENT_RELEASES_CHECK_INTERVAL_MS` (3 600 000) — как часто проверять, первая проверка — при
   старте; `AGENT_RELEASES_PROXY` (`false`) — сборки агента узлам через бэкенд потоком, иначе
   перенаправление на источник;
-- `AGENT_RELEASES_PUBLIC_KEY` — ключ автора агента для `install.sh` (по умолчанию — ключ
-  релизов `epifanovmd/agent`; пусто — из `manifest.json` источника).
+- `AGENT_RELEASES_PUBLIC_KEY` — ключ автора агента: им подписаны агент и netprobe (по
+  умолчанию — ключ релизов `epifanovmd/agent`; пусто — из `manifest.json` источника).
+
+Ключ проекта нода получает из архива при `agent install` (его кладёт `agent pack`), ключ
+автора агента вшит в программу агента.
 
 Новая версия в источнике — запись в журнал и сокет `agent:release` `{ version, previous?,
 from }` всем клиентам (каждая копия бэкенда проверяет сама: событие может прийти несколько
@@ -286,14 +299,14 @@ from }` всем клиентам (каждая копия бэкенда про
 
 ## Тесты
 
-Юнит: доступ, регистрация, ошибки, история. Хранилище на Postgres (и шифрование значений
+Юнит: доступ, регистрация, ошибки, история, скрипт и команда установки (`agent-bundle.test.ts`). Хранилище на Postgres (и шифрование значений
 с `AGENT_CONFIGS_KEY`) —
 `TEST_DATABASE_URL=postgres://…/<тестовая база> yarn test:file src/modules/agent/store/agent.store.integration.test.ts`.
 E2E — `test/e2e/agents.e2e.ts`: настоящий агент (сборки с GitHub, скачанные заранее —
 `yarn agent:fetch`) с воркерами wg (`WG_DRY_RUN`) и socks (хелпер `test/e2e/real-agent.ts`):
 регистрация по токену ноды, настройки и их итог, метрики, запрос к воркеру, журнал, действия,
 токены, отзыв и удаление. `test/e2e/agent-update.e2e.ts` — сборки: агент из источника
-(сервер стенда вместо GitHub, `test/e2e/agent-release.ts`), воркеры проекта с подписью ключом
-стенда, `install.sh` с обоими ключами, обновление воркера проекта и обновление прежнего
+(сервер стенда вместо GitHub, `test/e2e/agent-release.ts`), архив `agent pack` стенда с
+воркерами проекта, подписанными ключом стенда, `install.sh` и архив с `/api/v1/agent-bundle`, обновление воркера проекта и обновление прежнего
 агента (`yarn agent:fetch 1.0.1`) до версии источника. Сценарии домена — фейковый агент на
 WebSocket (`test/e2e/fake-agent.ts`).

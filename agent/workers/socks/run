@@ -1,0 +1,4 @@
+#!/bin/sh
+# Воркер из исходников на своей машине (agent run): собрать и запустить. На узле run — сама
+# программа из архива agent pack.
+exec "$(dirname "$0")/../../go-worker.sh" run "$(basename "$(cd "$(dirname "$0")" && pwd)")"

@@ -17,7 +17,7 @@ import {
   AGENT_VERSION,
   agentBinary,
   PLATFORM,
-  PROJECT_RELEASES_DIR,
+  projectReleasesDir,
 } from "./agent-release";
 import { BASE_URL } from "./harness";
 
@@ -55,7 +55,7 @@ interface IManifestWorker {
 const projectWorker = (name: string): IManifestWorker => {
   const [os, arch] = PLATFORM.split("-");
   const manifest = JSON.parse(
-    readFileSync(join(PROJECT_RELEASES_DIR, "manifest.json"), "utf8"),
+    readFileSync(join(projectReleasesDir(), "manifest.json"), "utf8"),
   ) as { workers?: IManifestWorker[] };
   const build = manifest.workers?.find(
     w => w.name === name && w.os === os && w.arch === arch,
@@ -63,7 +63,7 @@ const projectWorker = (name: string): IManifestWorker => {
 
   if (!build) {
     throw new Error(
-      `E2E: нет воркера ${name} для ${PLATFORM} — yarn agent:release`,
+      `E2E: нет воркера ${name} для ${PLATFORM} — agent pack стенда не собрал его`,
     );
   }
 
@@ -91,7 +91,7 @@ export class RealAgent {
 
     if (!source) {
       throw new Error(
-        `E2E: нет агента ${version} для ${PLATFORM} — agent/fetch-agent.sh ${version}`,
+        `E2E: нет агента ${version} для ${PLATFORM} — yarn agent:fetch ${version}`,
       );
     }
 
@@ -105,12 +105,13 @@ export class RealAgent {
       const build = projectWorker(name);
       const target = join(dataDir, "workers", name);
 
-      mkdirSync(target, { recursive: true });
-      copyFileSync(
-        join(PROJECT_RELEASES_DIR, build.file),
+      mkdirSync(join(target, "current"), { recursive: true });
+      execFileSync("tar", [
+        "-xzf",
+        join(projectReleasesDir(), build.file),
+        "-C",
         join(target, "current"),
-      );
-      chmodSync(join(target, "current"), 0o755);
+      ]);
       writeFileSync(
         join(target, "version"),
         `${options.workerVersion ?? build.version}\n`,

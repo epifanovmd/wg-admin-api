@@ -1,6 +1,6 @@
 node_modules
 dist
-build
+/build
 coverage
 .vscode/
 .idea
@@ -9,12 +9,12 @@ yarn-error.log
 .env*
 !.env.example
 !.env.deploy.example
+!agent/.env.prod.example
 
 # Локальная память агента разработки
 .claude/memory/
 
-# Сборки воркеров, каталог сборок для узлов (agent/release.sh) и данные агента разработки (agent/dev.sh)
+# Данные агента разработки (yarn agent) и скачанные сборки агента (yarn agent:fetch: e2e);
+# программа агента и архивы для узлов — в agent/.gitignore
 agent/dist/
-agent/release/
-agent/release.new/
 .agent/

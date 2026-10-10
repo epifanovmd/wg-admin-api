@@ -1,0 +1,3 @@
+#!/bin/sh
+# agent pack: программа воркера под платформу узла (GOOS, GOARCH, OUT задаёт pack) → $OUT/run.
+exec "$(dirname "$0")/../../go-worker.sh" build "$(basename "$(cd "$(dirname "$0")" && pwd)")"

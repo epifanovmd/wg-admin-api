@@ -68,7 +68,7 @@ jobs:
             APP_VERSION=${{ github.ref_name }}
             APP_COMMIT=${{ steps.build-info.outputs.commit }}
             APP_BUILT_AT=${{ steps.build-info.outputs.built-at }}
-          # Ключ проекта для подписи воркеров wg и socks (agent-release keygen);
+          # Ключ проекта для подписи воркеров wg и socks (agent keygen);
           # нет секрета — воркеры без подписи.
           secrets: |
             agent_signing_key=${{ secrets.AGENT_SIGNING_KEY }}

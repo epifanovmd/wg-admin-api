@@ -14,7 +14,7 @@ import { z } from "zod";
 
 import { config } from "../../config";
 import { EventBus, Injectable, logger } from "../../core";
-import { agentConfig } from "./agent.config";
+import { agentConfig, bundleReleasesDir } from "./agent.config";
 import { AgentSignals } from "./agent.signals";
 import { AGENT_RELAY_PATH, AGENTS_CHANGED_CHANNEL } from "./agent.types";
 import { AgentEnrollmentService } from "./agent-enrollment.service";
@@ -320,9 +320,8 @@ export class AgentRuntime {
         relay: relayTo,
         relaySecret: agentConfig.relaySecret,
       }),
-      releasesDir: agentConfig.releasesDir,
+      releasesDir: bundleReleasesDir(),
       agentReleases: agentReleasesOptions(),
-      updatePublicKeys: agentConfig.updatePublicKeys,
       baseUrl: agentConfig.publicUrl,
       trustProxy: config.server.trustProxy,
       validateConfigs: true,

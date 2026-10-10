@@ -75,7 +75,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # shellcheck предустановлен в образе ubuntu-latest.
-      - run: shellcheck scripts/*.sh scripts/db/*.sh test/smoke/*.sh agent/*.sh agent/workers/*/*.sh
+      - run: shellcheck scripts/*.sh scripts/db/*.sh test/smoke/*.sh agent/*.sh agent/workers/*/*.sh agent/workers/*/build agent/workers/*/run
 
   migrations:
     runs-on: ubuntu-latest
@@ -156,15 +156,15 @@ jobs:
         run: yarn test:file src/core/redis/live-store.test.ts
         env:
           TEST_REDIS_URL: redis://localhost:6379/14
-      # Настоящий агент в e2e: воркеры проекта и сборки агента с GitHub (текущий и
-      # прежний — для обновления); сами тесты в GitHub не ходят.
+      # Настоящий агент в e2e: сборки агента с GitHub (текущий и прежний — для
+      # обновления); архив папки агента стенд собирает agent pack (воркеры — Go);
+      # сами тесты в GitHub не ходят.
       - id: go
         run: echo "version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' agent/go.mod)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ steps.go.outputs.version }}
           cache-dependency-path: agent/go.sum
-      - run: yarn agent:release
       - run: yarn agent:fetch && yarn agent:fetch 1.0.1
       - run: yarn test:e2e
 
@@ -226,7 +226,7 @@ jobs:
             APP_VERSION=${{ steps.build-info.outputs.commit }}
             APP_COMMIT=${{ steps.build-info.outputs.commit }}
             APP_BUILT_AT=${{ steps.build-info.outputs.built-at }}
-          # Подпись воркеров wg и socks (стадия agent-release): закрытый ключ — секрет
+          # Подпись воркеров wg и socks (стадия agent-bundle): закрытый ключ — секрет
           # AGENT_SIGNING_KEY, в слои образа не попадает.
           secrets: |
             agent_signing_key=${{ secrets.AGENT_SIGNING_KEY }}

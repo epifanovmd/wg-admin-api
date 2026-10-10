@@ -17,6 +17,7 @@ import { AgentService } from "./agent.service";
 import { AgentSignals } from "./agent.signals";
 import { AGENTS_ROOM } from "./agent.types";
 import { AgentAccessService } from "./agent-access.service";
+import { AgentBundleHandler } from "./agent-bundle.handler";
 import { AgentEnrollmentController } from "./agent-enrollment.controller";
 import { AgentEnrollmentService } from "./agent-enrollment.service";
 import { AgentEnrollmentToken } from "./agent-enrollment-token.entity";
@@ -66,6 +67,7 @@ import { StoredAgentConfig } from "./store/stored-agent-config.entity";
     AgentEnrollmentController,
     AgentReleaseController,
     { provide: RAW_HTTP_HANDLER, useClass: AgentLinkHandler },
+    { provide: RAW_HTTP_HANDLER, useClass: AgentBundleHandler },
     asSocketHandler(AgentSocketHandler),
     asSocketListener(AgentListener),
     asSocketRoomPolicy(

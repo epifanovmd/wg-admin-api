@@ -15,7 +15,7 @@ import {
 import { WgProvisionService } from "./wg-provision.service";
 
 const COMMAND =
-  "curl -fsSL 'https://api.example.com/api/v1/agent-link/install.sh' | sudo sh -s -- --instance 'wg' --token-file '/tmp/wg-admin.x1/agent.token' --worker 'wg'";
+  "curl -fsSL 'https://api.example.com/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token-file '/tmp/wg-admin.x1/agent.token' --name 'node-a'";
 
 describe("provision-plan", () => {
   it("сначала снимается служба wg-admin-agent, затем — команда установки без sudo; каталог удаляется", () => {
@@ -26,7 +26,7 @@ describe("provision-plan", () => {
       "systemctl disable --now wg-admin-agent",
     );
     expect(install.command).to.include(
-      "| sh -s -- --instance 'wg' --token-file '/tmp/wg-admin.x1/agent.token'",
+      "| sh -s -- --token-file '/tmp/wg-admin.x1/agent.token'",
     );
     expect(install.command).to.not.include("sudo");
     expect(install.command).to.include("rm -rf /tmp/wg-admin.x1");
@@ -34,7 +34,7 @@ describe("provision-plan", () => {
   });
 
   it("withoutSudo меняет только запуск установщика", () => {
-    expect(withoutSudo(COMMAND)).to.include("| sh -s -- --instance");
+    expect(withoutSudo(COMMAND)).to.include("| sh -s -- --token-file");
     expect(withoutSudo("ls")).to.equal("ls");
   });
 

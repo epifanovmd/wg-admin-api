@@ -7,7 +7,7 @@
 ## Проект
 
 WG Admin — админка WireGuard: бэкенд (модульный монолит на Node.js + TypeScript) и
-воркеры узла на Go (`agent/workers`: `wg`, `socks`), которые запускает агент 1.1.0
+воркеры узла на Go (`agent/workers`: `wg`, `socks`), которые запускает агент 1.3.0
 ([github.com/epifanovmd/agent](https://github.com/epifanovmd/agent)) на нодах; на
 бэкенде связь с агентами — пакет `agent-sdk` в модуле `agent`. Бэкенд: Koa + tsoa (маршруты и OpenAPI из декораторов),
 Inversify (DI), TypeORM + PostgreSQL, pg-boss (очередь задач на Postgres), Redis
@@ -30,9 +30,9 @@ yarn test                 # юнит, src/**/*.test.ts (один файл: yarn 
 yarn test:e2e             # интеграционный набор test/e2e/*.e2e.ts (нужен dev-compose)
 yarn gen:module <name>    # каркас модуля по конвенциям (--dry-run — список файлов)
 yarn migration:generate src/migrations/<Name> | migration:run | migration:revert
-yarn agent:release        # воркеры wg, socks в agent/release (агента бэкенд берёт с GitHub сам)
-yarn agent:fetch [версия] # скачать сборки агента с GitHub в agent/dist (локальный агент, e2e)
-yarn agent                # локальный агент (agent/dev.sh run; agent:start|stop|status|logs)
+yarn agent                # локальный агент (agent/agent.yaml; agent:start|stop|status|logs)
+yarn agent:pack           # архивы папки агента для узлов в agent/bundle (воркеры wg, socks — сборкой Go)
+yarn agent:fetch [версия] # скачать сборки агента с GitHub в agent/dist (e2e; прежняя — 1.0.1)
 scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]   # воркеры: Go в контейнере
 ```
 

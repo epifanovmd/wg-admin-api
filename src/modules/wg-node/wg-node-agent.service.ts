@@ -21,10 +21,10 @@ import { WgNodeError } from "./wg-node.errors";
 import { WgNodePermissions } from "./wg-node.permissions";
 import { WgNodeService } from "./wg-node.service";
 import {
+  WG_AGENT_INSTANCE,
   WG_AGENT_LOGS_DEFAULT_LINES,
   WG_NODE_ID_LABEL,
   WG_NODE_INSTALL_TOKEN_TTL_MINUTES,
-  WG_NODE_WORKERS,
   WG_WORKER,
 } from "./wg-node.types";
 import { wgNodeStateOf } from "./wg-node-status";
@@ -33,36 +33,6 @@ const MINUTE_MS = 60_000;
 
 /** Срок перезапуска интерфейса: wg-quick down/up на воркере. */
 const RESTART_TIMEOUT_MS = 90_000;
-
-/**
- * Пакеты узла для воркера wg: wg-quick, ip, iptables, conntrack, ping.
- * Имена различаются у менеджеров пакетов.
- */
-const NODE_PACKAGES = {
-  apt: ["wireguard-tools", "iproute2", "iptables", "conntrack", "iputils-ping"],
-  dnf: ["wireguard-tools", "iproute", "iptables", "conntrack-tools", "iputils"],
-  yum: ["wireguard-tools", "iproute", "iptables", "conntrack-tools", "iputils"],
-  apk: [
-    "wireguard-tools",
-    "iproute2",
-    "iptables",
-    "conntrack-tools",
-    "iputils",
-  ],
-  zypper: [
-    "wireguard-tools",
-    "iproute2",
-    "iptables",
-    "conntrack-tools",
-    "iputils",
-  ],
-};
-
-/** Параметры ядра для пробросов и NAT. */
-const NODE_SYSCTL = {
-  "net.ipv4.ip_forward": "1",
-  "net.ipv6.conf.all.forwarding": "1",
-};
 
 /** Выпущенный для ноды токен регистрации. */
 export interface IWgNodeEnrollmentToken {
@@ -170,9 +140,9 @@ export class WgNodeAgentService {
   }
 
   /**
-   * Команда установки агента ноды: экземпляр проекта (`--instance`),
-   * воркеры wg и socks с сервера, права root (воркер настраивает сеть),
-   * пакеты и параметры ядра для WireGuard, пробросов и NAT.
+   * Команда установки агента ноды: архив папки агента с этого сервера — экземпляр
+   * `wg`, воркеры wg и socks, права root, пакеты и параметры ядра для WireGuard,
+   * пробросов и NAT задаёт `agent/agent.prod.yaml`; здесь — токен и имя ноды.
    */
   commandFor(
     node: Pick<WgNode, "name">,
@@ -183,22 +153,12 @@ export class WgNodeAgentService {
       ...auth,
       ...(baseUrl && { baseUrl }),
       name: node.name,
-      privileged: true,
-      workers: [...WG_NODE_WORKERS],
-      packages: NODE_PACKAGES.apt,
-      packagesByManager: {
-        dnf: NODE_PACKAGES.dnf,
-        yum: NODE_PACKAGES.yum,
-        apk: NODE_PACKAGES.apk,
-        zypper: NODE_PACKAGES.zypper,
-      },
-      sysctl: NODE_SYSCTL,
     }).command;
   }
 
-  /** Экземпляр агента проекта на узле (`--instance`); пусто — по умолчанию. */
-  instance(): string | undefined {
-    return this._agents.instance();
+  /** Экземпляр агента проекта на ноде (`instance` в agent/agent.prod.yaml). */
+  instance(): string {
+    return WG_AGENT_INSTANCE;
   }
 
   /** Адрес бэкенда для агентов. */

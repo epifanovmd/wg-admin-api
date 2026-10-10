@@ -1,12 +1,6 @@
-import { createHash, generateKeyPairSync, sign } from "crypto";
-import {
-  copyFileSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { execFileSync } from "child_process";
+import { generateKeyPairSync } from "crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { createServer, type Server } from "http";
 import type { AddressInfo } from "net";
 import { tmpdir } from "os";
@@ -16,13 +10,13 @@ import { join, resolve } from "path";
  * Сборки для сценариев с настоящим агентом — без GitHub:
  *
  * - **агент и netprobe** — каталог сборок с GitHub, скачанный заранее
- *   (`agent/fetch-agent.sh` → `agent/dist/agent-<версия>`; другой корень —
+ *   (`yarn agent:fetch [версия]` → `agent/dist/v<версия>`; другой корень —
  *   `E2E_AGENT_DIST`). Стенд раздаёт его своим HTTP-сервером, бэкенд берёт
  *   его как адрес сборок (`AGENT_RELEASES_URL`);
- * - **воркеры проекта** wg и socks — сборки под эту машину из `agent/release`
- *   или `agent/dist` (`yarn agent:release`, `scripts/go-agent.sh build`;
- *   другой каталог — `E2E_WORKERS_DIR`). Стенд подписывает их своим ключом
- *   проекта и пишет `manifest.json` во временный `AGENT_RELEASES_DIR`.
+ * - **архив папки агента** — `agent pack` этой программой агента под эту
+ *   машину во временный `AGENT_BUNDLE_DIR`: воркеры wg и socks собирает их
+ *   `build` (Go на машине или в контейнере), сборки в `release/` подписаны
+ *   ключом проекта стенда.
  *
  * Чего нет — сценарии с настоящим агентом пропускаются.
  */
@@ -37,14 +31,14 @@ export const AGENT_VERSION = (
   ) as { version: string }
 ).version;
 
-/** Прежняя версия агента — для обновления агента (`agent/fetch-agent.sh 1.0.1`). */
+/** Прежняя версия агента — для обновления агента (`yarn agent:fetch 1.0.1`). */
 export const AGENT_PREVIOUS_VERSION = env.E2E_AGENT_PREVIOUS_VERSION ?? "1.0.1";
 
 const distRoot = resolve(env.E2E_AGENT_DIST ?? "agent/dist");
 
 /** Каталог сборок агента версии `version` (с GitHub). */
 export const agentDist = (version: string): string =>
-  join(distRoot, `agent-${version}`);
+  join(distRoot, `v${version}`);
 
 /** Программа агента версии `version` под эту машину; нет — `null`. */
 export const agentBinary = (version: string): string | null => {
@@ -52,29 +46,6 @@ export const agentBinary = (version: string): string | null => {
 
   return existsSync(file) ? file : null;
 };
-
-const PROJECT_WORKERS = ["wg", "socks"] as const;
-
-const workerVersion = (name: string): string =>
-  readFileSync(resolve(`agent/workers/${name}/VERSION`), "utf8").trim();
-
-/** Сборка воркера проекта под эту машину; нет — `null`. */
-export const workerBuild = (name: string): string | null => {
-  const file = `${name}-${workerVersion(name)}-${PLATFORM}`;
-  const dirs = env.E2E_WORKERS_DIR
-    ? [env.E2E_WORKERS_DIR]
-    : ["agent/release", "agent/dist"];
-
-  return (
-    dirs.map(dir => resolve(dir, file)).find(path => existsSync(path)) ?? null
-  );
-};
-
-/** Есть ли всё для сценариев с настоящим агентом. */
-export const realAgentAvailable = (): boolean =>
-  !!agentBinary(AGENT_VERSION) &&
-  existsSync(join(agentDist(AGENT_VERSION), "manifest.json")) &&
-  PROJECT_WORKERS.every(name => !!workerBuild(name));
 
 /** Ключ проекта стенда (Ed25519): им подписаны воркеры wg и socks. */
 const projectKey = generateKeyPairSync("ed25519");
@@ -85,21 +56,11 @@ export const PROJECT_PUBLIC_KEY = Buffer.from(
   "base64url",
 ).toString("base64");
 
-/** Подпись сборки (§11 спецификации агента): Ed25519, base64. */
-const signBuild = (
-  name: string,
-  version: string,
-  os: string,
-  arch: string,
-  sha256: string,
-): string =>
-  sign(
-    null,
-    Buffer.from(
-      ["agent-release/1", name, version, os, arch, sha256].join("\n"),
-    ),
-    projectKey.privateKey,
-  ).toString("base64");
+/** Закрытый ключ проекта стенда для agent pack (`AGENT_SIGNING_KEY`: seed, base64). */
+const signingKey = Buffer.from(
+  projectKey.privateKey.export({ format: "jwk" }).d!,
+  "base64url",
+).toString("base64");
 
 /** Ключ автора агента из manifest.json сборок с GitHub. */
 export const authorPublicKey = (): string | undefined =>
@@ -109,8 +70,18 @@ export const authorPublicKey = (): string | undefined =>
     ) as { publicKey?: string }
   ).publicKey;
 
-/** Каталог воркеров проекта стенда; создаёт `prepare`. */
-export let PROJECT_RELEASES_DIR = "";
+/** Архивы папки агента стенда (`AGENT_BUNDLE_DIR`); создаёт `prepare`. */
+export let BUNDLE_DIR = "";
+
+/** Сборки воркеров wg и socks стенда: `release/` архивов. */
+export const projectReleasesDir = (): string => join(BUNDLE_DIR, "release");
+
+/** Есть ли всё для сценариев с настоящим агентом. */
+export const realAgentAvailable = (): boolean =>
+  !!agentBinary(AGENT_VERSION) &&
+  existsSync(join(agentDist(AGENT_VERSION), "manifest.json")) &&
+  !!BUNDLE_DIR &&
+  existsSync(join(projectReleasesDir(), "manifest.json"));
 
 /** Адрес сборок агента на сервере стенда (`AGENT_RELEASES_URL`). */
 export let AGENT_RELEASES_URL = "";
@@ -120,41 +91,52 @@ export const mirrorRequests: string[] = [];
 
 let mirror: Server | undefined;
 
-/** Воркеры проекта с подписью ключом стенда — во временный каталог. */
-const writeProjectRelease = (): string => {
-  const dir = mkdtempSync(join(tmpdir(), "e2e-wg-release-"));
+/**
+ * Архив папки агента под эту машину — `agent pack` программой агента этой версии
+ * (воркеры wg и socks собирает их build), сборки подписаны ключом стенда;
+ * netprobe — с сервера сборок стенда. Не вышло (нет Go и Docker) — пусто:
+ * сценарии с настоящим агентом пропускаются.
+ */
+const packBundle = (releasesUrl: string): string => {
+  const binary = agentBinary(AGENT_VERSION);
+
+  if (!binary || !releasesUrl) return "";
+  const dir = mkdtempSync(join(tmpdir(), "e2e-wg-bundle-"));
   const [os, arch] = PLATFORM.split("-");
-  const workers = PROJECT_WORKERS.flatMap(name => {
-    const build = workerBuild(name);
 
-    if (!build) return [];
-
-    const version = workerVersion(name);
-    const file = `${name}-${version}-${PLATFORM}`;
-    const sha256 = createHash("sha256")
-      .update(readFileSync(build))
-      .digest("hex");
-
-    copyFileSync(build, join(dir, file));
-
-    return [
+  try {
+    execFileSync(
+      binary,
+      [
+        "pack",
+        "--env",
+        "prod",
+        "--platform",
+        `${os}/${arch}`,
+        "--out",
+        dir,
+        "--release-out",
+        join(dir, "release"),
+      ],
       {
-        name,
-        version,
-        os,
-        arch,
-        file,
-        sha256,
-        signature: signBuild(name, version, os, arch, sha256),
-        stopTimeout: "30s",
+        cwd: resolve("agent"),
+        env: {
+          ...env,
+          AGENT_SIGNING_KEY: signingKey,
+          AGENT_UPDATE_RELEASES: releasesUrl.replace(/\/download\/v[^/]+$/, ""),
+          AGENT_NO_UPDATE_CHECK: "1",
+        },
+        stdio: "pipe",
       },
-    ];
-  });
+    );
+  } catch (err) {
+    process.stderr.write(
+      `E2E: agent pack не удался — сценарии с настоящим агентом пропускаются\n${String(err)}\n`,
+    );
+    rmSync(dir, { recursive: true, force: true });
 
-  writeFileSync(
-    join(dir, "manifest.json"),
-    `${JSON.stringify({ version: "0.0.0-e2e", artifacts: [], workers }, null, 2)}\n`,
-  );
+    return "";
+  }
 
   return dir;
 };
@@ -194,19 +176,18 @@ const serve = async (dir: string): Promise<string> => {
 export const prepareAgentReleases = async (): Promise<
   Record<string, string>
 > => {
-  PROJECT_RELEASES_DIR = writeProjectRelease();
-
   const dist = agentDist(AGENT_VERSION);
 
   AGENT_RELEASES_URL = existsSync(join(dist, "manifest.json"))
     ? await serve(dist)
     : "";
+  BUNDLE_DIR = packBundle(AGENT_RELEASES_URL);
+  mirrorRequests.length = 0;
 
   return {
-    AGENT_RELEASES_DIR: PROJECT_RELEASES_DIR,
+    AGENT_BUNDLE_DIR: BUNDLE_DIR,
     AGENT_RELEASES_GITHUB: "",
     AGENT_RELEASES_URL,
-    AGENT_UPDATE_PUBLIC_KEY: PROJECT_PUBLIC_KEY,
   };
 };
 
@@ -216,7 +197,5 @@ export const closeAgentReleases = async (): Promise<void> => {
     await new Promise<void>(r => mirror!.close(() => r()));
     mirror = undefined;
   }
-  if (PROJECT_RELEASES_DIR) {
-    rmSync(PROJECT_RELEASES_DIR, { recursive: true, force: true });
-  }
+  if (BUNDLE_DIR) rmSync(BUNDLE_DIR, { recursive: true, force: true });
 };
