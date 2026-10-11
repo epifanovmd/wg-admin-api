@@ -1,8 +1,0 @@
-# HTTPS перед API (профиль compose `https`): сертификат Let's Encrypt для
-# APP_DOMAIN получается и продлевается автоматически (нужны DNS-запись на
-# этот хост и доступные порты 80/443). WebSocket (Socket.IO) и long-poll
-# агентов проксируются без дополнительных настроек.
-{$APP_DOMAIN} {
-	encode zstd gzip
-	reverse_proxy api:8181
-}

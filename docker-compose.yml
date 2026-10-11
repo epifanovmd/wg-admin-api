@@ -1,6 +1,7 @@
-# Production-стек админки WireGuard: api + worker + одноразовый migrate, Redis;
-# по профилю `https` — Caddy. Postgres — отдельным файлом
-# (docker-compose.postgres.yml) или внешний. Агент WireGuard на нодах (в том
+# Production-стек админки WireGuard: api + worker + одноразовый migrate. Redis и
+# Postgres — отдельными файлами (docker-compose.redis.yml, docker-compose.postgres.yml)
+# или общая инфраструктура хоста (репозиторий infra) — docker-compose.infra.yml;
+# HTTPS — её reverse proxy. Агент WireGuard на нодах (в том
 # числе на этом же VPS) — служба systemd (install.sh, см. agent/README.md).
 # Образы — из registry или сборкой из исходников на хосте (`make release` /
 # `make deploy`, см. Makefile).
@@ -62,8 +63,6 @@ x-ready-check: &ready-check
 x-after-migrate: &after-migrate
   migrate:
     condition: service_completed_successfully
-  redis:
-    condition: service_healthy
 
 services:
   # Одноразовый: применяет миграции и выходит. api и worker ждут его успеха.
@@ -123,50 +122,3 @@ services:
           memory: 768m
     healthcheck: *ready-check
     restart: unless-stopped
-
-  # HTTPS перед API (по профилю `https`): Caddy с автоматическим сертификатом
-  # для APP_DOMAIN. Агентам и вебу — https://APP_DOMAIN вместо http://IP:порт.
-  caddy:
-    profiles: ["https"]
-    image: caddy:2-alpine
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
-      - "${HTTPS_PORT:-443}:443/udp"
-    environment:
-      APP_DOMAIN: ${APP_DOMAIN:-}
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      api:
-        condition: service_healthy
-    restart: unless-stopped
-    logging: *logging
-
-  redis:
-    image: redis:7-alpine
-    command:
-      [
-        "redis-server",
-        "--save",
-        "",
-        "--appendonly",
-        "no",
-        "--maxmemory",
-        "128mb",
-        "--maxmemory-policy",
-        "allkeys-lru",
-      ]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-    restart: unless-stopped
-    logging: *logging
-
-volumes:
-  caddy_data:
-  caddy_config:

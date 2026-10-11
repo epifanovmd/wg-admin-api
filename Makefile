@@ -41,11 +41,10 @@ sync:
 	$(SSH) 'mkdir -p $(SSH_PROJECT_DIR)'
 	rsync -az --delete -e "ssh $(SSH_OPTS)" --exclude-from=.deployignore ./ $(SSH_USER)@$(SSH_HOST):$(SSH_PROJECT_DIR)/
 
-# Для release на хосте нужны только файлы compose и конфиг Caddy.
+# Для release на хосте нужны только файлы compose.
 compose:
-	$(SSH) 'mkdir -p $(SSH_PROJECT_DIR)/deploy'
+	$(SSH) 'mkdir -p $(SSH_PROJECT_DIR)'
 	scp $(SSH_OPTS) $(COMPOSE_FILES) $(SSH_USER)@$(SSH_HOST):$(SSH_PROJECT_DIR)/
-	scp $(SSH_OPTS) deploy/Caddyfile $(SSH_USER)@$(SSH_HOST):$(SSH_PROJECT_DIR)/deploy/
 
 env:
 	$(SSH) 'mkdir -p $(SSH_PROJECT_DIR)'

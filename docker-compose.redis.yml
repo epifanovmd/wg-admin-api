@@ -1,0 +1,43 @@
+# Redis в составе стека (кэш: лимиты, отзыв токенов, Socket.IO между репликами).
+# Подключается к docker-compose.yml:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.redis.yml
+# С общей инфраструктурой (docker-compose.infra.yml) не нужен — REDIS_URL и
+# REDIS_KEY_PREFIX в .env.production.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-after-redis: &after-redis
+  redis:
+    condition: service_healthy
+
+services:
+  api:
+    depends_on: *after-redis
+  worker:
+    depends_on: *after-redis
+
+  redis:
+    image: redis:7-alpine
+    command:
+      [
+        "redis-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "128mb",
+        "--maxmemory-policy",
+        "allkeys-lru",
+      ]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    logging: *logging

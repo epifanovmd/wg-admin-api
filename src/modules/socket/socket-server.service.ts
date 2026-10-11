@@ -1,8 +1,9 @@
-import { createAdapter } from "@socket.io/redis-adapter";
+import { createShardedAdapter } from "@socket.io/redis-adapter";
 import { inject } from "inversify";
 import type { Redis } from "ioredis";
 import { Server } from "socket.io";
 
+import { config } from "../../config";
 import {
   createRedisClient,
   HttpServer,
@@ -35,13 +36,19 @@ export class SocketServerService {
     });
 
     // С Redis комнаты и emit общие для всех реплик: сообщение пользователю
-    // доходит до его сокетов, где бы они ни были подключены.
+    // доходит до его сокетов, где бы они ни были подключены. Шардированный
+    // pub/sub (SSUBSCRIBE) — без подписок по шаблону: каналы `<префикс>socket.io#…`
+    // проходят ACL общего Redis, где проекту доступны только свои каналы.
     if (isRedisConfigured()) {
-      const pub = createRedisClient("socket-pub");
-      const sub = createRedisClient("socket-sub");
+      const pub = createRedisClient("socket-pub", { prefixKeys: false });
+      const sub = createRedisClient("socket-sub", { prefixKeys: false });
 
       this._adapterClients.push(pub, sub);
-      this._io.adapter(createAdapter(pub, sub));
+      this._io.adapter(
+        createShardedAdapter(pub, sub, {
+          channelPrefix: `${config.redis.keyPrefix}socket.io`,
+        }),
+      );
       logger.info("[Socket] Redis adapter enabled");
     }
   }

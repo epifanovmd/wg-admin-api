@@ -1,0 +1,19 @@
+# Общая инфраструктура хоста (репозиторий infra): Postgres, Redis, S3 — по именам
+# сервисов в её сети INFRA_NETWORK (по умолчанию infra_data). Подключается вместо
+# docker-compose.redis.yml / postgres.yml / s3.yml:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.infra.yml
+# Учётки проекта (POSTGRES_*, REDIS_URL, REDIS_KEY_PREFIX, S3_*) — в .env.production,
+# их выдаёт `make credentials P=<проект>` в infra.
+
+x-infra: &infra
+  networks: [default, infra]
+
+services:
+  migrate: *infra
+  api: *infra
+  worker: *infra
+
+networks:
+  infra:
+    name: ${INFRA_NETWORK:-infra_data}
+    external: true

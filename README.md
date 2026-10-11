@@ -49,7 +49,6 @@ templates/           ← шаблоны писем
 test/e2e/            ← интеграционный набор (настоящий сервер + Postgres, Redis, Mailpit)
 test/smoke/          ← образ узла для smoke-стенда
 scripts/             ← генератор модуля, Go в контейнере, проверка версий воркеров, дамп БД
-deploy/              ← конфиг Caddy (HTTPS)
 docs/                ← устройство системы
 ```
 
@@ -218,16 +217,20 @@ read-only файловая система. Версию сборки (`APP_VERSI
 `APP_BUILT_AT`) передают build-аргументами `make` и `release.yml`; она видна в
 `GET /api/v1/app/version`.
 
-`docker-compose.yml` — production-стек: `api`, `worker`, одноразовый `migrate`,
-Redis; по профилю `https` — Caddy с сертификатом для `APP_DOMAIN`
-(`deploy/Caddyfile`). Postgres — `docker-compose.postgres.yml` или внешний
-(`POSTGRES_HOST`). Секреты — `.env.production`; обязателен `WG_SECRETS_KEY`
+`docker-compose.yml` — production-стек: `api`, `worker`, одноразовый `migrate`.
+Redis — `docker-compose.redis.yml`, Postgres — `docker-compose.postgres.yml` или внешний
+(`POSTGRES_HOST`). Общая инфраструктура хоста (репозиторий infra) вместо них —
+`docker-compose.infra.yml`: сервисы подключаются к её сети (`INFRA_NETWORK`, по умолчанию
+`infra_data`), учётки проекта — `POSTGRES_*`, `REDIS_URL`, `REDIS_KEY_PREFIX` в
+`.env.production`. HTTPS — reverse proxy инфраструктуры (Traefik): маршрут по меткам
+контейнера `api` в её сети `infra_edge`. Секреты — `.env.production`; обязателен `WG_SECRETS_KEY`
 (`openssl rand -hex 32`): им шифруются ключи WireGuard в БД; значения настроек
 воркеров шифруются ключом `AGENT_CONFIGS_KEY`. В compose одна копия `api` —
 пересылка вызовов агентов между копиями (`AGENT_RELAY_*`) не нужна.
 
 ```sh
-export COMPOSE_FILE=docker-compose.yml:docker-compose.postgres.yml
+export COMPOSE_FILE=docker-compose.yml:docker-compose.redis.yml:docker-compose.postgres.yml
+# или с общей инфраструктурой: COMPOSE_FILE=docker-compose.yml:docker-compose.infra.yml
 TAG=v1.2.3 docker compose pull          # или: docker compose build api
 docker compose run --rm migrate
 docker compose up -d

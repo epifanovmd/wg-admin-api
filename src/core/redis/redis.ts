@@ -11,8 +11,13 @@ export const isRedisConfigured = (): boolean => !!config.redis.url;
 /**
  * Отдельное соединение — для pub/sub и адаптера Socket.IO, которым нужны
  * выделенные клиенты. Ошибки соединения логируются, ioredis переподключается сам.
+ * `prefixKeys: false` — без `REDIS_KEY_PREFIX` у команд: клиент сам задаёт
+ * полные имена (ioredis иначе добавляет префикс и к шардированным каналам).
  */
-export const createRedisClient = (purpose: string): Redis => {
+export const createRedisClient = (
+  purpose: string,
+  { prefixKeys = true }: { prefixKeys?: boolean } = {},
+): Redis => {
   const url = config.redis.url;
 
   if (!url) {
@@ -21,6 +26,8 @@ export const createRedisClient = (purpose: string): Redis => {
 
   const client = new Redis(url, {
     connectionName: `${config.app.name}:${purpose}`,
+    // Изоляция проекта в общем Redis: ключи `<REDIS_KEY_PREFIX>*`.
+    keyPrefix: (prefixKeys && config.redis.keyPrefix) || undefined,
     maxRetriesPerRequest: 2,
     enableOfflineQueue: true,
   });
