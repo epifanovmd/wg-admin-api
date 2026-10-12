@@ -11,7 +11,7 @@ const WORK_DIR = "/tmp/wg-admin.Ab3dEf9h";
 
 /** Команда установки, как её собирает `installCommand` модуля agent. */
 const installCommand = (tokenFile: string, baseUrl = "http://api") =>
-  `curl -fsSL '${baseUrl}/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token-file '${tokenFile}' --name 'node-a'`;
+  `curl -fsSL '${baseUrl}/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- --token-file '${tokenFile}' --name 'node-a'`;
 
 const makeAgents = () => ({
   commandFor: sinon
@@ -108,7 +108,7 @@ describe("WgProvisionNodeJob", () => {
     runner.exec.callsFake(async (command: string) =>
       command.startsWith("mktemp")
         ? { code: 0, stdout: WORK_DIR, stderr: "" }
-        : command.includes("agent-bundle")
+        : command.includes("agent-link/bundle")
           ? { code: 1, stdout: "", stderr: "boom" }
           : { code: 0, stdout: "", stderr: "" },
     );
@@ -173,7 +173,7 @@ describe("WgProvisionNodeJob", () => {
         if (command.startsWith("mktemp")) {
           return { code: 0, stdout: WORK_DIR, stderr: "" };
         }
-        if (!command.includes("agent-bundle")) {
+        if (!command.includes("agent-link/bundle")) {
           return { code: 0, stdout: "", stderr: "" };
         }
         onLine?.("▶ [0s] Зависимости");

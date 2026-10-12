@@ -77,7 +77,7 @@ permission)` и `viewFilter(actor)`; методы без актора (`findEnti
 | GET    | `/{id}/logs?lines&worker`        | `wg:node:logs[:own]` — журнал агента или воркера с узла                  |
 
 Команда установки (`WgNodeAgentService.commandFor`): `curl -fsSL '<AGENT_PUBLIC_URL или
-APP_PUBLIC_URL>/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token '<токен>' --name
+APP_PUBLIC_URL>/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- --token '<токен>' --name
 '<нода>'` — скрипт ставит архив папки агента (`agent pack`) под машину ноды. Экземпляр `wg`
 (`WG_AGENT_INSTANCE`, как `instance` в `agent/agent.prod.yaml`), воркеры wg и socks, права
 root, пакеты и параметры ядра задаёт `agent/agent.prod.yaml` архива, флагов для них в

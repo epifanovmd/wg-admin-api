@@ -609,6 +609,14 @@
 						"$ref": "#/components/schemas/IAgentUpdateInfoDto",
 						"description": "Новая версия, которую агент нашёл в своём каталоге сборок сам; нет — новее нет или не проверял."
 					},
+					"updateMode": {
+						"type": "string",
+						"description": "Режим обновления агента: `self` — обновляется по команде сервера;\n`external` (в контейнере) и `disabled` — нет. Нет — агент старше 1.4."
+					},
+					"install": {
+						"type": "string",
+						"description": "Как агент поставлен на узел: `systemd`, `user` (без root, служба пользователя),\n`manual` (без root, без службы); нет — запущен иначе (в контейнере, `--run`)."
+					},
 					"alerts": {
 						"items": {
 							"$ref": "#/components/schemas/AgentAlertDto"
@@ -1242,7 +1250,7 @@
 				"properties": {
 					"command": {
 						"type": "string",
-						"description": "`curl …/api/v1/agent-bundle/install.sh | sudo sh -s -- --token …`."
+						"description": "`curl …/api/v1/agent-link/bundle/install.sh | sudo sh -s -- --token …`."
 					}
 				},
 				"required": [
@@ -7122,7 +7130,7 @@
 						}
 					}
 				},
-				"description": "Команда установки агента на новый узел одной строкой:\n`curl …/api/v1/agent-bundle/install.sh | sudo sh -s -- --token …` — скрипт\nставит архив папки агента (`agent pack`): экземпляр, воркеры, пакеты и права —\nиз неё.",
+				"description": "Команда установки агента на новый узел одной строкой:\n`curl …/api/v1/agent-link/bundle/install.sh | sudo sh -s -- --token …` — скрипт\nставит архив папки агента (`agent pack`): экземпляр, воркеры, пакеты и права —\nиз неё.",
 				"summary": "Команда установки агента",
 				"tags": [
 					"Agent"

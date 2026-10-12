@@ -2,6 +2,7 @@ import {
   type Agent,
   type AgentEvent,
   AgentsError,
+  bundleInstallCommand,
   type LogEntry,
 } from "agent-sdk/server";
 import { inject } from "inversify";
@@ -22,7 +23,6 @@ import {
   IAgentActor,
   inScope,
 } from "./agent-access.service";
-import { installCommand } from "./agent-bundle";
 import {
   AgentHistoryService,
   IAgentEventFeedQuery,
@@ -213,7 +213,10 @@ export class AgentService {
     body: ICreateAgentInstallCommandBody,
   ): IAgentInstallCommandDto {
     return {
-      command: installCommand(body.baseUrl ?? this.publicUrl(), body),
+      command: bundleInstallCommand(
+        { token: body.token, tokenFile: body.tokenFile, name: body.name },
+        body.baseUrl ?? this.publicUrl(),
+      ),
     };
   }
 

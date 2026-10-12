@@ -275,6 +275,16 @@ export class AgentDto extends BaseDto {
   metrics?: IAgentMetricsPointDto;
   /** Новая версия, которую агент нашёл в своём каталоге сборок сам; нет — новее нет или не проверял. */
   update?: IAgentUpdateInfoDto;
+  /**
+   * Режим обновления агента: `self` — обновляется по команде сервера;
+   * `external` (в контейнере) и `disabled` — нет. Нет — агент старше 1.4.
+   */
+  updateMode?: string;
+  /**
+   * Как агент поставлен на узел: `systemd`, `user` (без root, служба пользователя),
+   * `manual` (без root, без службы); нет — запущен иначе (в контейнере, `--run`).
+   */
+  install?: string;
   alerts: AgentAlertDto[];
   session?: IAgentSessionDto;
 
@@ -293,6 +303,10 @@ export class AgentDto extends BaseDto {
     if (agent.version) this.version = agent.version;
     if (agent.bootId) this.bootId = agent.bootId;
     if (agent.startedAt !== undefined) this.startedAt = agent.startedAt;
+    if (agent.hello?.agent.updateMode) {
+      this.updateMode = agent.hello.agent.updateMode;
+    }
+    if (agent.hello?.agent.install) this.install = agent.hello.agent.install;
     if (agent.host) {
       this.host = {
         os: agent.host.os,

@@ -321,6 +321,7 @@ export class AgentRuntime {
         relaySecret: agentConfig.relaySecret,
       }),
       releasesDir: bundleReleasesDir(),
+      bundlesDir: agentConfig.bundleDir,
       agentReleases: agentReleasesOptions(),
       baseUrl: agentConfig.publicUrl,
       trustProxy: config.server.trustProxy,

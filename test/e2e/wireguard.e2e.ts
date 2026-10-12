@@ -51,7 +51,7 @@ describe("wireguard", () => {
 
       nodeA = resA.data.node;
       expect(resA.data.install.command).to.match(
-        /\/api\/v1\/agent-bundle\/install\.sh' \| sudo sh -s -- --token '[^']+\.[^']+' --name 'node-a'/,
+        /\/api\/v1\/agent-link\/bundle\/install\.sh' \| sudo sh -s -- --token '[^']+\.[^']+' --name 'node-a'/,
       );
       expect(resA.data.install.command).not.to.include("--worker");
       expect(nodeA.status).to.equal("created");
@@ -1186,7 +1186,11 @@ describe("wireguard", () => {
       expect(release).to.have.property("candidates");
 
       // Установщик публичный: без секретов, адрес сервера вписан.
-      const script = await call(null, "GET", "/api/v1/agent-bundle/install.sh");
+      const script = await call(
+        null,
+        "GET",
+        "/api/v1/agent-link/bundle/install.sh",
+      );
 
       expect(script.status).to.equal(200);
       expect(script.data).to.include("#!/bin/sh");

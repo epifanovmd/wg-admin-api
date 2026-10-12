@@ -239,7 +239,7 @@ flowchart LR
 бэкенда:
 
 ```bash
-curl -fsSL '<бэкенд>/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token '<токен>' --name '<нода>'
+curl -fsSL '<бэкенд>/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- --token '<токен>' --name '<нода>'
 ```
 
 Команду с одноразовым токеном выдаёт создание ноды и запрос новой команды

@@ -46,6 +46,11 @@ export const AgentError = defineErrors("AGENT", {
     status: HttpStatus.CONFLICT,
     message: "Обновление недоступно: нет новой версии или сборки под агента",
   },
+  UPDATE_NOT_SUPPORTED: {
+    status: HttpStatus.CONFLICT,
+    message:
+      "Агент не обновляет себя сам: в контейнере его обновляют новым образом или перезапуском, либо обновления выключены",
+  },
   STORE_CONFLICT: {
     status: HttpStatus.CONFLICT,
     message: "Запись агента меняется другими процессами, повторите",
@@ -98,6 +103,7 @@ const SDK_ERRORS: Record<string, ErrorFactory> = {
   WORKER_NOT_RELEASED: AgentError.WORKER_NOT_RELEASED,
   CONFIG_INVALID: AgentError.CONFIG_INVALID,
   UPDATE_NOT_AVAILABLE: AgentError.UPDATE_NOT_AVAILABLE,
+  UPDATE_NOT_SUPPORTED: AgentError.UPDATE_NOT_SUPPORTED,
   CONFLICT: AgentError.STORE_CONFLICT,
   TIMEOUT: AgentError.TIMEOUT,
   BODY_TOO_LARGE: AgentError.TOO_LARGE,

@@ -204,7 +204,7 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
 собираются архивы папки агента для узлов (`/app/agent/bundle` =
 `AGENT_BUNDLE_DIR`, стадия `agent-bundle`: `agent pack --env prod` для
 linux/amd64 и linux/arm64 — агент, настройки, воркеры wg и socks и их сборки
-для обновления); их раздаёт API (`/api/v1/agent-bundle/…`). Новые версии
+для обновления); их раздаёт API (`/api/v1/agent-link/bundle/…`). Новые версии
 агента бэкенд берёт из релизов GitHub (`AGENT_RELEASES_GITHUB`, диапазон `^1`)
 и замечает сам — ради новой версии агента образ не пересобирают. Подписать
 воркеры ключом проекта — необязательный секрет BuildKit `agent_signing_key`

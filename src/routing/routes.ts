@@ -316,6 +316,8 @@ const models: TsoaRoute.Models = {
             "outbox": {"dataType":"double"},
             "metrics": {"ref":"IAgentMetricsPointDto"},
             "update": {"ref":"IAgentUpdateInfoDto"},
+            "updateMode": {"dataType":"string"},
+            "install": {"dataType":"string"},
             "alerts": {"dataType":"array","array":{"dataType":"refObject","ref":"AgentAlertDto"},"required":true},
             "session": {"ref":"IAgentSessionDto"},
         },

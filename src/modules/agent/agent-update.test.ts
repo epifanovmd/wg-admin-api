@@ -59,6 +59,24 @@ describe("agent-update", () => {
     ]);
   });
 
+  it("агент, который себя не обновляет (в Docker), — не кандидат по своей находке", () => {
+    const docker = agent({
+      update: { latest: "1.3.0", checkedAt: Date.now() },
+      hello: {
+        agent: {
+          version: "1.2.1",
+          bootId: "b",
+          startedAt: 0,
+          updateMode: "external",
+          install: "docker",
+        },
+        host: { os: "linux", arch: "amd64", hostname: "n1" },
+      },
+    });
+
+    expect(mergeUpdateCandidates([], [docker])).to.deep.equal([]);
+  });
+
   it("из двух целей — новейшая; не новее текущей и отозванные — не кандидаты", () => {
     const found = agent({ update: { latest: "1.3.0", checkedAt: 1 } });
 

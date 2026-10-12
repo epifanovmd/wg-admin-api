@@ -78,14 +78,14 @@ describe("сборки агента: источник агента и ворке
 
   it("установка с сервера: скрипт и архив папки агента (ключ проекта — в нём); сборка агента — перенаправление на источник", async () => {
     const script = await (
-      await fetch(`${BASE_URL}/api/v1/agent-bundle/install.sh`)
+      await fetch(`${BASE_URL}/api/v1/agent-link/bundle/install.sh`)
     ).text();
 
-    expect(script).to.include(`SERVER='${BASE_URL}'`);
+    expect(script).to.include(`SERVER="${BASE_URL}"`);
     expect(script).to.include('install --server "$SERVER" "$@"');
 
     const archive = await fetch(
-      `${BASE_URL}/api/v1/agent-bundle/${PLATFORM}.tar.gz`,
+      `${BASE_URL}/api/v1/agent-link/bundle/${PLATFORM}.tar.gz`,
     );
 
     expect(archive.status).to.equal(200);
@@ -239,6 +239,8 @@ describe("сборки агента: источник агента и ворке
         token: E2E_BOOTSTRAP_TOKEN,
         name: "release-self-check",
         updateReleases: `http://127.0.0.1:${(catalog.address() as AddressInfo).port}`,
+        // Кандидат на обновление — только агент, который обновляет себя сам (self).
+        update: true,
       });
 
       agents.push(agent);

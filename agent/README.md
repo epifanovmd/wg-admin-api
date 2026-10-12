@@ -356,13 +356,13 @@ yarn agent:pack                   # agent/bundle: agent-prod-<версия>-linu
 Команда установки с API:
 
 ```bash
-curl -fsSL 'https://<api>/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token '<токен>' --name '<нода>'
+curl -fsSL 'https://<api>/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- --token '<токен>' --name '<нода>'
 ```
 
 Флагов экземпляра, воркеров, пакетов и прав в ней нет — всё это в `agent.prod.yaml` архива.
 `POST /api/v1/agent-releases/install-command` принимает `{ token | tokenFile, baseUrl?, name? }`.
-API раздаёт архивы из `AGENT_BUNDLE_DIR` (`/api/v1/agent-bundle/install.sh` и
-`/api/v1/agent-bundle/linux-<arch>.tar.gz`, без входа: секретов в архиве нет); в образе API
+API раздаёт архивы из `AGENT_BUNDLE_DIR` (`/api/v1/agent-link/bundle/install.sh` и
+`/api/v1/agent-link/bundle/linux-<arch>.tar.gz`, без входа: секретов в архиве нет); в образе API
 (`/app/agent/bundle`) их собирает стадия `agent-bundle` `Dockerfile` (`agent pack --env prod`
 для linux/amd64 и linux/arm64), для разработки — `yarn agent:pack` (`AGENT_BUNDLE_DIR=agent/bundle`).
 Узел ставится не с API — адрес и токен можно положить в `agent/.env.prod` (образец —

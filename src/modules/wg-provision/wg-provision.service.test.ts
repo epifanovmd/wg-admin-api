@@ -15,7 +15,7 @@ import {
 import { WgProvisionService } from "./wg-provision.service";
 
 const COMMAND =
-  "curl -fsSL 'https://api.example.com/api/v1/agent-bundle/install.sh' | sudo sh -s -- --token-file '/tmp/wg-admin.x1/agent.token' --name 'node-a'";
+  "curl -fsSL 'https://api.example.com/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- --token-file '/tmp/wg-admin.x1/agent.token' --name 'node-a'";
 
 describe("provision-plan", () => {
   it("сначала снимается служба wg-admin-agent, затем — команда установки без sudo; каталог удаляется", () => {

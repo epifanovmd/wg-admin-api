@@ -1,5 +1,6 @@
 import type { Agent, UpdateCandidate } from "agent-sdk/server";
 
+import { isSelfUpdating } from "./agent.types";
 import type { IAgentUpdateCandidateDto } from "./dto";
 
 const parse = (version: string) => {
@@ -42,6 +43,8 @@ export const mergeUpdateCandidates = (
     const latest = agent.update?.latest;
 
     if (agent.revoked || !latest || !agent.version || !agent.host) continue;
+    // Агент, который себя не обновляет (в контейнере), обновляют новым образом.
+    if (!isSelfUpdating(agent)) continue;
     if (compareVersions(latest, agent.version) <= 0) continue;
     const known = result.get(agent.id);
 

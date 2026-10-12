@@ -100,3 +100,15 @@ export type TAgentActionName =
 
 /** Длина открытой части токена регистрации (`<prefix>.<secret>`), символов. */
 export const ENROLLMENT_TOKEN_PREFIX_LENGTH = 8;
+
+/**
+ * Обновляет ли агент себя по `agent.update`: `hello.agent.updateMode` нет
+ * (агент старше 1.4) или `self`. Агент в контейнере (`external`) обновляют новым образом.
+ */
+export const isSelfUpdating = (agent: {
+  hello?: { agent: { updateMode?: string } };
+}): boolean => {
+  const mode = agent.hello?.agent.updateMode;
+
+  return !mode || mode === "self";
+};
