@@ -15,10 +15,12 @@ import { join, resolve } from "path";
 /**
  * Сборки для сценариев с настоящим агентом — без GitHub:
  *
- * - **агент и netprobe** — каталог сборок с GitHub, скачанный заранее
+ * - **агент** — сборки агента с GitHub, скачанные заранее
  *   (`yarn agent:fetch [версия]` → `agent/dist/v<версия>`; другой корень —
- *   `E2E_AGENT_DIST`). Стенд раздаёт его своим HTTP-сервером, бэкенд берёт
- *   его как адрес сборок (`AGENT_RELEASES_URL`);
+ *   `E2E_AGENT_DIST`). Стенд раздаёт их своим HTTP-сервером как каталог
+ *   сборок агента (как релизы на GitHub, `AGENT_CATALOG_URL`): из него агент
+ *   берёт новую версию сам (`update.releases`), `agent pack` — программу
+ *   агента для архива;
  * - **архив папки агента** — `agent pack` этой программой агента под эту
  *   машину во временный `AGENT_BUNDLE_DIR`: воркеры wg и socks собирает их
  *   `build` (Go на машине или в контейнере), сборки в `release/` подписаны
@@ -37,8 +39,11 @@ export const AGENT_VERSION = (
   ) as { version: string }
 ).version;
 
-/** Прежняя версия агента — для обновления агента (`yarn agent:fetch 1.0.1`). */
-export const AGENT_PREVIOUS_VERSION = env.E2E_AGENT_PREVIOUS_VERSION ?? "1.0.1";
+/**
+ * Прежняя версия агента — для обновления агента (`yarn agent:fetch 1.4.0`):
+ * новую версию в своём каталоге сборок агент находит сам с 1.2.
+ */
+export const AGENT_PREVIOUS_VERSION = env.E2E_AGENT_PREVIOUS_VERSION ?? "1.4.0";
 
 const distRoot = resolve(env.E2E_AGENT_DIST ?? "agent/dist");
 
@@ -68,14 +73,6 @@ const signingKey = Buffer.from(
   "base64url",
 ).toString("base64");
 
-/** Ключ автора агента из manifest.json сборок с GitHub. */
-export const authorPublicKey = (): string | undefined =>
-  (
-    JSON.parse(
-      readFileSync(join(agentDist(AGENT_VERSION), "manifest.json"), "utf8"),
-    ) as { publicKey?: string }
-  ).publicKey;
-
 /** Архивы папки агента стенда (`AGENT_BUNDLE_DIR`); создаёт `prepare`. */
 export let BUNDLE_DIR = "";
 
@@ -89,24 +86,27 @@ export const realAgentAvailable = (): boolean =>
   !!BUNDLE_DIR &&
   existsSync(join(projectReleasesDir(), "manifest.json"));
 
-/** Адрес сборок агента на сервере стенда (`AGENT_RELEASES_URL`). */
-export let AGENT_RELEASES_URL = "";
+/**
+ * Каталог сборок агента на сервере стенда (как релизы на GitHub:
+ * `<url>/latest/download/<файл>`, `<url>/download/v<версия>/<файл>`).
+ */
+export let AGENT_CATALOG_URL = "";
 
-/** Запросы к серверу сборок агента (пути). */
+/** Запросы к каталогу сборок агента (пути). */
 export const mirrorRequests: string[] = [];
 
 let mirror: Server | undefined;
 
 /**
  * Архив папки агента под эту машину — `agent pack` программой агента этой версии
- * (воркеры wg и socks собирает их build), сборки подписаны ключом стенда;
- * netprobe — с сервера сборок стенда. Не вышло (нет Go и Docker) — пусто:
- * сценарии с настоящим агентом пропускаются.
+ * (воркеры wg и socks собирает их build), сборки подписаны ключом стенда.
+ * Не вышло (нет Go и Docker) — пусто: сценарии с настоящим агентом
+ * пропускаются.
  */
-const packBundle = (releasesUrl: string): string => {
+const packBundle = (catalogUrl: string): string => {
   const binary = agentBinary(AGENT_VERSION);
 
-  if (!binary || !releasesUrl) return "";
+  if (!binary || !catalogUrl) return "";
   const dir = mkdtempSync(join(tmpdir(), "e2e-wg-bundle-"));
   const [os, arch] = PLATFORM.split("-");
 
@@ -129,7 +129,7 @@ const packBundle = (releasesUrl: string): string => {
         env: {
           ...env,
           AGENT_SIGNING_KEY: signingKey,
-          AGENT_UPDATE_RELEASES: releasesUrl.replace(/\/download\/v[^/]+$/, ""),
+          AGENT_UPDATE_RELEASES: catalogUrl,
           AGENT_NO_UPDATE_CHECK: "1",
         },
         stdio: "pipe",
@@ -151,7 +151,7 @@ const packBundle = (releasesUrl: string): string => {
   return dir;
 };
 
-/** Статический сервер каталога сборок агента: `<url>/<файл>`. */
+/** Статический сервер каталога сборок агента: файл — по последнему сегменту пути. */
 const serve = async (dir: string): Promise<string> => {
   mirror = createServer((req, res) => {
     const path = req.url ?? "";
@@ -176,29 +176,26 @@ const serve = async (dir: string): Promise<string> => {
 
   const { port } = mirror.address() as AddressInfo;
 
-  return `http://127.0.0.1:${port}/download/v${AGENT_VERSION}`;
+  return `http://127.0.0.1:${port}`;
 };
 
 /**
- * Сборки стенда до запуска сервера: окружение бэкенда. Без скачанных
- * сборок агента удалённого источника нет (бэкенд не ходит в GitHub).
+ * Сборки стенда до запуска сервера: каталог сборок агента и архивы папки
+ * агента; результат — окружение бэкенда. Без скачанных сборок агента
+ * каталога нет (стенд не ходит в GitHub).
  */
 export const prepareAgentReleases = async (): Promise<
   Record<string, string>
 > => {
   const dist = agentDist(AGENT_VERSION);
 
-  AGENT_RELEASES_URL = existsSync(join(dist, "manifest.json"))
+  AGENT_CATALOG_URL = existsSync(join(dist, "manifest.json"))
     ? await serve(dist)
     : "";
-  BUNDLE_DIR = packBundle(AGENT_RELEASES_URL);
+  BUNDLE_DIR = packBundle(AGENT_CATALOG_URL);
   mirrorRequests.length = 0;
 
-  return {
-    AGENT_BUNDLE_DIR: BUNDLE_DIR,
-    AGENT_RELEASES_GITHUB: "",
-    AGENT_RELEASES_URL,
-  };
+  return { AGENT_BUNDLE_DIR: BUNDLE_DIR };
 };
 
 export const closeAgentReleases = async (): Promise<void> => {

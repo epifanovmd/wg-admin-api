@@ -122,9 +122,9 @@ export const startServer = async (): Promise<void> => {
       JWT_SECRET_KEY: "e2e-secret-key-0123456789abcdef0123456789",
       ADMIN_EMAIL: E2E.admin.email,
       ADMIN_PASSWORD: E2E.admin.password,
-      // Агенты: общий токен регистрации, сборки стенда (agent-release.ts:
-      // агент — с сервера стенда, не с GitHub; воркеры проекта с подписью
-      // ключом стенда), быстрый статус и отметка offline.
+      // Агенты: общий токен регистрации, архивы папки агента стенда
+      // (agent-release.ts: воркеры проекта с подписью ключом стенда), быстрый
+      // статус и отметка offline.
       AGENT_BOOTSTRAP_TOKEN: E2E_BOOTSTRAP_TOKEN,
       ...releases,
       AGENT_STATUS_INTERVAL_MS: "2000",

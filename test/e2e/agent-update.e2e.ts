@@ -4,11 +4,10 @@ import { createServer } from "http";
 import { AddressInfo } from "net";
 
 import {
+  AGENT_CATALOG_URL,
   AGENT_PREVIOUS_VERSION,
-  AGENT_RELEASES_URL,
   AGENT_VERSION,
   agentBinary,
-  authorPublicKey,
   mirrorRequests,
   PLATFORM,
   PROJECT_PUBLIC_KEY,
@@ -19,13 +18,13 @@ import { BASE_URL, E2E_BOOTSTRAP_TOKEN } from "./harness";
 import { RealAgent } from "./real-agent";
 
 /**
- * Сборки агента: агент и netprobe — из удалённого источника (сервер стенда
- * вместо GitHub, `AGENT_RELEASES_URL`), воркеры проекта wg и socks — из
- * каталога проекта с подписью ключом проекта. Установщик знает оба ключа,
- * воркеры проекта обновляются, прежний агент видит обновление и
- * обновляется до версии источника.
+ * Сборки: воркеры проекта wg и socks — из каталога проекта (`release/`
+ * архивов) с подписью ключом проекта, их обновляет бэкенд. Агент берёт свои
+ * сборки сам из своего каталога сборок (сервер стенда вместо GitHub,
+ * `AGENT_CATALOG_URL`): прежний агент находит новую версию, бэкенд видит
+ * кандидата и обновляет агента до неё.
  */
-describe("сборки агента: источник агента и воркеры проекта", function () {
+describe("сборки: воркеры проекта и обновление агента из его каталога", function () {
   this.timeout(120_000);
 
   let admin: Actor;
@@ -38,7 +37,7 @@ describe("сборки агента: источник агента и ворке
     expectStatus(await call(admin, "GET", `/api/v1/agents/${id}`), 200).data;
 
   before(async function () {
-    if (!realAgentAvailable() || !AGENT_RELEASES_URL) this.skip();
+    if (!realAgentAvailable() || !AGENT_CATALOG_URL) this.skip();
     admin = await signInAdmin();
   });
 
@@ -46,27 +45,17 @@ describe("сборки агента: источник агента и ворке
     await Promise.all(agents.map(agent => agent.stop()));
   });
 
-  it("итоговый манифест: агент и netprobe из источника, wg и socks — из каталога проекта", async () => {
+  it("сборки проекта: wg и socks — из каталога проекта, сборок агента нет", async () => {
     const { manifest } = await release();
 
     expect(manifest.version).to.equal(AGENT_VERSION);
-    expect(manifest.remote).to.include({
-      version: AGENT_VERSION,
-      from: AGENT_RELEASES_URL,
-    });
-    expect(manifest.remote.publicKey).to.equal(authorPublicKey());
-    expect(manifest.artifacts).to.have.length.greaterThan(0);
-    expect(
-      manifest.artifacts.every((a: any) => a.source === "remote"),
-    ).to.equal(true);
+    expect(manifest).to.not.have.property("remote");
+    expect(manifest.artifacts).to.deep.equal([]);
 
     const workers = manifest.workers.map((w: any) => `${w.name}:${w.source}`);
 
-    expect(workers).to.include.members([
-      "wg:local",
-      "socks:local",
-      "netprobe:remote",
-    ]);
+    expect(workers).to.include.members(["wg:local", "socks:local"]);
+    expect(workers.every((w: string) => w.endsWith(":local"))).to.equal(true);
 
     const info = expectStatus(
       await call(admin, "GET", "/api/v1/app/version"),
@@ -76,7 +65,7 @@ describe("сборки агента: источник агента и ворке
     expect(info.agentVersion).to.equal(AGENT_VERSION);
   });
 
-  it("установка с сервера: скрипт и архив папки агента (ключ проекта — в нём); сборка агента — перенаправление на источник", async () => {
+  it("установка с сервера: скрипт и архив папки агента (ключ проекта — в нём); сборок агента бэкенд не раздаёт", async () => {
     const script = await (
       await fetch(`${BASE_URL}/api/v1/agent-link/bundle/install.sh`)
     ).text();
@@ -111,10 +100,7 @@ describe("сборки агента: источник агента и ворке
       { redirect: "manual" },
     );
 
-    expect(file.status).to.equal(302);
-    expect(file.headers.get("location")).to.equal(
-      `${AGENT_RELEASES_URL}/agent-${PLATFORM}`,
-    );
+    expect(file.status).to.equal(404);
   });
 
   it("агент версии источника: воркер проекта обновляется (подпись ключом проекта)", async () => {
@@ -167,7 +153,7 @@ describe("сборки агента: источник агента и ворке
     );
   });
 
-  it("прежний агент: обновление видно, агент обновляется до версии источника", async function () {
+  it("прежний агент: новую версию нашёл в своём каталоге, обновляется до неё", async function () {
     if (
       AGENT_PREVIOUS_VERSION === AGENT_VERSION ||
       !agentBinary(AGENT_PREVIOUS_VERSION)
@@ -181,6 +167,7 @@ describe("сборки агента: источник агента и ворке
       name: "release-previous",
       version: AGENT_PREVIOUS_VERSION,
       update: true,
+      updateReleases: AGENT_CATALOG_URL,
     });
 
     agents.push(agent);
@@ -195,7 +182,7 @@ describe("сборки агента: источник агента и ворке
     expect(candidate).to.include({
       current: AGENT_PREVIOUS_VERSION,
       target: AGENT_VERSION,
-      source: "server",
+      source: "agent",
     });
 
     const updated = expectStatus(

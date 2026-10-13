@@ -1,7 +1,9 @@
-import type {
-  ConfigRecord,
-  RestartResult,
-  WorkerUpdateResult,
+import {
+  type Agent,
+  type ConfigRecord,
+  type RestartResult,
+  workerManifest,
+  type WorkerUpdateResult,
 } from "agent-sdk/server";
 import { inject } from "inversify";
 
@@ -21,6 +23,7 @@ import {
   IAgentFetchBody,
   IAgentWorkerActionResultDto,
 } from "./dto";
+import { AgentStore, configActorOf } from "./store/agent.store";
 
 /** Заголовки ответа воркера, которые не передаются клиенту как есть. */
 const HOP_HEADERS = new Set([
@@ -51,7 +54,7 @@ const toConfigDto = (
   version: record.version,
   ...(withData && { data: record.data }),
   updatedAt: record.updatedAt,
-  ...(record.actor && { actor: record.actor }),
+  ...(configActorOf(record) && { actor: configActorOf(record) }),
 });
 
 const entryKey = (worker: string, key: string): string => `${worker}/${key}`;
@@ -73,6 +76,47 @@ const toActionResult = (
           result.previous !== undefined && { previous: result.previous }),
       };
 
+/** Путь подходит под шаблон маршрута: `{name}` — один непустой сегмент, кроме «.» и «..»; параметры после `?` не учитываются. */
+const matchRoute = (template: string, path: string): boolean => {
+  let plain = path.split("?")[0].split("#")[0];
+
+  try {
+    plain = decodeURIComponent(plain);
+  } catch {
+    // неверный %XX — путь как есть
+  }
+
+  const want = template.split("/");
+  const got = plain.split("/");
+
+  return (
+    want.length === got.length &&
+    want.every((part, i) =>
+      /^\{[^/{}]+\}$/.test(part)
+        ? got[i] !== "" && got[i] !== "." && got[i] !== ".."
+        : part === got[i],
+    )
+  );
+};
+
+/** Есть ли у маршрута воркера схема тела (`routes[].request` манифеста). */
+const routeHasSchema = (
+  agent: Agent,
+  worker: string,
+  method: string,
+  path: string,
+): boolean =>
+  !!workerManifest(agent, worker)?.routes?.find(
+    route =>
+      route.method === method &&
+      matchRoute(route.path, path) &&
+      route.request !== undefined,
+  );
+
+/** Тело запроса текстом UTF-8. */
+const bodyText = (body: string | Uint8Array): string =>
+  typeof body === "string" ? body : Buffer.from(body).toString("utf8");
+
 /** Тело запроса к воркеру: текст или байты из base64. */
 const requestBody = (
   body: IAgentFetchBody,
@@ -87,15 +131,6 @@ const requestBody = (
   return new Uint8Array(bytes);
 };
 
-/**
- * Воркеры агента: перезапуск и обновление с сервера (занятый воркер — ответ
- * сразу, замена после окончания работы, итог — событие `action`; `force` —
- * сразу), настройки по ключам (проверка по схеме из манифеста воркера —
- * `validateConfigs`), запрос к воркеру с потоком ответа (в аудит — только
- * изменяющие методы). Действия и запросы выполняет копия с соединением
- * агента: из другой копии SDK пересылает их туда (`relay`), без пересылки —
- * `AGENT_ELSEWHERE` (503, повторить).
- */
 /** Ответ воркера на запрос модуля: статус и тело (JSON или текст). */
 export interface IAgentWorkerJsonResponse {
   status: number;
@@ -111,11 +146,21 @@ const parseJsonOrText = (text: string): unknown => {
   }
 };
 
+/**
+ * Воркеры агента: перезапуск и обновление с сервера (занятый воркер — ответ
+ * сразу, замена после окончания работы, итог — событие `action`; `force` —
+ * сразу), настройки по ключам (значение проверяется по схеме ключа из
+ * манифеста воркера — `CONFIG_INVALID`), запрос к воркеру с потоком ответа
+ * (тело — по схеме маршрута, `REQUEST_INVALID`; в аудит — только изменяющие
+ * методы). Действия и запросы выполняет копия с соединением агента; в другой
+ * копии — `AGENT_ELSEWHERE` (503, повторить).
+ */
 @Injectable()
 export class AgentWorkerService {
   constructor(
     @inject(AgentRuntime) private readonly _runtime: AgentRuntime,
     @inject(AgentAccessService) private readonly _access: AgentAccessService,
+    @inject(AgentStore) private readonly _store: AgentStore,
   ) {}
 
   async restart(
@@ -126,13 +171,7 @@ export class AgentWorkerService {
   ): Promise<IAgentWorkerActionResultDto> {
     await this._access.require(actor, id, "manage");
 
-    return toActionResult(
-      await callAgents(() =>
-        this._runtime.agents
-          .by(actor.userId)
-          .restartWorker(id, worker, { force }),
-      ),
-    );
+    return this.restartAs(actor.userId, id, worker, force);
   }
 
   async update(
@@ -143,13 +182,7 @@ export class AgentWorkerService {
   ): Promise<IAgentWorkerActionResultDto> {
     await this._access.require(actor, id, "manage");
 
-    return toActionResult(
-      await callAgents(() =>
-        this._runtime.agents
-          .by(actor.userId)
-          .updateWorker(id, worker, { force }),
-      ),
-    );
+    return this.updateAs(actor.userId, id, worker, force);
   }
 
   /** Ключи настроек агента: значение и статус применения. */
@@ -206,9 +239,7 @@ export class AgentWorkerService {
     data: unknown,
   ): Promise<IAgentConfigEntryDto> {
     await this._access.require(actor, id, "config");
-    await callAgents(() =>
-      this._runtime.agents.by(actor.userId).setConfig(id, worker, key, data),
-    );
+    await this.writeConfig(actor.userId, id, worker, key, data);
 
     return this.entry(id, worker, key, true);
   }
@@ -222,18 +253,19 @@ export class AgentWorkerService {
     await this._access.require(actor, id, "config");
 
     const deleted = await callAgents(() =>
-      this._runtime.agents.by(actor.userId).deleteConfig(id, worker, key),
+      this._runtime.agents.deleteConfig(id, worker, key),
     );
 
     if (!deleted) throw AgentError.CONFIG_NOT_FOUND();
+    this._runtime.audit("config.delete", actor.userId, id, { worker, key });
   }
 
   /**
    * Запрос к воркеру через агента: ответ — статус, заголовки и поток тела
    * воркера. Ответ воркера с ошибкой (4xx, 5xx) — обычный ответ; ошибка до
    * ответа воркера — `AgentError` или код агента (`WORKER_UNAVAILABLE`, …).
-   * Изменяющий запрос (`POST`, `PUT`, `PATCH`, `DELETE`) — от имени
-   * пользователя, в аудит; чтение — без аудита.
+   * Тело — по схеме маршрута из манифеста (`REQUEST_INVALID`). Изменяющий
+   * запрос (`POST`, `PUT`, `PATCH`, `DELETE`) — в аудит; чтение — без аудита.
    */
   async fetch(
     actor: IAgentActor,
@@ -246,11 +278,18 @@ export class AgentWorkerService {
 
     const payload = requestBody(body);
     const method = (body.method ?? "GET").toUpperCase();
-    const agents = AGENT_AUDITED_FETCH_METHODS.includes(method)
-      ? this._runtime.agents.by(actor.userId)
-      : this._runtime.agents;
+
+    await this.checkRequest(id, worker, method, body.path, payload);
+    if (AGENT_AUDITED_FETCH_METHODS.includes(method)) {
+      this._runtime.audit("fetch", actor.userId, id, {
+        worker,
+        method,
+        path: body.path,
+      });
+    }
+
     const response = await callAgents(() =>
-      agents.fetch(id, worker, body.path, {
+      this._runtime.agents.fetch(id, worker, body.path, {
         method,
         headers: body.headers ?? {},
         ...(payload !== undefined && { body: payload }),
@@ -288,9 +327,7 @@ export class AgentWorkerService {
     data: unknown,
   ): Promise<IAgentConfigDto> {
     return toConfigDto(
-      await callAgents(() =>
-        this._runtime.agents.setConfig(id, worker, key, data),
-      ),
+      await this.writeConfig(null, id, worker, key, data),
       true,
     );
   }
@@ -311,15 +348,25 @@ export class AgentWorkerService {
       timeoutMs?: number;
     } = {},
   ): Promise<IAgentWorkerJsonResponse> {
-    const agents = options.actorId
-      ? this._runtime.agents.by(options.actorId)
-      : this._runtime.agents;
+    const method = (options.method ?? "GET").toUpperCase();
+    const body =
+      options.body === undefined ? undefined : JSON.stringify(options.body);
+
+    await this.checkRequest(id, worker, method, path, body);
+    if (options.actorId) {
+      this._runtime.audit("fetch", options.actorId, id, {
+        worker,
+        method,
+        path,
+      });
+    }
+
     const response = await callAgents(() =>
-      agents.fetch(id, worker, path, {
-        method: options.method ?? "GET",
-        ...(options.body !== undefined && {
+      this._runtime.agents.fetch(id, worker, path, {
+        method,
+        ...(body !== undefined && {
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(options.body),
+          body,
         }),
         timeoutMs: options.timeoutMs ?? AGENT_FETCH_TIMEOUT.defaultMs,
       }),
@@ -338,7 +385,13 @@ export class AgentWorkerService {
   ): Promise<IAgentWorkerActionResultDto> {
     return toActionResult(
       await callAgents(() =>
-        this._runtime.agents.by(actorId).restartWorker(id, worker, { force }),
+        this._runtime.act(
+          actorId,
+          id,
+          "worker.restart",
+          { name: worker, ...(force && { force: true }) },
+          () => this._runtime.agents.restartWorker(id, worker, { force }),
+        ),
       ),
     );
   }
@@ -352,9 +405,91 @@ export class AgentWorkerService {
   ): Promise<IAgentWorkerActionResultDto> {
     return toActionResult(
       await callAgents(() =>
-        this._runtime.agents.by(actorId).updateWorker(id, worker, { force }),
+        this._runtime.act(
+          actorId,
+          id,
+          "worker.update",
+          { name: worker, ...(force && { force: true }) },
+          () => this._runtime.agents.updateWorker(id, worker, { force }),
+        ),
       ),
     );
+  }
+
+  /**
+   * Записать значение от имени пользователя (`actorId`; `null` — система):
+   * проверка по схеме ключа из манифеста воркера (`CONFIG_INVALID`), автор —
+   * в колонку `actor`, запись — в аудит.
+   */
+  private async writeConfig(
+    actorId: string | null,
+    id: string,
+    worker: string,
+    key: string,
+    data: unknown,
+  ): Promise<ConfigRecord> {
+    const agent = await this._runtime.agents.getAgent(id);
+    const problems = agent
+      ? this._runtime.schemaProblems(agent, worker, { config: key }, data)
+      : [];
+
+    if (problems.length) {
+      throw AgentError.CONFIG_INVALID({
+        reason: `${worker}/${key}: ${problems.join("; ")}`,
+      });
+    }
+
+    const record = await callAgents(() =>
+      this._store.withActor(actorId, () =>
+        this._runtime.agents.setConfig(id, worker, key, data),
+      ),
+    );
+
+    this._runtime.audit("config.set", actorId, id, {
+      worker,
+      key,
+      version: record.version,
+    });
+
+    return record;
+  }
+
+  /**
+   * Тело запроса по схеме маршрута из манифеста воркера (`routes[].request`):
+   * не JSON или не по схеме — `REQUEST_INVALID`. Схемы нет — без проверки.
+   */
+  private async checkRequest(
+    id: string,
+    worker: string,
+    method: string,
+    path: string,
+    body: string | Uint8Array | undefined,
+  ): Promise<void> {
+    const agent = await this._runtime.agents.getAgent(id);
+
+    if (!agent || !routeHasSchema(agent, worker, method, path)) return;
+
+    const what = `${worker} ${method} ${path.split("?")[0]}`;
+    let value: unknown = null;
+
+    try {
+      if (body !== undefined) value = JSON.parse(bodyText(body));
+    } catch {
+      throw AgentError.REQUEST_INVALID({ reason: `${what}: тело — не JSON` });
+    }
+
+    const problems = this._runtime.schemaProblems(
+      agent,
+      worker,
+      { route: { method, path } },
+      value,
+    );
+
+    if (problems.length) {
+      throw AgentError.REQUEST_INVALID({
+        reason: `${what}: ${problems.join("; ")}`,
+      });
+    }
   }
 
   private async entry(

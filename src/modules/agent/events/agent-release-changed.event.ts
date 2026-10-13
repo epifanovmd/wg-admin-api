@@ -1,6 +1,6 @@
 import type { IAgentReleaseNoticeDto } from "../dto";
 
-/** В удалённом источнике сборок агента появилась новая версия. */
+/** Агенты нашли новую версию агента (новейшая `update.latest` выросла). */
 export class AgentReleaseChangedEvent {
   constructor(public readonly release: IAgentReleaseNoticeDto) {}
 }

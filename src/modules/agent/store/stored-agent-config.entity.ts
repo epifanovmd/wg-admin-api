@@ -29,7 +29,7 @@ export class StoredAgentConfig {
   @Column({ name: "updated_at", type: "bigint", transformer: bigintNumber })
   updatedAt!: number;
 
-  /** Кто изменил (`agents.by`). */
+  /** Кто изменил: пользователь (`AgentStore.withActor`); `NULL` — система. */
   @Column({ type: "varchar", length: 255, nullable: true })
   actor!: string | null;
 }

@@ -1,9 +1,5 @@
-/**
- * Откуда сборка: `remote` — удалённый источник сборок агента (GitHub или
- * `AGENT_RELEASES_URL`), `local` — каталог воркеров проекта
- * (``release/` архивов `AGENT_BUNDLE_DIR``).
- */
-export type TAgentReleaseSource = "remote" | "local";
+/** Откуда сборка: `local` — сборки проекта (`release/` архивов `AGENT_BUNDLE_DIR`). */
+export type TAgentReleaseSource = "local";
 
 /** Сборка агента. */
 export interface IAgentReleaseArtifactDto {
@@ -14,7 +10,7 @@ export interface IAgentReleaseArtifactDto {
   sha256: string;
   signature?: string;
   source: TAgentReleaseSource;
-  /** Ссылка на сборку в источнике или путь от корня бэкенда. */
+  /** Ссылка на сборку: путь от корня бэкенда `/api/v1/agent-link/releases/<file>` или сам `file`, если он — адрес. */
   url: string;
 }
 
@@ -27,44 +23,33 @@ export interface IAgentWorkerArtifactDto extends IAgentReleaseArtifactDto {
   stopTimeout?: string;
 }
 
-/** Версия агента в удалённом источнике: какая, откуда, когда проверена. */
-export interface IAgentRemoteReleaseDto {
-  version: string;
-  /** `github:owner/repo` или адрес сборок (url). */
-  from: string;
-  /** Когда источник проверен, мс с 1970-01-01. */
-  checkedAt: number;
-  /** Ключ подписи сборок агента (base64). */
-  publicKey?: string;
-}
-
 /**
- * Итоговый манифест сборок: агент и netprobe — из удалённого источника, воркеры
- * проекта (wg, socks) — из ``release/` архивов `AGENT_BUNDLE_DIR``.
+ * Сборки проекта — `manifest.json` из ``release/` архивов `AGENT_BUNDLE_DIR``
+ * (`agent pack --release-out`): версия агента, которым собраны архивы, и
+ * сборки воркеров wg и socks. Сборки агента бэкенд не раздаёт: агент берёт их
+ * из своего каталога сборок (`update.releases` в `agent.yaml`).
  */
 export interface IAgentReleaseManifestDto {
   version: string;
   publicKey?: string;
   artifacts: IAgentReleaseArtifactDto[];
   workers?: IAgentWorkerArtifactDto[];
-  /** Нет — сборки агента ещё не получены (или источник не задан). */
-  remote?: IAgentRemoteReleaseDto;
-}
-
-/** В источнике появилась новая версия агента (сокет `agent:release`). */
-export interface IAgentReleaseNoticeDto {
-  version: string;
-  /** Прежняя версия; нет — версия получена впервые после запуска бэкенда. */
-  previous?: string;
-  /** `github:owner/repo` или адрес сборок (url). */
-  from: string;
 }
 
 /**
- * Откуда новая версия агента: `server` — сборки сервера (источник сборок агента), `agent` —
- * агент нашёл её в своём каталоге сборок сам.
+ * Агенты нашли новую версию агента (сокет `agent:release`): новейшая
+ * `update.latest` среди агентов выросла.
  */
-export type TAgentUpdateSource = "server" | "agent";
+export interface IAgentReleaseNoticeDto {
+  version: string;
+  /** Прежняя новейшая версия; нет — первая найденная после запуска бэкенда. */
+  previous?: string;
+  /** Кто нашёл: `agent:<имя агента>`. */
+  from: string;
+}
+
+/** Откуда новая версия агента: `agent` — агент нашёл её в своём каталоге сборок сам. */
+export type TAgentUpdateSource = "agent";
 
 /** Агент, которого можно обновить до новой версии. */
 export interface IAgentUpdateCandidateDto {

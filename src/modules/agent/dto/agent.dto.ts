@@ -1,8 +1,6 @@
 import type {
   Agent,
   AgentWorker,
-  Alert,
-  AlertEvent,
   ConfigStatus,
   MetricsPoint,
   WorkerManifest,
@@ -10,6 +8,7 @@ import type {
 
 import { BaseDto } from "../../../core/dto/BaseDto";
 import type { TAgentLogLevel } from "../agent.types";
+import type { IAgentAlert, IAgentAlertChange } from "../agent-alerts";
 
 /**
  * Id агента в пути: формат проверяется до контроллера.
@@ -173,7 +172,7 @@ export class AgentAlertDto extends BaseDto {
   /** В событии: `true` — началась, `false` — закончилась. */
   active?: boolean;
 
-  constructor(alert: Alert | AlertEvent) {
+  constructor(alert: IAgentAlert | IAgentAlertChange) {
     super(alert);
 
     this.key = alert.key;
@@ -187,7 +186,7 @@ export class AgentAlertDto extends BaseDto {
     if ("active" in alert) this.active = alert.active;
   }
 
-  static fromModel(alert: Alert | AlertEvent): AgentAlertDto {
+  static fromModel(alert: IAgentAlert | IAgentAlertChange): AgentAlertDto {
     return new AgentAlertDto(alert);
   }
 }
@@ -288,7 +287,7 @@ export class AgentDto extends BaseDto {
   alerts: AgentAlertDto[];
   session?: IAgentSessionDto;
 
-  constructor(agent: Agent) {
+  constructor(agent: Agent, alerts: readonly IAgentAlert[]) {
     super(agent);
 
     this.id = agent.id;
@@ -325,12 +324,13 @@ export class AgentDto extends BaseDto {
         checkedAt: agent.update.checkedAt,
       };
     }
-    this.alerts = agent.alerts.map(AgentAlertDto.fromModel);
+    this.alerts = alerts.map(AgentAlertDto.fromModel);
     if (agent.session) this.session = { ...agent.session };
   }
 
-  static fromModel(agent: Agent): AgentDto {
-    return new AgentDto(agent);
+  /** Агент и его текущие проблемы (`agentAlerts`). */
+  static fromModel(agent: Agent, alerts: readonly IAgentAlert[]): AgentDto {
+    return new AgentDto(agent, alerts);
   }
 }
 

@@ -458,7 +458,7 @@ const models: TsoaRoute.Models = {
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "TAgentReleaseSource": {
         "dataType": "refAlias",
-        "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["remote"]},{"dataType":"enum","enums":["local"]}],"validators":{}},
+        "type": {"dataType":"enum","enums":["local"],"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "IAgentReleaseArtifactDto": {
@@ -493,17 +493,6 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-    "IAgentRemoteReleaseDto": {
-        "dataType": "refObject",
-        "properties": {
-            "version": {"dataType":"string","required":true},
-            "from": {"dataType":"string","required":true},
-            "checkedAt": {"dataType":"double","required":true},
-            "publicKey": {"dataType":"string"},
-        },
-        "additionalProperties": false,
-    },
-    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "IAgentReleaseManifestDto": {
         "dataType": "refObject",
         "properties": {
@@ -511,14 +500,13 @@ const models: TsoaRoute.Models = {
             "publicKey": {"dataType":"string"},
             "artifacts": {"dataType":"array","array":{"dataType":"refObject","ref":"IAgentReleaseArtifactDto"},"required":true},
             "workers": {"dataType":"array","array":{"dataType":"refObject","ref":"IAgentWorkerArtifactDto"}},
-            "remote": {"ref":"IAgentRemoteReleaseDto"},
         },
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "TAgentUpdateSource": {
         "dataType": "refAlias",
-        "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["server"]},{"dataType":"enum","enums":["agent"]}],"validators":{}},
+        "type": {"dataType":"enum","enums":["agent"],"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "IAgentUpdateCandidateDto": {

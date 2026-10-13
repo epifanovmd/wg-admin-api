@@ -47,7 +47,7 @@
     "@simplewebauthn/server": "^14",
     "@socket.io/redis-adapter": "^8.3.0",
     "@tsoa/runtime": "6.6.0",
-    "agent-sdk": "https://github.com/epifanovmd/agent/releases/download/v2.0.0/agent-sdk-2.0.0.tgz",
+    "agent-sdk": "https://github.com/epifanovmd/agent/releases/download/v3.0.0/agent-sdk-3.0.0.tgz",
     "bcrypt": "^6.0.0",
     "ejs": "^6",
     "helmet": "^8",

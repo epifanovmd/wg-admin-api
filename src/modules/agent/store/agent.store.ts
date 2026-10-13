@@ -4,6 +4,7 @@ import type {
   SetConfigOptions,
   Store,
 } from "agent-sdk/server";
+import { AsyncLocalStorage } from "async_hooks";
 import { inject } from "inversify";
 import { DataSource } from "typeorm";
 
@@ -45,6 +46,16 @@ const agentOf = (row: {
   ...(row.record as AgentRecord),
   rev: Number(row.rev),
 });
+
+/** Значение ключа настроек и кто его записал (колонка `actor`). */
+export interface IAgentConfigRecord extends ConfigRecord {
+  /** Пользователь; нет — система. */
+  actor?: string;
+}
+
+/** Кто записал значение ключа настроек; нет — система. */
+export const configActorOf = (record: ConfigRecord): string | undefined =>
+  (record as IAgentConfigRecord).actor;
 
 interface IConfigRow {
   agent_id: string;
@@ -106,15 +117,22 @@ const rowsOf = <T>(result: unknown): T[] =>
  * `jsonb` и `rev` колонкой: запись — одним условным `UPDATE … WHERE rev = …`,
  * несколько процессов не затирают изменения друг друга. Настройки — строка
  * `agent_configs` на ключ; после удаления строка остаётся (`data = NULL`) со
- * счётчиком версии, поэтому версия ключа только растёт.
+ * счётчиком версии, поэтому версия ключа только растёт. Автора записи
+ * (`actor`) задаёт вызывающий — `withActor` вокруг `agents.setConfig`.
  */
 @Injectable()
 export class AgentStore implements Store {
   private readonly _cipher = new ConfigCipher();
+  private readonly _actor = new AsyncLocalStorage<string>();
 
   constructor(@inject(DataSource) private readonly _db: DataSource) {}
 
-  private _configOf(row: IConfigRow): ConfigRecord {
+  /** Запись настроек внутри `fn` — от имени пользователя `actor` (пусто — система). */
+  withActor<T>(actor: string | null, fn: () => Promise<T>): Promise<T> {
+    return actor ? this._actor.run(actor, fn) : fn();
+  }
+
+  private _configOf(row: IConfigRow): IAgentConfigRecord {
     return {
       agentId: row.agent_id,
       worker: row.worker,
@@ -184,7 +202,8 @@ export class AgentStore implements Store {
   /**
    * Версия — `max(счётчик + 1, minVersion)` одним `INSERT … ON CONFLICT`:
    * две записи одновременно получают разные версии. Значение пишется
-   * JSON-текстом: `null` — это `'null'::jsonb`, а не удаление.
+   * JSON-текстом: `null` — это `'null'::jsonb`, а не удаление. Автор — из
+   * `withActor`.
    */
   async setConfig(
     agentId: string,
@@ -192,7 +211,7 @@ export class AgentStore implements Store {
     key: string,
     data: unknown,
     opts: SetConfigOptions = {},
-  ): Promise<ConfigRecord> {
+  ): Promise<IAgentConfigRecord> {
     const result: unknown = await this._db.query(
       `INSERT INTO "agent_configs" ("agent_id", "worker", "key", "version", "data", "updated_at", "actor")
        VALUES ($1, $2, $3, GREATEST(1, $4::bigint), $5::jsonb, $6, $7)
@@ -209,14 +228,14 @@ export class AgentStore implements Store {
         opts.minVersion ?? 0,
         JSON.stringify(this._cipher.seal(jsonSafe(data) ?? null)),
         Date.now(),
-        opts.actor ?? null,
+        this._actor.getStore() ?? null,
       ],
     );
 
     return this._configOf(rowsOf<IConfigRow>(result)[0]);
   }
 
-  async listConfigs(agentId: string): Promise<ConfigRecord[]> {
+  async listConfigs(agentId: string): Promise<IAgentConfigRecord[]> {
     const rows: IConfigRow[] = await this._db.query(
       `SELECT * FROM "agent_configs" WHERE "agent_id" = $1 AND "data" IS NOT NULL
        ORDER BY "worker", "key"`,

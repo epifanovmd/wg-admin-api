@@ -34,7 +34,6 @@ const record = (patch: Partial<AgentRecord> = {}): AgentRecord => ({
   secretHash: "ab".repeat(32),
   lastSeq: 0,
   configs: {},
-  alerts: [],
   rev: 0,
   ...patch,
 });
@@ -111,17 +110,18 @@ describe("AgentStore и история агентов (Postgres, TEST_DATABASE_U
     expect(await store.updateAgent(record())).to.equal(false);
   });
 
-  it("настройки: версия растёт, переживает удаление, minVersion; null — значение", async () => {
+  it("настройки: версия растёт, переживает удаление, minVersion; null — значение; автор — из withActor", async () => {
     const agentId = newAgentId();
 
     await store.createAgent(record({ id: agentId }));
 
     const v1 = await store.setConfig(agentId, "echo", "settings", { a: 1 });
-    const v2 = await store.setConfig(agentId, "echo", "settings", null, {
-      actor: "u1",
-    });
+    const v2 = await store.withActor("u1", () =>
+      store.setConfig(agentId, "echo", "settings", null),
+    );
 
     expect([v1.version, v2.version]).to.deep.equal([1, 2]);
+    expect(v1).to.not.have.property("actor");
     expect(v2).to.deep.include({ data: null, actor: "u1" });
     expect((await store.listConfigs(agentId)).map(c => c.data)).to.deep.equal([
       null,

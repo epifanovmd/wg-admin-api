@@ -16,8 +16,7 @@ const isLinkPath = (path: string): boolean =>
  * HTTP-маршруты агентов `/api/v1/agent-link/*` — до разбора тела, CORS и
  * лимита запросов: регистрация и сборки ведёт SDK (ошибки отвечает сам),
  * установку из архивов (`bundle/*`) — `serveBundle`. WebSocket пути агентов
- * подключает `AgentBootstrap`; пересылку между копиями — внутренний сервер
- * `AgentRelayServer`.
+ * подключает `AgentBootstrap`.
  */
 @Injectable()
 export class AgentLinkHandler implements IRawHttpHandler {

@@ -1,5 +1,5 @@
 # Агент на машине разработчика: yarn agent (порт API и токен регистрации — из .env.development).
-# Боевые узлы — agent.prod.yaml поверх этого файла. Что получилось и откуда каждое значение:
+# Боевые узлы — agent.prod.yaml поверх этого файла. Проверить и посмотреть итог:
 # yarn agent config check.
 server:
   url: "http://localhost:${SERVER_PORT}"

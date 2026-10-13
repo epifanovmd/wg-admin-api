@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # Один образ на все роли процесса (APP_ROLE=api|worker|all) и миграции.
 # Архивы папки агента для нод (agent pack: агент, настройки, воркеры wg и socks)
-# собираются здесь же — бэкенд раздаёт их (AGENT_BUNDLE_DIR), агента и netprobe
-# берёт из релизов GitHub (AGENT_RELEASES_GITHUB).
+# собираются здесь же — бэкенд раздаёт их (AGENT_BUNDLE_DIR); новые версии агента
+# узлы берут из своего каталога сборок (релизы GitHub агента).
 # Стадии сборки идут на платформе сборщика (кросс-компиляция, без эмуляции);
 # платформа образа влияет только на production-зависимости и runtime.
 ARG NODE_VERSION=24-alpine
@@ -14,7 +14,7 @@ ARG GO_VERSION=1.26.9-bookworm
 # go build здесь же), release/ — сборки воркеров для обновления нод и install.sh —
 # установщик агента (API раздаёт его вместе с архивами). Программа агента и install.sh —
 # с GitHub Release версии agent-sdk; агента под другие платформы pack берёт оттуда же.
-# Ключ подписи воркеров — необязательный секрет agent_signing_key (agent keygen):
+# Ключ подписи воркеров — необязательный секрет agent_signing_key (openssl, agent/README.md):
 # docker build --secret id=agent_signing_key,env=AGENT_SIGNING_KEY …; без него воркеры
 # ставятся, но с API не обновляются. Открытый ключ pack кладёт в архив сам.
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS agent-bundle

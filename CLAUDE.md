@@ -32,7 +32,7 @@ yarn gen:module <name>    # каркас модуля по конвенциям 
 yarn migration:generate src/migrations/<Name> | migration:run | migration:revert
 yarn agent                # локальный агент на переднем плане (agent/agent.yaml; agent/dev.sh)
 yarn agent:pack           # архивы папки агента для узлов в agent/bundle (воркеры wg, socks — сборкой Go)
-yarn agent:fetch [версия] # скачать сборки агента с GitHub в agent/dist (e2e; прежняя — 1.0.1)
+yarn agent:fetch [версия] # скачать сборки агента с GitHub в agent/dist (e2e; прежняя — 1.4.0)
 scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]   # воркеры: Go в контейнере
 ```
 

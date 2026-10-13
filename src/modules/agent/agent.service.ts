@@ -3,12 +3,13 @@ import {
   type AgentEvent,
   AgentsError,
   type LogEntry,
-  type UpdateCandidate,
+  type ReleaseView,
 } from "agent-sdk/server";
 import { inject } from "inversify";
 
 import { config } from "../../config";
 import {
+  HttpException,
   ICursorPageDto,
   Injectable,
   IPaginatedDto,
@@ -29,6 +30,12 @@ import {
   IAgentEventFeedQuery,
 } from "./agent-history.service";
 import {
+  IAgentUpdateCandidate,
+  IUpdateCandidates,
+  selfUpdating,
+  updateCandidates,
+} from "./agent-update-candidates";
+import {
   AgentAlertDto,
   AgentConfigStatusDto,
   AgentDto,
@@ -36,6 +43,7 @@ import {
   IAgentInstallCommandDto,
   IAgentLogsDto,
   IAgentReleaseDto,
+  IAgentReleaseManifestDto,
   IAgentUpdateCandidateDto,
   IAgentUpdateResultDto,
   ICreateAgentInstallCommandBody,
@@ -66,14 +74,31 @@ const shQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 const toCandidateDto = ({
   agentName,
   ...rest
-}: UpdateCandidate): IAgentUpdateCandidateDto => ({ ...rest, name: agentName });
+}: IAgentUpdateCandidate): IAgentUpdateCandidateDto => ({
+  ...rest,
+  name: agentName,
+  source: "agent",
+});
+
+/** Сборки проекта для API: все из каталога проекта (`source: local`). */
+const toManifestDto = ({
+  artifacts,
+  workers,
+  ...rest
+}: ReleaseView): IAgentReleaseManifestDto => ({
+  ...rest,
+  artifacts: artifacts.map(artifact => ({ ...artifact, source: "local" })),
+  ...(workers && {
+    workers: workers.map(artifact => ({ ...artifact, source: "local" })),
+  }),
+});
 
 /**
  * Агенты: список и карточка (`hello`, `status` с воркерами, последняя точка
  * метрик, проблемы), отзыв, удаление, смена ключа, обновление, журнал,
- * сборки агента и команда установки. Доступ — право модуля или политика
- * (`AgentAccessService`); вызовы SDK — от имени пользователя (`by`), чтобы
- * действие попало в аудит.
+ * сборки проекта, кандидаты на обновление и команда установки. Доступ —
+ * право модуля или политика (`AgentAccessService`); действия — от имени
+ * пользователя: «кто что сделал» — в аудит (`AgentRuntime.act`, `audit`).
  */
 @Injectable()
 export class AgentService {
@@ -96,9 +121,11 @@ export class AgentService {
     );
 
     return toPage(
-      agents
-        .slice(page.offset, page.offset + page.limit)
-        .map(AgentDto.fromModel),
+      await Promise.all(
+        agents
+          .slice(page.offset, page.offset + page.limit)
+          .map(agent => this._runtime.toDto(agent)),
+      ),
       agents.length,
       page,
     );
@@ -107,7 +134,7 @@ export class AgentService {
   async get(actor: IAgentActor, id: string): Promise<AgentDto> {
     await this._access.require(actor, id, "view");
 
-    return AgentDto.fromModel(await this.require(id));
+    return this._runtime.toDto(await this.require(id));
   }
 
   /** Текущие проблемы: одного агента или всех в области просмотра. */
@@ -115,11 +142,16 @@ export class AgentService {
     if (agentId) await this._access.require(actor, agentId, "view");
 
     const scope = agentId ? "all" : await this._access.scope(actor, "view");
-    const alerts = await this._runtime.agents.listAlerts(agentId);
+    const agents = agentId
+      ? [await this.require(agentId)]
+      : (await this._runtime.agents.listAgents()).filter(agent =>
+          inScope(scope, agent.id),
+        );
+    const alerts = await Promise.all(
+      agents.map(agent => this._runtime.alertsOf(agent)),
+    );
 
-    return alerts
-      .filter(alert => inScope(scope, alert.agentId))
-      .map(AgentAlertDto.fromModel);
+    return alerts.flat().map(AgentAlertDto.fromModel);
   }
 
   /** Лента событий воркеров, новые первыми: одного агента или всех в области. */
@@ -151,23 +183,23 @@ export class AgentService {
   async revoke(actor: IAgentActor, id: string): Promise<AgentDto> {
     await this.requireModuleManage(actor, id);
 
-    return AgentDto.fromModel(
-      await callAgents(() => this._runtime.agents.by(actor.userId).revoke(id)),
-    );
+    return this._runtime.toDto(await this.revokeAgent(actor.userId, id));
   }
 
   /** Удалить запись агента, его настройки и историю (только `agent:manage`). */
   async delete(actor: IAgentActor, id: string): Promise<void> {
     await this.requireModuleManage(actor, id);
-    await callAgents(() =>
-      this._runtime.agents.by(actor.userId).deleteAgent(id),
-    );
+    await callAgents(() => this.deleteAgent(actor.userId, id));
   }
 
   /** Сменить ключ: агент переподключится с новым секретом. */
   async rotateKey(actor: IAgentActor, id: string): Promise<void> {
     await this._access.require(actor, id, "manage");
-    await callAgents(() => this._runtime.agents.by(actor.userId).rotateKey(id));
+    await callAgents(() =>
+      this._runtime.act(actor.userId, id, "agent.rotateKey", {}, () =>
+        this._runtime.agents.rotateKey(id),
+      ),
+    );
   }
 
   /** Обновить агента до доступной версии; итог — после запуска новой версии. */
@@ -186,26 +218,25 @@ export class AgentService {
     await this._access.require(actor, id, "logs");
 
     const entries: LogEntry[] = await callAgents(() =>
-      this._runtime.agents.by(actor.userId).logs(id, query),
+      this._runtime.act(actor.userId, id, "agent.logs", { ...query }, () =>
+        this._runtime.agents.logs(id, query),
+      ),
     );
 
     return { entries };
   }
 
   /**
-   * Итоговый манифест сборок (агент и netprobe — из удалённого источника, воркеры
-   * wg и socks — из `release/` архивов `AGENT_BUNDLE_DIR`) и кого можно обновить.
+   * Сборки проекта (воркеры wg и socks — `release/` архивов
+   * `AGENT_BUNDLE_DIR`) и кого можно обновить: агентов — до новой версии,
+   * которую они нашли в своём каталоге сборок, воркеры — до сборки проекта.
    */
   async release(actor: IAgentActor): Promise<IAgentReleaseDto> {
     const scope = await this._access.scope(actor, "view");
-    const agents = this._runtime.agents;
-    const [manifest, candidates] = await Promise.all([
-      agents.release(),
-      agents.updateCandidates(),
-    ]);
+    const { release, candidates } = await this.candidates();
 
     return {
-      manifest,
+      manifest: release && toManifestDto(release),
       candidates: candidates.agents
         .filter(c => inScope(scope, c.agentId))
         .map(toCandidateDto),
@@ -247,11 +278,13 @@ export class AgentService {
   async find(id: string): Promise<AgentDto | null> {
     const agent = await this._runtime.agents.getAgent(id);
 
-    return agent ? AgentDto.fromModel(agent) : null;
+    return agent ? this._runtime.toDto(agent) : null;
   }
 
   async all(): Promise<AgentDto[]> {
-    return (await this._runtime.agents.listAgents()).map(AgentDto.fromModel);
+    const agents = await this._runtime.agents.listAgents();
+
+    return Promise.all(agents.map(agent => this._runtime.toDto(agent)));
   }
 
   /** Статус настроек агента (желаемая, доставленная, применённая версии). */
@@ -263,25 +296,33 @@ export class AgentService {
 
   /** Агенты, которых можно обновить до новой версии. */
   async updateCandidateIds(): Promise<Set<string>> {
-    const { agents } = await this._runtime.agents.updateCandidates();
+    const { candidates } = await this.candidates();
 
-    return new Set(agents.map(c => c.agentId));
+    return new Set(candidates.agents.map(c => c.agentId));
   }
 
   /**
-   * Обновить агента до новой версии от имени пользователя (без проверки прав): до версии с
-   * сервера или до найденной самим агентом — её он берёт из своего каталога сборок.
+   * Обновить агента от имени пользователя (без проверки прав) до новой
+   * версии, которую он нашёл в своём каталоге сборок: сборку агент берёт
+   * оттуда сам. Агент себя не обновляет — `UPDATE_NOT_SUPPORTED`, новой
+   * версии нет — `UPDATE_NOT_AVAILABLE`.
    */
   async updateAs(actorId: string, id: string): Promise<IAgentUpdateResultDto> {
-    const agents = this._runtime.agents;
-    const candidate = (await agents.updateCandidates()).agents.find(
-      c => c.agentId === id,
-    );
+    const agent = await this.require(id);
+
+    if (agent.revoked) throw AgentError.REVOKED();
+    if (!selfUpdating(agent)) throw AgentError.UPDATE_NOT_SUPPORTED();
+
+    const candidate = updateCandidates([agent], null).agents[0];
+
+    if (!candidate) throw AgentError.UPDATE_NOT_AVAILABLE();
+
+    const version = candidate.target;
 
     return callAgents(() =>
-      candidate?.source === "agent"
-        ? agents.by(actorId).updateAgent(id, { version: candidate.target })
-        : agents.by(actorId).updateAgent(id),
+      this._runtime.act(actorId, id, "agent.update", { version }, () =>
+        this._runtime.agents.updateAgent(id, { version }),
+      ),
     );
   }
 
@@ -290,11 +331,14 @@ export class AgentService {
     return callAgents(() => this._runtime.agents.logs(id, query));
   }
 
-  /** Версия агента в сборках; сборок агента нет — `null`. */
+  /**
+   * Версия агента в архивах для нод — сборок проекта (`agent pack
+   * --release-out`); сборок нет — `null`.
+   */
   async releaseVersion(): Promise<string | null> {
     const release = await this._runtime.agents.release();
 
-    return release?.artifacts.length ? release.version : null;
+    return release?.version ?? null;
   }
 
   /** Агенты на связи с этим процессом (наблюдение — здесь, без пересылки). */
@@ -330,23 +374,52 @@ export class AgentService {
 
   /** Отозвать от имени пользователя (`actorId`) или системы (пусто). */
   async revokeAs(actorId: string, id: string): Promise<void> {
-    const agents = this._runtime.agents;
-
-    await callAgents(() => (actorId ? agents.by(actorId) : agents).revoke(id));
+    await this.revokeAgent(actorId, id);
   }
 
   /** Отозвать и удалить запись (агент удалён с машины). */
   async revokeAndDelete(actorId: string, id: string): Promise<void> {
-    const agents = this._runtime.agents;
-    const as = actorId ? agents.by(actorId) : agents;
-
     try {
-      await as.revoke(id);
-      await as.deleteAgent(id);
+      await this.revokeAgent(actorId, id);
+      await this.deleteAgent(actorId, id);
     } catch (err) {
       if (err instanceof AgentsError && err.code === "AGENT_NOT_FOUND") return;
+      if (
+        err instanceof HttpException &&
+        err.code === AgentError.codes.NOT_FOUND
+      ) {
+        return;
+      }
       throw toAgentError(err);
     }
+  }
+
+  /** Сборки проекта и кандидаты на обновление. */
+  private async candidates(): Promise<{
+    release: ReleaseView | null;
+    candidates: IUpdateCandidates;
+  }> {
+    const agents = this._runtime.agents;
+    const [list, release] = await Promise.all([
+      agents.listAgents(),
+      agents.release(),
+    ]);
+
+    return { release, candidates: updateCandidates(list, release) };
+  }
+
+  private async revokeAgent(actorId: string, id: string): Promise<Agent> {
+    const agent = await callAgents(() => this._runtime.agents.revoke(id));
+
+    this._runtime.audit("agent.revoke", actorId, id);
+
+    return agent;
+  }
+
+  /** Удалить запись агента (ошибки SDK — как есть). */
+  private async deleteAgent(actorId: string, id: string): Promise<void> {
+    await this._runtime.agents.deleteAgent(id);
+    this._runtime.deleted(actorId, id);
   }
 
   /** Видимый агент без права модуля на управление — 403, невидимый — 404. */

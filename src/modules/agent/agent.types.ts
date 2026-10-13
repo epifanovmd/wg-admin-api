@@ -58,13 +58,6 @@ export const AGENT_WATCH = {
 /** Канал NOTIFY: агенты, изменённые в другом процессе (payload — JSON). */
 export const AGENTS_CHANGED_CHANNEL = "agents_changed";
 
-/**
- * Маршрут пересылки вызовов агентов между копиями API (`relay`) на
- * внутреннем сервере пересылки (`AGENT_RELAY_PORT`): закрыт общим секретом
- * `AGENT_RELAY_SECRET`.
- */
-export const AGENT_RELAY_PATH = "/internal/agent-relay";
-
 /** Заголовок ответа прокси запроса к воркеру: статус ответа воркера. */
 export const AGENT_WORKER_STATUS_HEADER = "X-Agent-Worker-Status";
 

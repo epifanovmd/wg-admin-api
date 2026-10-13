@@ -6,9 +6,9 @@
 
 - `GET /api/v1/app/version` — любой вошедший пользователь (`jwt`):
   `{ version, commit, builtAt, startedAt, agentVersion }`. `agentVersion` —
-  версия агента в сборках, которые бэкенд раздаёт узлам (релизы GitHub или
-  `AGENT_RELEASES_URL`, модуль agent); null — сборок агента нет.
-  Установленная на ноде — `agentVersion` ноды.
+  версия агента в архивах, которые бэкенд раздаёт узлам для установки
+  (`AGENT_BUNDLE_DIR`, модуль agent); null — архивов нет. Установленная на
+  ноде — `agentVersion` ноды.
 
 ## Откуда версия
 

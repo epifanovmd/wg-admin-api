@@ -2,8 +2,8 @@
 
 Всё, что агент делает на машине разработчика и на узлах, — здесь: программа агента, её
 настройки и воркеры проекта `wg` и `socks`. Сам агент — отдельный проект
-([github.com/epifanovmd/agent](https://github.com/epifanovmd/agent), версия 1.x); здесь — то,
-что запускает на нём этот бэкенд.
+([github.com/epifanovmd/agent](https://github.com/epifanovmd/agent)); здесь — то, что
+запускает на нём этот бэкенд.
 
 ```
 agent/
@@ -28,8 +28,8 @@ agent/
 - **Воркер** — небольшая программа на Go, которую агент запускает и с которой говорит по HTTP
   через unix-сокет. Воркеры проекта — папки в `workers/`: исходники, `VERSION` и два
   исполняемых файла — `build` (сборка для архива узла) и `run` (запуск из исходников).
-- **Настройки** — `agent.yaml` и файлы поверх него (`extends`): что запускать и как. Итог и
-  откуда каждое значение — `yarn agent config check` (или `--env prod`).
+- **Настройки** — `agent.yaml` и файлы поверх него (`extends`): что запускать и как. Проверить
+  и посмотреть итог — `yarn agent config check` (или `--env prod`).
 
 ```
 бэкенд ──WebSocket──► агент ──HTTP по unix-сокету──► воркер wg     (интерфейсы, туннели, пробросы)
@@ -56,8 +56,7 @@ agent/
 yarn dev                          # API (в .env.development — AGENT_BOOTSTRAP_TOKEN)
 yarn agent                        # агент с воркерами wg и socks (agent.yaml); Ctrl+C — остановка
 yarn agent status                 # работает ли агент (запущенный в другом терминале)
-yarn agent config check           # итоговые настройки и откуда каждое значение
-yarn agent worker list            # воркеры: откуда каждый, версия
+yarn agent config check           # проверить настройки и показать итоговые значения
 yarn agent upgrade --check        # есть ли новая версия агента (yarn agent upgrade — поставить)
 ```
 
@@ -389,17 +388,25 @@ sudo /opt/agent-wg/bin/agent uninstall --instance wg --purge # и настрой
 
 ## Обновления и подписи
 
-- **Агента** бэкенд берёт из релизов GitHub `epifanovmd/agent` сам (`AGENT_RELEASES_*`,
-  диапазон `^1`): проверяет при запуске и раз в час (`AGENT_RELEASES_CHECK_INTERVAL_MS`), новую
-  версию пишет в журнал и сообщает админке сокетом. Агент на узле тоже сам проверяет новые
-  версии (`update: self`) и сообщает о них. Обновить — из админки
-  (`POST /api/v1/wg/nodes/{id}/agent/update`) или `sudo agent-wg upgrade` на узле. Пересобирать
-  бэкенд ради новой версии агента не нужно. Узлам без доступа к GitHub —
-  `AGENT_RELEASES_PROXY=true` (бэкенд передаёт файл сам), своё зеркало или закреплённая версия —
-  `AGENT_RELEASES_URL`.
-- **Воркеры проекта** подписывает `agent pack` ключом проекта из `AGENT_SIGNING_KEY` (пара —
-  `yarn agent keygen`). Открытый ключ попадает в архив, и `agent install` добавляет его к ключам
-  узла. Без ключа воркеры ставятся, но с API не обновляются (агент ответит `UPDATE_NOT_VERIFIED`).
+- **Агент** берёт свои сборки сам из своего каталога сборок (`update.releases` в `agent.yaml`;
+  по умолчанию — релизы GitHub `epifanovmd/agent`): на узле (`update: self`) он проверяет новую
+  версию при запуске и раз в `update.checkInterval` и сообщает её бэкенду — нода становится
+  кандидатом на обновление, админка узнаёт об этом сокетом. Обновить — из админки
+  (`POST /api/v1/wg/nodes/{id}/agent/update`: бэкенд передаёт агенту найденную версию, сборку
+  агент скачивает и проверяет сам) или `sudo agent-wg upgrade` на узле. Сборок агента бэкенд не
+  раздаёт и ради новой версии агента не пересобирается; узлам без доступа к GitHub — своё
+  зеркало или каталог в `update.releases`.
+- **Воркеры проекта** подписывает `agent pack` ключом проекта из `AGENT_SIGNING_KEY`. Открытый
+  ключ попадает в архив, и `agent install` добавляет его к ключам узла. Без ключа воркеры
+  ставятся, но с API не обновляются (агент ответит `UPDATE_NOT_VERIFIED`). Пара ключей
+  (Ed25519) — `openssl`:
+
+  ```bash
+  openssl genpkey -algorithm ed25519 -outform DER -out signing.der
+  echo "AGENT_SIGNING_KEY=$(tail -c 32 signing.der | base64)"
+  echo "AGENT_UPDATE_PUBLIC_KEYS=$(openssl pkey -inform DER -in signing.der -pubout -outform DER | tail -c 32 | base64)"
+  ```
+
 - Агент, который после обновления три запуска подряд не вышел на связь, возвращается к прежней
   версии; воркер, который после обновления не стал здоров, — тоже.
 
@@ -446,4 +453,5 @@ agent/workers/wg/linux-check.sh  # воркер wg на настоящем Linux
 
 Сквозные тесты бэкенда с настоящим агентом (`agents.e2e.ts`, `agent-update.e2e.ts`) берут
 программу агента из `agent/dist` (`yarn agent:fetch`; прежняя версия для обновления —
-`yarn agent:fetch 1.0.1`) и собирают архив `agent pack` стенда с его ключом проекта.
+`yarn agent:fetch 1.4.0`), раздают её как каталог сборок агента и собирают архив `agent pack`
+стенда с его ключом проекта.

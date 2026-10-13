@@ -24,7 +24,6 @@ import { AgentEnrollmentTokenRepository } from "./agent-enrollment-token.reposit
 import { AgentHistoryService } from "./agent-history.service";
 import { AgentLinkHandler } from "./agent-link.handler";
 import { AgentPruneJob } from "./agent-prune.job";
-import { AgentRelayServer } from "./agent-relay.server";
 import { AgentReleaseController } from "./agent-release.controller";
 import { AgentRoomPolicy } from "./agent-room.policy";
 import { AgentWatchService } from "./agent-watch.service";
@@ -60,7 +59,6 @@ import { StoredAgentConfig } from "./store/stored-agent-config.entity";
     AgentService,
     AgentWorkerService,
     AgentWatchService,
-    AgentRelayServer,
     AgentController,
     AgentWorkerController,
     AgentEnrollmentController,

@@ -178,9 +178,9 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
   Redis. Параметры — `E2E_*`. Сценарии домена идут с фейковым агентом на
   WebSocket (`test/e2e/fake-agent.ts`, `node-agent.ts`); `agents.e2e.ts` и
   `agent-update.e2e.ts` — настоящий агент и воркеры. Агент — сборки с GitHub,
-  скачанные заранее (`yarn agent:fetch` и `yarn agent:fetch 1.0.1` — для
-  обновления агента): стенд раздаёт его бэкенду со своего сервера, в GitHub
-  тесты не ходят. Архив для узлов стенд собирает сам (`agent pack` с воркерами
+  скачанные заранее (`yarn agent:fetch` и `yarn agent:fetch 1.4.0` — для
+  обновления агента): стенд раздаёт их агентам как каталог сборок со своего
+  сервера, в GitHub тесты не ходят. Архив для узлов стенд собирает сам (`agent pack` с воркерами
   wg и socks), подписывая воркеры своим ключом проекта. Чего нет — сценарии
   пропускаются.
 - **Воркеры** — `go test` в `agent/` (`scripts/go-agent.sh test`); воркер wg на
@@ -204,12 +204,12 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
 `AGENT_BUNDLE_DIR`, стадия `agent-bundle`: `agent pack --env prod` для
 linux/amd64 и linux/arm64 — агент, настройки, воркеры wg и socks и их сборки
 для обновления); их раздаёт API (`/api/v1/agent-link/bundle/…`). Новые версии
-агента бэкенд берёт из релизов GitHub (`AGENT_RELEASES_GITHUB`, диапазон `^1`)
-и замечает сам — ради новой версии агента образ не пересобирают. Подписать
+агента узлы находят сами в своём каталоге сборок (релизы GitHub агента) и
+сообщают бэкенду — ради новой версии агента образ не пересобирают. Подписать
 воркеры ключом проекта — необязательный секрет BuildKit `agent_signing_key`
 (`docker build --secret id=agent_signing_key,env=AGENT_SIGNING_KEY .`; в
 `release.yml` — секрет репозитория `AGENT_SIGNING_KEY`; пара ключей —
-`yarn agent keygen`, открытый ключ `agent pack` кладёт в архив); без него
+`openssl`, `agent/README.md`, открытый ключ `agent pack` кладёт в архив); без него
 обновить воркеры с бэкенда нельзя. Стадии сборки кросс-компилируют на платформе сборщика;
 production-зависимости, непривилегированный пользователь, `tini` как PID 1,
 read-only файловая система. Версию сборки (`APP_VERSION`, `APP_COMMIT`,
@@ -224,8 +224,10 @@ Redis — `docker-compose.redis.yml`, Postgres — `docker-compose.postgres.yml`
 `.env.production`. HTTPS — reverse proxy инфраструктуры (Traefik): маршрут по меткам
 контейнера `api` в её сети `infra_edge`. Секреты — `.env.production`; обязателен `WG_SECRETS_KEY`
 (`openssl rand -hex 32`): им шифруются ключи WireGuard в БД; значения настроек
-воркеров шифруются ключом `AGENT_CONFIGS_KEY`. В compose одна копия `api` —
-пересылка вызовов агентов между копиями (`AGENT_RELAY_*`) не нужна.
+воркеров шифруются ключом `AGENT_CONFIGS_KEY`. Вызов агента (запрос к воркеру,
+действие) выполняет копия `api`, с которой агент на связи; в другой копии — 503
+`AGENT_ELSEWHERE` с `Retry-After`, поэтому реплики `api` — только за липким
+балансировщиком.
 
 ```sh
 export COMPOSE_FILE=docker-compose.yml:docker-compose.redis.yml:docker-compose.postgres.yml
@@ -233,7 +235,7 @@ export COMPOSE_FILE=docker-compose.yml:docker-compose.redis.yml:docker-compose.p
 TAG=v1.2.3 docker compose pull          # или: docker compose build api
 docker compose run --rm migrate
 docker compose up -d
-docker compose up -d --scale api=3      # реплики API (API_PORTS=8181-8183; агентам — AGENT_RELAY_*)
+docker compose up -d --scale api=3      # реплики API (API_PORTS=8181-8183; агентам — липкий балансировщик)
 ```
 
 Остановка по SIGTERM: `/ready` → 503, пауза для балансировщика, дожидание

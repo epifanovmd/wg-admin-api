@@ -32,11 +32,10 @@ export class AgentReleaseController extends Controller {
   }
 
   /**
-   * Сборки агента и кого из доступных агентов можно обновить до их версии:
-   * агент и netprobe — из релизов GitHub (`AGENT_RELEASES_GITHUB`) или
-   * адреса сборок (`AGENT_RELEASES_URL`), воркеры проекта wg и socks — из
-   * `release/` архивов `AGENT_BUNDLE_DIR`. Новую версию агента в источнике бэкенд замечает
-   * сам (сокет `agent:release`).
+   * Сборки проекта и кого из доступных агентов можно обновить: воркеры wg и
+   * socks — до сборки из `release/` архивов `AGENT_BUNDLE_DIR`, агента — до
+   * новой версии, которую он нашёл в своём каталоге сборок (`update.latest`;
+   * новая версия у агентов — сокет `agent:release`).
    * @summary Сборки агента
    */
   @Security("jwt")
