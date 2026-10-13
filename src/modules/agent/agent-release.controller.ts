@@ -47,7 +47,7 @@ export class AgentReleaseController extends Controller {
 
   /**
    * Команда установки агента на новый узел одной строкой:
-   * `curl …/api/v1/agent-link/bundle/install.sh | sudo sh -s -- --token …` — скрипт
+   * `curl …/api/v1/agent-link/bundle/install.sh | sudo sh -s -- --server … --bundle … --token …` — установщик агента
    * ставит архив папки агента (`agent pack`): экземпляр, воркеры, пакеты и права —
    * из неё.
    * @summary Команда установки агента

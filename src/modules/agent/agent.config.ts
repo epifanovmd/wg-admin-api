@@ -20,16 +20,6 @@ export const AGENT_BUNDLE_DIR_DEFAULT = "agent/bundle";
 /** Репозиторий релизов агента, если `AGENT_RELEASES_GITHUB` не задан. */
 export const AGENT_RELEASES_GITHUB_DEFAULT = "epifanovmd/agent";
 
-/** Диапазон версий агента, если `AGENT_RELEASES_RANGE` не задан. */
-export const AGENT_RELEASES_RANGE_DEFAULT = "^1";
-
-/**
- * Открытый ключ автора агента: им подписаны агент и netprobe в релизах
- * GitHub; `install.sh` передаёт его узлу вместе с ключом проекта.
- */
-export const AGENT_RELEASES_PUBLIC_KEY_DEFAULT =
-  "9yYblu2wKJnjKccihbJv2lKtbxvqecCnX67u9LmgSuo=";
-
 /** Настройки агентов (env `AGENT_*`). */
 export const agentConfig = defineModuleConfig(
   "agent",
@@ -96,13 +86,13 @@ export const agentConfig = defineModuleConfig(
      * `releasesUrl` — агент только с узлов, где он уже стоит.
      */
     releasesGithub: optionalString,
-    /** Диапазон версий агента из релизов GitHub (semver). */
-    releasesRange: z.string().min(1).default(AGENT_RELEASES_RANGE_DEFAULT),
+    /** Диапазон версий агента из релизов GitHub (semver); нет — мажорная версия agent-sdk. */
+    releasesRange: optionalString,
     /** Токен GitHub для запросов к API релизов (лимиты запросов). */
     releasesToken: optionalString,
     /**
-     * Адрес сборок одной версии агента (`<url>/manifest.json`, `<url>/<файл>`,
-     * `<url>/install.sh`): своё зеркало или закреплённая версия.
+     * Адрес сборок одной версии агента (`<url>/manifest.json`, `<url>/<файл>`):
+     * своё зеркало или закреплённая версия.
      */
     releasesUrl: optionalString,
     /**
@@ -112,8 +102,6 @@ export const agentConfig = defineModuleConfig(
     releasesProxy: bool(false),
     /** Как часто проверять новую версию агента, мс (первая проверка — при старте). */
     releasesCheckIntervalMs: positiveInt.default(3_600_000),
-    /** Открытый ключ автора агента (base64): им подписаны агент и netprobe. */
-    releasesPublicKey: optionalString,
     /**
      * Ключ шифрования значений настроек воркеров в БД (AES-256-GCM, 32 байта
      * hex или base64): в настройках бывают ключи и пароли. Без него значения
@@ -152,9 +140,6 @@ export const agentConfig = defineModuleConfig(
     releasesProxy: process.env.AGENT_RELEASES_PROXY,
     releasesCheckIntervalMs:
       process.env.AGENT_RELEASES_CHECK_INTERVAL_MS || undefined,
-    releasesPublicKey:
-      process.env.AGENT_RELEASES_PUBLIC_KEY ??
-      AGENT_RELEASES_PUBLIC_KEY_DEFAULT,
     configsKey: process.env.AGENT_CONFIGS_KEY,
     publicUrl: process.env.AGENT_PUBLIC_URL,
     validateEvents: process.env.AGENT_VALIDATE_EVENTS || undefined,

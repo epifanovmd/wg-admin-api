@@ -1650,9 +1650,9 @@ acorn@^8.16.0:
   resolved "https://registry.yarnpkg.com/acorn/-/acorn-8.18.0.tgz#4faf01b2d6d326bfeed97aea1f52220b5f4c1940"
   integrity sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==
 
-"agent-sdk@https://github.com/epifanovmd/agent/releases/download/v1.4.0/agent-sdk-1.4.0.tgz":
-  version "1.4.0"
-  resolved "https://github.com/epifanovmd/agent/releases/download/v1.4.0/agent-sdk-1.4.0.tgz#e667b23acafc4ab3b215a9889cb33121ad44591a"
+"agent-sdk@https://github.com/epifanovmd/agent/releases/download/v2.0.0/agent-sdk-2.0.0.tgz":
+  version "2.0.0"
+  resolved "https://github.com/epifanovmd/agent/releases/download/v2.0.0/agent-sdk-2.0.0.tgz#b0d47b610ae807c03ad4d86b17489d3ca3401945"
   dependencies:
     "@cfworker/json-schema" "^4.1.1"
     lru-cache "^11.5.3"

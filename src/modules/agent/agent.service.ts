@@ -2,8 +2,8 @@ import {
   type Agent,
   type AgentEvent,
   AgentsError,
-  bundleInstallCommand,
   type LogEntry,
+  type UpdateCandidate,
 } from "agent-sdk/server";
 import { inject } from "inversify";
 
@@ -23,11 +23,11 @@ import {
   IAgentActor,
   inScope,
 } from "./agent-access.service";
+import { bundleInstallFlags, bundleInstallUrl } from "./agent-bundle";
 import {
   AgentHistoryService,
   IAgentEventFeedQuery,
 } from "./agent-history.service";
-import { mergeUpdateCandidates } from "./agent-update";
 import {
   AgentAlertDto,
   AgentConfigStatusDto,
@@ -36,6 +36,7 @@ import {
   IAgentInstallCommandDto,
   IAgentLogsDto,
   IAgentReleaseDto,
+  IAgentUpdateCandidateDto,
   IAgentUpdateResultDto,
   ICreateAgentInstallCommandBody,
 } from "./dto";
@@ -57,6 +58,15 @@ export interface IAgentLogsQuery {
   worker?: string;
   lines?: number;
 }
+
+/** Значение в одинарных кавычках POSIX sh. */
+const shQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
+
+/** Кандидат обновления агента для API: имя агента — в `name`. */
+const toCandidateDto = ({
+  agentName,
+  ...rest
+}: UpdateCandidate): IAgentUpdateCandidateDto => ({ ...rest, name: agentName });
 
 /**
  * Агенты: список и карточка (`hello`, `status` с воркерами, последняя точка
@@ -189,34 +199,41 @@ export class AgentService {
   async release(actor: IAgentActor): Promise<IAgentReleaseDto> {
     const scope = await this._access.scope(actor, "view");
     const agents = this._runtime.agents;
-    const [manifest, candidates, workerCandidates, all] = await Promise.all([
+    const [manifest, candidates] = await Promise.all([
       agents.release(),
       agents.updateCandidates(),
-      agents.workerUpdateCandidates(),
-      agents.listAgents(),
     ]);
 
     return {
       manifest,
-      candidates: mergeUpdateCandidates(candidates, all).filter(c =>
+      candidates: candidates.agents
+        .filter(c => inScope(scope, c.agentId))
+        .map(toCandidateDto),
+      workerCandidates: candidates.workers.filter(c =>
         inScope(scope, c.agentId),
       ),
-      workerCandidates: workerCandidates.filter(c => inScope(scope, c.agentId)),
     };
   }
 
   /**
-   * Команда установки агента одной строкой: скрипт с этого сервера ставит архив
-   * папки агента (`agent pack`) под машину ноды — `agent install --token …`.
+   * Команда установки агента одной строкой: установщик агента с этого сервера
+   * ставит архив папки агента (`agent pack`) под машину ноды —
+   * `install.sh --bundle … --token …`.
    */
   installCommand(
     body: ICreateAgentInstallCommandBody,
   ): IAgentInstallCommandDto {
+    const server = body.baseUrl ?? this.publicUrl();
+    const flags = [
+      ...bundleInstallFlags(server),
+      ...(body.tokenFile
+        ? ["--token-file", body.tokenFile]
+        : ["--token", body.token ?? ""]),
+      ...(body.name ? ["--name", body.name] : []),
+    ];
+
     return {
-      command: bundleInstallCommand(
-        { token: body.token, tokenFile: body.tokenFile, name: body.name },
-        body.baseUrl ?? this.publicUrl(),
-      ),
+      command: `curl -fsSL ${shQuote(bundleInstallUrl(server))} | sudo sh -s -- ${flags.map(shQuote).join(" ")}`,
     };
   }
 
@@ -246,13 +263,9 @@ export class AgentService {
 
   /** Агенты, которых можно обновить до новой версии. */
   async updateCandidateIds(): Promise<Set<string>> {
-    const agents = this._runtime.agents;
-    const [candidates, all] = await Promise.all([
-      agents.updateCandidates(),
-      agents.listAgents(),
-    ]);
+    const { agents } = await this._runtime.agents.updateCandidates();
 
-    return new Set(mergeUpdateCandidates(candidates, all).map(c => c.agentId));
+    return new Set(agents.map(c => c.agentId));
   }
 
   /**
@@ -261,9 +274,8 @@ export class AgentService {
    */
   async updateAs(actorId: string, id: string): Promise<IAgentUpdateResultDto> {
     const agents = this._runtime.agents;
-    const [candidate] = mergeUpdateCandidates(
-      (await agents.updateCandidates()).filter(c => c.agentId === id),
-      [await agents.getAgent(id)].filter(a => !!a),
+    const candidate = (await agents.updateCandidates()).agents.find(
+      c => c.agentId === id,
     );
 
     return callAgents(() =>

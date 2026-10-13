@@ -1,6 +1,12 @@
 import { execFileSync } from "child_process";
 import { generateKeyPairSync } from "crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from "fs";
 import { createServer, type Server } from "http";
 import type { AddressInfo } from "net";
 import { tmpdir } from "os";
@@ -137,6 +143,10 @@ const packBundle = (releasesUrl: string): string => {
 
     return "";
   }
+  // Установщик агента — рядом с архивами, как у yarn agent:pack.
+  const installer = join(agentDist(AGENT_VERSION), "install.sh");
+
+  if (existsSync(installer)) copyFileSync(installer, join(dir, "install.sh"));
 
   return dir;
 };

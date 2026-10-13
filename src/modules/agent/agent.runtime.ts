@@ -44,12 +44,6 @@ import { AgentStore } from "./store/agent.store";
 const COALESCE_MS = 100;
 /** Больше агентов в одном сигнале — «обновить всех» (предел NOTIFY — 8000 байт). */
 const MAX_SIGNAL_IDS = 100;
-/** Замечания к событиям, ждущим `onEvent`, — не больше (защита от утечки). */
-const MAX_PENDING_PROBLEMS = 1_000;
-
-const eventKey = (event: Pick<AgentEvent, "agentId" | "id">): string =>
-  `${event.agentId}\n${event.id}`;
-
 /** Сигнал другим процессам: кого перечитать. */
 const ChangeSignalSchema = z.object({
   from: z.string(),
@@ -150,13 +144,11 @@ export const agentReleasesOptions = (
     | "releasesToken"
     | "releasesProxy"
     | "releasesCheckIntervalMs"
-    | "releasesPublicKey"
   > = agentConfig,
 ): AgentReleasesOptions | undefined => {
   const common = {
     checkIntervalMs: cfg.releasesCheckIntervalMs,
     proxy: cfg.releasesProxy,
-    ...(cfg.releasesPublicKey && { publicKey: cfg.releasesPublicKey }),
   };
 
   if (cfg.releasesUrl) return { ...common, url: cfg.releasesUrl };
@@ -164,7 +156,7 @@ export const agentReleasesOptions = (
     return {
       ...common,
       github: cfg.releasesGithub,
-      range: cfg.releasesRange,
+      ...(cfg.releasesRange && { range: cfg.releasesRange }),
       ...(cfg.releasesToken && { token: cfg.releasesToken }),
     };
   }
@@ -200,8 +192,6 @@ export class AgentRuntime {
   private readonly _connectedAt = new Map<string, number>();
   /** Воркеры агента в работе: «имя → перезапуски», — чтобы заметить их перезапуск. */
   private readonly _running = new Map<string, Map<string, number>>();
-  /** Замечания проверки по схеме к событиям, которые ещё придут в `onEvent`. */
-  private readonly _problems = new Map<string, string[]>();
 
   constructor(
     @inject(AgentStore) private readonly _store: AgentStore,
@@ -321,13 +311,13 @@ export class AgentRuntime {
         relaySecret: agentConfig.relaySecret,
       }),
       releasesDir: bundleReleasesDir(),
-      bundlesDir: agentConfig.bundleDir,
       agentReleases: agentReleasesOptions(),
-      baseUrl: agentConfig.publicUrl,
       trustProxy: config.server.trustProxy,
-      validateConfigs: true,
-      validateRequests: true,
-      validateEvents: agentConfig.validateEvents,
+      validate: {
+        configs: true,
+        requests: true,
+        events: agentConfig.validateEvents,
+      },
       onEvent: event => this.handleWorkerEvent(event),
       log: (msg, extra) => logger.info({ ...extra }, `[Agent] ${msg}`),
     });
@@ -339,12 +329,8 @@ export class AgentRuntime {
    * Подтверждение агенту — после успеха.
    */
   private async handleWorkerEvent(event: AgentEvent): Promise<void> {
-    const key = eventKey(event);
-    const problems = this._problems.get(key);
-
     for (const handler of this._eventHandlers) await handler(event);
-    this._problems.delete(key);
-    await this.saveEvent(event, problems);
+    await this.saveEvent(event, event.problems);
   }
 
   private async saveEvent(
@@ -359,10 +345,9 @@ export class AgentRuntime {
   }
 
   /**
-   * `data` события не по схеме манифеста (`validateEvents`): журнал;
-   * `log` — замечания попадут в историю вместе с событием (`onEvent`
-   * следует сразу), `reject` — событие только в историю, обработчикам
-   * модулей не передаётся.
+   * `data` события не по схеме манифеста (`validate.events`): журнал;
+   * `log` — замечания приходят в самом событии (`problems`, `onEvent`),
+   * `reject` — событие только в историю, обработчикам модулей не передаётся.
    */
   private onInvalidEvent({ event, problems, rejected }: InvalidEvent): void {
     logger.warn(
@@ -375,22 +360,13 @@ export class AgentRuntime {
       },
       "[Agent] data события не подходит под схему манифеста воркера",
     );
-    if (rejected) {
-      this.saveEvent(event, problems).catch(err =>
-        logger.warn(
-          { err, agentId: event.agentId },
-          "[Agent] Отклонённое событие не сохранено",
-        ),
-      );
-
-      return;
-    }
-    if (this._problems.size >= MAX_PENDING_PROBLEMS) {
-      const oldest = this._problems.keys().next().value;
-
-      if (oldest !== undefined) this._problems.delete(oldest);
-    }
-    this._problems.set(eventKey(event), problems);
+    if (!rejected) return;
+    this.saveEvent(event, problems).catch(err =>
+      logger.warn(
+        { err, agentId: event.agentId },
+        "[Agent] Отклонённое событие не сохранено",
+      ),
+    );
   }
 
   /** События SDK этого процесса → доменные события модуля. */

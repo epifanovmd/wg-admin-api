@@ -11,7 +11,8 @@ ARG GO_VERSION=1.26.9-bookworm
 # ── Архивы папки агента для нод (agent pack) ─────────────────────────────────
 # agent pack --env prod: по архиву на linux/amd64 и linux/arm64 — программа агента,
 # agent.yaml + agent.prod.yaml, воркеры wg и socks, собранные под платформу (их build —
-# go build здесь же), и release/ — сборки воркеров для обновления нод. Программа агента —
+# go build здесь же), release/ — сборки воркеров для обновления нод и install.sh —
+# установщик агента (API раздаёт его вместе с архивами). Программа агента и install.sh —
 # с GitHub Release версии agent-sdk; агента под другие платформы pack берёт оттуда же.
 # Ключ подписи воркеров — необязательный секрет agent_signing_key (agent keygen):
 # docker build --secret id=agent_signing_key,env=AGENT_SIGNING_KEY …; без него воркеры
@@ -25,7 +26,8 @@ RUN version=$(sed -n 's|.*agent-sdk-\([^/"]*\)\.tgz".*|\1|p' package.json) && te
     curl -fsSL "$base/manifest.json" -o /tmp/manifest.json && \
     sha=$(awk -v f="\"agent-linux-$arch\"" '$0 ~ "\"file\": " f { getline; gsub(/[",]/, "", $2); print $2; exit }' /tmp/manifest.json) && \
     test -n "$sha" && curl -fsSL "$base/agent-linux-$arch" -o /usr/local/bin/agent && \
-    echo "$sha  /usr/local/bin/agent" | sha256sum -c - && chmod +x /usr/local/bin/agent
+    echo "$sha  /usr/local/bin/agent" | sha256sum -c - && chmod +x /usr/local/bin/agent && \
+    curl -fsSL "$base/install.sh" -o /usr/local/share/agent-install.sh
 COPY agent/go.mod agent/go.sum ./agent/
 RUN --mount=type=cache,target=/go/pkg/mod cd agent && go mod download
 COPY agent/agent.yaml agent/agent.prod.yaml agent/go-worker.sh ./agent/
@@ -38,7 +40,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       AGENT_SIGNING_KEY="$(cat /run/secrets/agent_signing_key)"; export AGENT_SIGNING_KEY; \
     fi && \
     cd agent && AGENT_NO_UPDATE_CHECK=1 agent pack --env prod --platform linux/amd64,linux/arm64 \
-      --out /agent-bundle --release-out /agent-bundle/release
+      --out /agent-bundle --release-out /agent-bundle/release && \
+    cp /usr/local/share/agent-install.sh /agent-bundle/install.sh
 
 # ── Все зависимости для сборки ───────────────────────────────────────────────
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION} AS deps

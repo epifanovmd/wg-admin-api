@@ -1,3 +1,4 @@
+import type { Watch } from "agent-sdk/server";
 import { inject } from "inversify";
 
 import { Injectable, logger } from "../../core";
@@ -5,12 +6,13 @@ import { SocketServerService } from "../socket";
 import { AgentRuntime } from "./agent.runtime";
 import { AGENT_WATCH, agentIdOfRoom, TAgentLogLevel } from "./agent.types";
 
-/** Сокет смотрит агента: его наблюдатель и таймер продления. */
+/** Сокет смотрит агента: наблюдатель SDK (продлевается сам до close). */
 interface IWatch {
   agentId: string;
   socketId: string;
   level: TAgentLogLevel;
-  timer: NodeJS.Timeout;
+  /** Открытие наблюдателя; undefined — не открылся. */
+  handle: Promise<Watch | undefined>;
 }
 
 /** Наблюдатель сокета: id — от сокета (уникален среди всех процессов). */
@@ -23,9 +25,8 @@ const watchKey = (socketId: string, agentId: string): string =>
  * Пока сокет этого процесса в комнате `agent_<id>`, держит наблюдателя
  * `watch`: агент присылает метрики раз в секунду и журнал с уровня клиента.
  * Наблюдатель живёт в копии с соединением агента: из другой копии SDK
- * пересылает вызов туда (`relay`). Продлевается (в том числе после
- * переподключения агента к другой копии) и снимается при выходе из комнаты
- * (и при отключении сокета); процесс упал — истекает сам.
+ * пересылает вызов туда (`relay`). SDK продлевает его сам; снимается при
+ * выходе из комнаты (и при отключении сокета); процесс упал — истекает сам.
  */
 @Injectable()
 export class AgentWatchService {
@@ -72,8 +73,14 @@ export class AgentWatchService {
 
     if (!watch) return false;
     if (watch.level !== level) {
+      // Новые параметры — новым наблюдателем с тем же id.
+      const previous = watch.handle;
+
       watch.level = level;
-      void this.renew(watch);
+      watch.handle = previous
+        .then(handle => handle?.close())
+        .catch(() => {})
+        .then(() => this.open(watch));
     }
 
     return true;
@@ -89,12 +96,11 @@ export class AgentWatchService {
       agentId,
       socketId,
       level: AGENT_WATCH.logLevel,
-      timer: setInterval(() => void this.renew(watch), AGENT_WATCH.renewMs),
+      handle: Promise.resolve(undefined),
     };
 
-    watch.timer.unref();
+    watch.handle = this.open(watch);
     this._watches.set(key, watch);
-    void this.renew(watch);
   }
 
   private leave(room: string, socketId: string): void {
@@ -107,9 +113,9 @@ export class AgentWatchService {
     void this.unwatch(watch);
   }
 
-  private async renew(watch: IWatch): Promise<void> {
+  private async open(watch: IWatch): Promise<Watch | undefined> {
     try {
-      await this._runtime.agents.watch(watch.agentId, {
+      return await this._runtime.agents.watch(watch.agentId, {
         id: watchIdOf(watch.socketId),
         metricsIntervalMs: AGENT_WATCH.metricsIntervalMs,
         logLevel: watch.level,
@@ -120,17 +126,14 @@ export class AgentWatchService {
         { err, agentId: watch.agentId },
         "[Agent] Наблюдение за агентом не началось",
       );
+
+      return undefined;
     }
   }
 
   private async unwatch(watch: IWatch): Promise<void> {
-    clearInterval(watch.timer);
-
     try {
-      await this._runtime.agents.unwatch(
-        watch.agentId,
-        watchIdOf(watch.socketId),
-      );
+      await (await watch.handle)?.close();
     } catch (err) {
       logger.warn(
         { err, agentId: watch.agentId },

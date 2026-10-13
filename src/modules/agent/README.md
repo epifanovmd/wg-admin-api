@@ -87,21 +87,22 @@ SDK историю не хранит: она приходит событиями
 - `/api/v1/agent-link/*` (регистрация, сборки агента) — `RAW_HTTP_HANDLER`: до
   разбора тела, CORS и лимита запросов; в Swagger не входят. WebSocket того же пути —
   `agents.attach(HttpServer)` на ролях `api` и `all`.
-- `/api/v1/agent-link/bundle/*` — установка нод из архива папки агента; раздаёт SDK (опция
-  `bundlesDir` = `AGENT_BUNDLE_DIR`, без входа: в архиве нет секретов): `install.sh` (архив под
-  машину ноды → `agent install --server <API>`; `--uninstall [--purge]` — удалить) и
-  `<os>-<arch>.tar.gz`. Команда установки — `bundleInstallCommand` SDK: `curl -fsSL
-'<API>/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- --token '<токен>' --name '<нода>'`; экземпляр `wg`, воркеры, пакеты и права — в
-  `agent/agent.prod.yaml` архива.
+- `/api/v1/agent-link/bundle/*` — установка нод из архива папки агента (`agent-bundle.ts`,
+  каталог `AGENT_BUNDLE_DIR`, без входа: в архиве нет секретов): `install.sh` — установщик агента
+  из его релиза (архив под машину ноды → `agent install`; `--uninstall [--purge]` — удалить) и
+  новейший `<os>-<arch>.tar.gz`. Команда установки — `AgentService.installCommand`: `curl -fsSL
+'<API>/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- '--server' '<API>' '--bundle'
+'<API>/api/v1/agent-link/bundle/linux-{arch}.tar.gz' '--token' '<токен>' '--name' '<нода>'`;
+  экземпляр `wg`, воркеры, пакеты и права — в `agent/agent.prod.yaml` архива.
 - Регистрация: общий токен окружения `AGENT_BOOTSTRAP_TOKEN` или созданный токен
   (`<prefix>.<secret>`, в БД — префикс и хеш; срок, отзыв, лимит использований). Метки
   токена сильнее меток агента. Новый агент — событие `AgentEnrolledEvent` с источником
   (токен, кто создал, метки): по метке `nodeId` модуль wg-node привязывает агента к ноде.
 - `onEvent`: обработчики модулей (`onWorkerEvent`) → запись в
   `agent_events` → событие `AgentEventReceivedEvent` → подтверждение агенту. Ошибка — без
-  подтверждения: агент пришлёт событие снова с тем же id. Подписки SDK (`subscribeEvents`,
-  `waitEvent`) для обработчиков модулей не годятся: они вызываются после подтверждения и
-  видят только события своего процесса — важное обрабатывается в `onEvent`.
+  подтверждения: агент пришлёт событие снова с тем же id. `waitEvent` SDK для обработчиков
+  модулей не годится: он срабатывает после подтверждения и видит только события своего
+  процесса — важное обрабатывается в `onEvent`.
 - Связь: ping SDK раз в 5 с; агент после обрыва остаётся `online` ещё
   `AGENT_OFFLINE_GRACE_MS` (3 с) — остановленный агент виден `online: false` в сокете
   (`agent:updated`) через ~3 с, пропавшая сеть — через 13–18 с. Своих задержек поверх SDK
@@ -160,16 +161,16 @@ Store общий; соединение агента живёт в одном п�
 ([sdk/docs/workers.md](https://github.com/epifanovmd/agent/blob/main/sdk/docs/workers.md#манифест-что-воркер-умеет)).
 Что проверяет агент и что — сервер (`AgentRuntime`):
 
-| Что                                       | Кто проверяет                     | Не подошло                                                    |
-| ----------------------------------------- | --------------------------------- | ------------------------------------------------------------- |
-| метод и путь запроса к воркеру — `routes` | агент                             | 404 `AGENT_ROUTE_UNDECLARED`, воркер запроса не видит         |
-| тип задачи `POST /jobs` — `jobs`          | агент                             | 409 `AGENT_JOB_UNKNOWN`                                       |
-| тело запроса — `routes[].request`         | сервер (`validateRequests: true`) | 400 `AGENT_REQUEST_INVALID`, замечания — в `details.reason`   |
-| значение настройки — `configs[].schema`   | сервер (`validateConfigs: true`)  | 400 `AGENT_CONFIG_INVALID`                                    |
-| тип события — `events`                    | агент                             | воркеру `400 EVENT_UNDECLARED`, до сервера событие не доходит |
-| `data` события — `events[].schema`        | сервер (`AGENT_VALIDATE_EVENTS`)  | ниже                                                          |
-| тип запроса воркера — `requests`          | агент                             | воркеру `400 REQUEST_UNDECLARED`                              |
-| запрос воркера к серверу                  | сервер                            | обработчиков нет — воркеру `422 REQUEST_UNHANDLED`            |
+| Что                                       | Кто проверяет                    | Не подошло                                                    |
+| ----------------------------------------- | -------------------------------- | ------------------------------------------------------------- |
+| метод и путь запроса к воркеру — `routes` | агент                            | 404 `AGENT_ROUTE_UNDECLARED`, воркер запроса не видит         |
+| тип задачи `POST /jobs` — `jobs`          | агент                            | 409 `AGENT_JOB_UNKNOWN`                                       |
+| тело запроса — `routes[].request`         | сервер (`validate.requests`)     | 400 `AGENT_REQUEST_INVALID`, замечания — в `details.reason`   |
+| значение настройки — `configs[].schema`   | сервер (`validate.configs`)      | 400 `AGENT_CONFIG_INVALID`                                    |
+| тип события — `events`                    | агент                            | воркеру `400 EVENT_UNDECLARED`, до сервера событие не доходит |
+| `data` события — `events[].schema`        | сервер (`AGENT_VALIDATE_EVENTS`) | ниже                                                          |
+| тип запроса воркера — `requests`          | агент                            | воркеру `400 REQUEST_UNDECLARED`                              |
+| запрос воркера к серверу                  | сервер                           | обработчиков нет — воркеру `422 REQUEST_UNHANDLED`            |
 
 **События не по схеме** — `AGENT_VALIDATE_EVENTS`: `log` (по умолчанию) — запись в журнал,
 событие обрабатывается как обычно и сохраняется с замечаниями (`problems` в ленте и в
@@ -217,7 +218,7 @@ Store общий; соединение агента живёт в одном п�
   запросы к серверу `requests`), `configs` (что на диске агента и итог применения);
   последняя точка метрик, проблемы, процесс с соединением.
 - **Настройки:** `PUT` проверяет значение по `schema` ключа из манифеста воркера
-  (`validateConfigs`; не подходит — 400 `AGENT_CONFIG_INVALID`), даёт новую версию; агент на
+  (`validate.configs`; не подходит — 400 `AGENT_CONFIG_INVALID`), даёт новую версию; агент на
   связи получает её сразу, иначе — при подключении. Статус — `pending | applying | applied |
 failed | deleting` (`delivered`, `applied`, `error`); агент удалил ключ — событие сокета
   `agent:config` с `state: deleted` (`version: null`).
@@ -277,15 +278,13 @@ reject` — [выше](#строгость-манифеста)); `TRUST_PROXY` �
 (`GET /api/v1/agent-releases`, у каждой сборки — `source`: `remote` или `local`):
 
 - `AGENT_RELEASES_GITHUB` (`epifanovmd/agent`; пусто — без GitHub) и `AGENT_RELEASES_RANGE`
-  (`^1`) — релизы GitHub, новейшая версия в диапазоне; `AGENT_RELEASES_TOKEN` — токен GitHub
+  (пусто — мажорная версия agent-sdk, например `^2`) — релизы GitHub, новейшая версия в диапазоне; `AGENT_RELEASES_TOKEN` — токен GitHub
   для лимитов API;
 - `AGENT_RELEASES_URL` — адрес сборок одной версии (`<url>/manifest.json`): зеркало или закреплённая
   версия; важнее GitHub;
 - `AGENT_RELEASES_CHECK_INTERVAL_MS` (3 600 000) — как часто проверять, первая проверка — при
   старте; `AGENT_RELEASES_PROXY` (`false`) — сборки агента узлам через бэкенд потоком, иначе
   перенаправление на источник;
-- `AGENT_RELEASES_PUBLIC_KEY` — ключ автора агента: им подписаны агент и netprobe (по
-  умолчанию — ключ релизов `epifanovmd/agent`; пусто — из `manifest.json` источника).
 
 Ключ проекта нода получает из архива при `agent install` (его кладёт `agent pack`), ключ
 автора агента вшит в программу агента.
@@ -297,7 +296,7 @@ from }` всем клиентам (каждая копия бэкенда про
 Агент и сам проверяет новую версию в своём каталоге сборок (`update.releases`, раз в
 `update.checkInterval`) и сообщает её в `hello`/`status` — `update { latest, checkedAt }` в
 `AgentDto`, до веба доходит с `agent:updated`. Такой агент — тоже кандидат (`source: agent`, у
-версии с сервера — `source: server`; из двух целей — новейшая, `agent-update.ts`), даже если
+версии с сервера — `source: server`; из двух целей — новейшая; `updateCandidates` SDK), даже если
 бэкенд её ещё не видел; обновление агента (`POST /agents/{id}/update`, обновление агента ноды)
 ставит ему эту версию из его каталога.
 

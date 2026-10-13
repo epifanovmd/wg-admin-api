@@ -1,30 +1,26 @@
 import { expect } from "chai";
 
-import {
-  AGENT_RELEASES_GITHUB_DEFAULT,
-  AGENT_RELEASES_PUBLIC_KEY_DEFAULT,
-  AGENT_RELEASES_RANGE_DEFAULT,
-} from "./agent.config";
+import { AGENT_RELEASES_GITHUB_DEFAULT } from "./agent.config";
 import { agentReleasesOptions } from "./agent.runtime";
 
 const base = {
   releasesUrl: undefined,
   releasesGithub: AGENT_RELEASES_GITHUB_DEFAULT,
-  releasesRange: AGENT_RELEASES_RANGE_DEFAULT,
+  releasesRange: undefined,
   releasesToken: undefined,
   releasesProxy: false,
   releasesCheckIntervalMs: 3_600_000,
-  releasesPublicKey: AGENT_RELEASES_PUBLIC_KEY_DEFAULT,
 };
 
 describe("источник сборок агента (agentReleases)", () => {
-  it("по умолчанию — релизы GitHub epifanovmd/agent в диапазоне ^1 с ключом автора", () => {
+  it("по умолчанию — релизы GitHub epifanovmd/agent, версии — как мажорная версия agent-sdk", () => {
     expect(agentReleasesOptions(base)).to.deep.equal({
       github: "epifanovmd/agent",
-      range: "^1",
       checkIntervalMs: 3_600_000,
       proxy: false,
-      publicKey: AGENT_RELEASES_PUBLIC_KEY_DEFAULT,
+    });
+    expect(agentReleasesOptions({ ...base, releasesRange: "^2" })).to.include({
+      range: "^2",
     });
   });
 
@@ -57,11 +53,5 @@ describe("источник сборок агента (agentReleases)", () => {
     expect(
       agentReleasesOptions({ ...base, releasesGithub: undefined }),
     ).to.equal(undefined);
-  });
-
-  it("пустой ключ автора — ключ берётся из manifest.json источника", () => {
-    expect(
-      agentReleasesOptions({ ...base, releasesPublicKey: undefined }),
-    ).to.not.have.property("publicKey");
   });
 });

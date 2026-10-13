@@ -84,7 +84,7 @@ yarn dev                                         # генерация маршр
 (`WG_DRY_RUN=1` в `agent/agent.yaml`), системные команды не выполняются.
 
 ```sh
-yarn agent              # агент на переднем плане (agent/dev.mjs; программу агента скачает
+yarn agent              # агент на переднем плане (agent/dev.sh; программу агента скачает
                         # с GitHub в agent/agent, воркеры соберёт из исходников)
 yarn agent config check # итоговые настройки агента и откуда каждое значение
 ```
@@ -127,14 +127,13 @@ yarn agent config check # итоговые настройки агента и о
 
 **Агент и воркеры узла**
 
-| Команда                                                           | Что делает                                                                          |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `yarn agent:pack`                                                 | архивы для узлов и сборки воркеров wg и socks → `agent/bundle` (`AGENT_BUNDLE_DIR`) |
-| `yarn agent:fetch [версия]`                                       | программа агента и сборки агента с GitHub в `agent/dist/v<версия>` (e2e)            |
-| `yarn agent [команда]`                                            | локальный агент на переднем плане (воркер wg — в имитации) или команда агента       |
-| `yarn agent:start` / `agent:stop` / `agent:status` / `agent:logs` | локальный агент в фоне: запуск, остановка, состояние, журнал                        |
-| `scripts/go-agent.sh test` / `vet` / `tidy` / `fmt`               | тесты, `go vet`, `go mod tidy`, `gofmt` воркеров (Go в контейнере)                  |
-| `scripts/go-agent.sh build [os [arch]]`                           | сборки воркеров в `agent/dist` (без аргументов — linux и darwin × amd64 и arm64)    |
+| Команда                                             | Что делает                                                                          |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `yarn agent:pack`                                   | архивы для узлов и сборки воркеров wg и socks → `agent/bundle` (`AGENT_BUNDLE_DIR`) |
+| `yarn agent:fetch [версия]`                         | программа агента и сборки агента с GitHub в `agent/dist/v<версия>` (e2e)            |
+| `yarn agent [команда]`                              | локальный агент на переднем плане (воркер wg — в имитации) или команда агента       |
+| `scripts/go-agent.sh test` / `vet` / `tidy` / `fmt` | тесты, `go vet`, `go mod tidy`, `gofmt` воркеров (Go в контейнере)                  |
+| `scripts/go-agent.sh build [os [arch]]`             | сборки воркеров в `agent/dist` (без аргументов — linux и darwin × amd64 и arm64)    |
 
 **Makefile — сервер по SSH** (настройки — `.env.deploy`, образец `.env.deploy.example`;
 любое значение переопределяется в команде: `make deploy SSH_HOST=…`)

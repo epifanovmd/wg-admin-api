@@ -1250,7 +1250,7 @@
 				"properties": {
 					"command": {
 						"type": "string",
-						"description": "`curl …/api/v1/agent-link/bundle/install.sh | sudo sh -s -- --token …`."
+						"description": "`curl …/api/v1/agent-link/bundle/install.sh | sudo sh -s -- --server … --bundle … --token …`."
 					}
 				},
 				"required": [
@@ -7130,7 +7130,7 @@
 						}
 					}
 				},
-				"description": "Команда установки агента на новый узел одной строкой:\n`curl …/api/v1/agent-link/bundle/install.sh | sudo sh -s -- --token …` — скрипт\nставит архив папки агента (`agent pack`): экземпляр, воркеры, пакеты и права —\nиз неё.",
+				"description": "Команда установки агента на новый узел одной строкой:\n`curl …/api/v1/agent-link/bundle/install.sh | sudo sh -s -- --server … --bundle … --token …` — установщик агента\nставит архив папки агента (`agent pack`): экземпляр, воркеры, пакеты и права —\nиз неё.",
 				"summary": "Команда установки агента",
 				"tags": [
 					"Agent"

@@ -401,7 +401,7 @@ describe("агент ноды: настоящий агент и воркер wg 
     ).data;
 
     expect(command.command).to.equal(
-      `curl -fsSL '${BASE_URL}/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- --token 'abc.def'`,
+      `curl -fsSL '${BASE_URL}/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- '--server' '${BASE_URL}' '--bundle' '${BASE_URL}/api/v1/agent-link/bundle/linux-{arch}.tar.gz' '--token' 'abc.def'`,
     );
 
     expectStatus(

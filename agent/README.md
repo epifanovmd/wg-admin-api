@@ -15,7 +15,7 @@ agent/
 ├── workers/socks/      воркер socks (Go): SOCKS5-прокси через mTLS
 ├── internal/, go.mod   общий Go-код воркеров
 ├── go-worker.sh        сборка Go-воркера: Go на машине, иначе в контейнере (scripts/go-agent.sh)
-├── dev.mjs             yarn agent*: программа агента, порт и токен API из .env.development
+├── dev.sh              yarn agent*: программа агента, порт и токен API из .env.development
 ├── bundle/             архивы для узлов (yarn agent:pack, не в git) — их раздаёт API
 └── dist/               сборки агента для сквозных тестов (yarn agent:fetch) и воркеров (go-agent.sh build), не в git
 ```
@@ -55,13 +55,13 @@ agent/
 ```bash
 yarn dev                          # API (в .env.development — AGENT_BOOTSTRAP_TOKEN)
 yarn agent                        # агент с воркерами wg и socks (agent.yaml); Ctrl+C — остановка
-yarn agent:start | agent:stop [--force] | agent:status | agent:logs   # то же в фоне
+yarn agent status                 # работает ли агент (запущенный в другом терминале)
 yarn agent config check           # итоговые настройки и откуда каждое значение
 yarn agent worker list            # воркеры: откуда каждый, версия
 yarn agent upgrade --check        # есть ли новая версия агента (yarn agent upgrade — поставить)
 ```
 
-`yarn agent` (это `agent/dev.mjs`) скачивает программу агента той же версии, что `agent-sdk` в
+`yarn agent` (это `agent/dev.sh`) скачивает программу агента той же версии, что `agent-sdk` в
 `package.json`, если её ещё нет (со сверкой sha256), берёт `SERVER_PORT` и
 `AGENT_BOOTSTRAP_TOKEN` из `.env.development` (другой файл — `ENV_FILE=…`) и запускает
 `agent/agent run`. Токен — тот же, что у API, не короче 32 символов.
