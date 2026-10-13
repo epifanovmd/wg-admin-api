@@ -17,6 +17,8 @@ agent/.env.prod
 *.md
 .env
 .env.*
+# Версия агента по умолчанию (AGENT_VERSION) — из образца: секретов в нём нет.
+!.env.example
 docker-compose*.yml
 Dockerfile*
 .dockerignore

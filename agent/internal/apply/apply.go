@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"wgadmin/agent/internal/desired"
+	"wgadmin/agent/internal/contract"
 	"wgadmin/agent/internal/failover"
 	"wgadmin/agent/internal/logx"
 	"wgadmin/agent/internal/netcfg"
@@ -21,14 +21,14 @@ import (
 	"wgadmin/agent/internal/wg"
 )
 
-// WgQuickTimeout — срок одной команды wg-quick: итог применения должен
-// успеть к сроку агента (30 с на PUT /config).
+// WgQuickTimeout — срок одной команды wg-quick: зависшая команда не держит
+// применение остальных частей состояния.
 const WgQuickTimeout = 20 * time.Second
 
 // Result — итог применения: ошибки отдельных частей не прерывают остальные.
 type Result struct {
-	Interfaces []desired.InterfaceStatus
-	Routes     []desired.ForwardStatus
+	Interfaces []contract.InterfaceStatus
+	Routes     []contract.ForwardStatus
 	Errors     []string
 }
 
@@ -54,15 +54,15 @@ func ConfPath(configDir, name string) string {
 func (a *Applier) confPath(name string) string { return ConfPath(a.configDir, name) }
 
 // Routes — активные маршруты пробросов с id.
-func Routes(resolved []failover.Resolved) []desired.ForwardStatus {
-	routes := []desired.ForwardStatus{}
+func Routes(resolved []failover.Resolved) []contract.ForwardStatus {
+	routes := []contract.ForwardStatus{}
 
 	for _, forward := range resolved {
 		if forward.ID == "" {
 			continue
 		}
 
-		status := desired.ForwardStatus{ID: forward.ID, ActiveRoute: forward.ActiveRoute}
+		status := contract.ForwardStatus{ID: forward.ID, ActiveRoute: forward.ActiveRoute}
 		if forward.ActiveCandidate != nil {
 			status.ActiveCandidate = forward.ActiveCandidate
 			status.ActiveNodeID = forward.Candidates[*forward.ActiveCandidate].NodeID
@@ -75,9 +75,9 @@ func Routes(resolved []failover.Resolved) []desired.ForwardStatus {
 
 // Apply — конфиги интерфейсов (атомарно, 0600), wg-quick up/down, `wg
 // syncconf` для пиров, туннели и пробросы.
-func (a *Applier) Apply(target desired.State, health *failover.Health) Result {
+func (a *Applier) Apply(target contract.State, health *failover.Health) Result {
 	owned := state.LoadOwned(a.stateFile)
-	result := Result{Interfaces: []desired.InterfaceStatus{}, Routes: []desired.ForwardStatus{}, Errors: []string{}}
+	result := Result{Interfaces: []contract.InterfaceStatus{}, Routes: []contract.ForwardStatus{}, Errors: []string{}}
 
 	egress := wg.DefaultEgress()
 	want := map[string]bool{}
@@ -106,7 +106,7 @@ func (a *Applier) Apply(target desired.State, health *failover.Health) Result {
 		if err != nil {
 			message := err.Error()
 			result.Errors = append(result.Errors, iface.Name+": "+message)
-			result.Interfaces = append(result.Interfaces, desired.InterfaceStatus{Name: iface.Name, Status: "error", Message: message})
+			result.Interfaces = append(result.Interfaces, contract.InterfaceStatus{Name: iface.Name, Status: "error", Message: message})
 			logx.Error("Интерфейс %s: %s", iface.Name, message)
 
 			continue
@@ -132,7 +132,7 @@ func (a *Applier) Apply(target desired.State, health *failover.Health) Result {
 	result.Routes = Routes(resolved)
 
 	if netcfg.HasIptables() {
-		plain := make([]desired.Forward, len(resolved))
+		plain := make([]contract.Forward, len(resolved))
 		for i, forward := range resolved {
 			plain[i] = forward.Forward
 		}
@@ -159,12 +159,12 @@ func (a *Applier) Apply(target desired.State, health *failover.Health) Result {
 
 // withoutConflicts — туннели и пробросы без конфликтов с чужим на узле:
 // лучше не поднять релей, чем перехватить чужой трафик.
-func withoutConflicts(wanted desired.State, errs *[]string) ([]desired.Tunnel, []desired.Forward) {
+func withoutConflicts(wanted contract.State, errs *[]string) ([]contract.Tunnel, []contract.Forward) {
 	host := netcfg.ReadHostNetwork()
 	ports := netcfg.HostPorts{UDP: sysinfo.UDPPorts(), TCP: sysinfo.TCPPorts()}
 	refused := map[string]bool{}
 
-	tunnels := []desired.Tunnel{}
+	tunnels := []contract.Tunnel{}
 	for _, tunnel := range wanted.Tunnels {
 		if conflict := netcfg.TunnelConflict(tunnel, host); conflict != "" {
 			*errs = append(*errs, conflict)
@@ -176,7 +176,7 @@ func withoutConflicts(wanted desired.State, errs *[]string) ([]desired.Tunnel, [
 		tunnels = append(tunnels, tunnel)
 	}
 
-	forwards := []desired.Forward{}
+	forwards := []contract.Forward{}
 	for _, forward := range wanted.Forwards {
 		conflict := netcfg.ForwardConflict(forward, ports)
 		if refused[forward.TargetIP] {
@@ -217,7 +217,7 @@ func writeAtomic(file string, data []byte) error {
 	return os.Rename(tmp, file)
 }
 
-func (a *Applier) applyInterface(owned *state.Owned, iface desired.Interface, egress string) (desired.InterfaceStatus, error) {
+func (a *Applier) applyInterface(owned *state.Owned, iface contract.Interface, egress string) (contract.InterfaceStatus, error) {
 	file := a.confPath(iface.Name)
 	rendered := []byte(wg.RenderConfig(iface, egress))
 	existing, readErr := os.ReadFile(file)
@@ -226,20 +226,20 @@ func (a *Applier) applyInterface(owned *state.Owned, iface desired.Interface, eg
 
 	if _, ours := owned.Fingerprints[iface.Name]; !ours {
 		if err := ForeignConfig(iface.Name, existing, exists, rendered, up); err != nil {
-			return desired.InterfaceStatus{}, err
+			return contract.InterfaceStatus{}, err
 		}
 		// Отметка «свой» — до записи файла: иначе прерванное применение
 		// оставило бы конфиг, который следующее сочтёт чужим.
 		owned.Fingerprints[iface.Name] = ""
 		if err := state.SaveOwned(a.stateFile, *owned); err != nil {
-			return desired.InterfaceStatus{}, err
+			return contract.InterfaceStatus{}, err
 		}
 	}
 
 	changed := !bytes.Equal(existing, rendered)
 	if changed {
 		if err := writeAtomic(file, rendered); err != nil {
-			return desired.InterfaceStatus{}, err
+			return contract.InterfaceStatus{}, err
 		}
 	}
 
@@ -253,38 +253,38 @@ func (a *Applier) applyInterface(owned *state.Owned, iface desired.Interface, eg
 		}
 		owned.Fingerprints[iface.Name] = fingerprint
 
-		return desired.InterfaceStatus{Name: iface.Name, Status: "down"}, nil
+		return contract.InterfaceStatus{Name: iface.Name, Status: "down"}, nil
 	}
 
 	switch {
 	case !up:
 		logx.Info("Поднимаю интерфейс %s", iface.Name)
 		if err := shell.MustRun("wg-quick up "+file, WgQuickTimeout); err != nil {
-			return desired.InterfaceStatus{}, err
+			return contract.InterfaceStatus{}, err
 		}
 	case fingerprintChanged:
 		logx.Info("Interface-секция %s изменилась — перезапуск", iface.Name)
 		shell.Run("wg-quick down "+file+" || true", WgQuickTimeout)
 		if err := shell.MustRun("wg-quick up "+file, WgQuickTimeout); err != nil {
-			return desired.InterfaceStatus{}, err
+			return contract.InterfaceStatus{}, err
 		}
 	case changed:
 		logx.Info("Пиры %s изменились — wg syncconf", iface.Name)
 
 		stripped := file + ".sync"
 		if err := os.WriteFile(stripped, []byte(wg.RenderStripped(iface)), 0o600); err != nil {
-			return desired.InterfaceStatus{}, err
+			return contract.InterfaceStatus{}, err
 		}
 		err := shell.MustRun(fmt.Sprintf("wg syncconf %s %s", iface.Name, stripped), WgQuickTimeout)
 		_ = os.Remove(stripped)
 		if err != nil {
-			return desired.InterfaceStatus{}, err
+			return contract.InterfaceStatus{}, err
 		}
 	}
 
 	owned.Fingerprints[iface.Name] = fingerprint
 
-	return desired.InterfaceStatus{Name: iface.Name, Status: "up"}, nil
+	return contract.InterfaceStatus{Name: iface.Name, Status: "up"}, nil
 }
 
 // Restart — wg-quick down и up интерфейса воркера.

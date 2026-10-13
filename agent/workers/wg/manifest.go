@@ -1,5 +1,11 @@
 package main
 
+import (
+	"encoding/json"
+
+	"github.com/epifanovmd/agent/protocol"
+)
+
 // Схемы JSON манифеста. Лишние поля разрешены: бэкенд может добавлять поля
 // раньше, чем воркер их начнёт понимать.
 
@@ -100,53 +106,71 @@ var (
 	}, "targets")
 )
 
-// Manifest — что воркер умеет: настройки, маршруты, события.
-func Manifest(version string) map[string]any {
-	return map[string]any{
-		"version":     version,
-		"description": "WireGuard-интерфейсы, IPIP-туннели и пробросы портов узла, пробы связности",
-		"configs": []any{
-			map[string]any{
-				"key":         "state",
-				"description": "Желаемое состояние узла: интерфейсы с пирами, туннели, пробросы. Ответ — итог применения",
-				"schema":      stateSchema,
+// raw — схема JSON для манифеста.
+func raw(v schema) json.RawMessage {
+	data, _ := json.Marshal(v)
+
+	return data
+}
+
+var (
+	nodeInfoSchema = object(schema{
+		"wgVersion": nullable("string"),
+		"wgMode":    schema{"type": []string{"string", "null"}, "enum": []any{"kernel", "userspace", nil}},
+		"distro":    typed("string"),
+		"kernel":    typed("string"),
+		"udpPorts":  array(typed("integer")),
+		"tcpPorts":  array(typed("integer")),
+	}, "udpPorts", "tcpPorts")
+
+	restartSchema = object(schema{"name": schema{"type": "string", "pattern": `^[a-zA-Z0-9_=+.-]{1,15}$`}}, "name")
+)
+
+// Manifest — что воркер умеет (docs/PROTOCOL.md агента, §13): настройки, команды, события.
+func Manifest() protocol.WorkerManifest {
+	return protocol.WorkerManifest{
+		Description: "WireGuard-интерфейсы, IPIP-туннели и пробросы портов узла, пробы связности",
+		Configs: []protocol.ManifestConfig{
+			{
+				Key:         ConfigState,
+				Description: "Желаемое состояние узла: интерфейсы с пирами, туннели, пробросы. Итог — событие state.result",
+				Schema:      raw(stateSchema),
 			},
-			map[string]any{
-				"key":         "probes",
-				"description": "Ноды для проверки связности (ping раз в минуту, итог — в метриках)",
-				"schema":      probesSchema,
+			{
+				Key:         ConfigProbes,
+				Description: "Ноды для проверки связности (ping раз в минуту, итог — в метриках)",
+				Schema:      raw(probesSchema),
 			},
 		},
-		"routes": []any{
-			map[string]any{
-				"method":      "POST",
-				"path":        "/interfaces/{name}/restart",
-				"description": "Перезапустить интерфейс (wg-quick down и up)",
-				"response": object(schema{
+		Commands: []protocol.ManifestCommand{
+			{
+				Type:        CommandRestart,
+				Description: "Перезапустить интерфейс (wg-quick down и up)",
+				Schema:      raw(restartSchema),
+				Result: raw(object(schema{
 					"name":   typed("string"),
 					"status": enum("up"),
-				}, "name", "status"),
-			},
-			map[string]any{
-				"method":      "GET",
-				"path":        "/state",
-				"description": "Последний итог применения настройки state",
-				"response":    stateResultSchema,
+				}, "name", "status")),
 			},
 		},
-		"events": []any{
-			map[string]any{
-				"type":        "state.result",
-				"description": "Итог применения изменился без новой версии настройки (повтор после ошибки, смена маршрута) или пришёл позже ответа",
-				"schema":      stateResultSchema,
+		Events: []protocol.ManifestEvent{
+			{
+				Type:        EventStateResult,
+				Description: "Итог применения state: после новой версии, повтора после ошибки, смены маршрута",
+				Schema:      raw(stateResultSchema),
 			},
-			map[string]any{
-				"type":        "route.changed",
-				"description": "Пробы сменили активный маршрут пробросов (туннель ↔ напрямую, другая реплика)",
-				"schema": object(schema{
+			{
+				Type:        EventRouteChanged,
+				Description: "Пробы сменили активный маршрут пробросов (туннель ↔ напрямую, другая реплика)",
+				Schema: raw(object(schema{
 					"version": typed("integer"),
 					"routes":  array(routeSchema),
-				}, "version", "routes"),
+				}, "version", "routes")),
+			},
+			{
+				Type:        EventNodeInfo,
+				Description: "Сведения об узле изменились: версия и режим WireGuard, дистрибутив, ядро, занятые порты",
+				Schema:      raw(nodeInfoSchema),
 			},
 		},
 	}

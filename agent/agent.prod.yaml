@@ -1,6 +1,7 @@
 # Узлы WireGuard: этот файл поверх agent.yaml (воркеры — оттуда же). Архив для узлов —
 # yarn agent:pack (его же раздаёт API), установка — sudo ./agent install --token <токен> из
-# архива или одной командой с API. Адрес API и токен узлу передаёт установка.
+# архива или одной командой с API. Адрес API и токен узлу передаёт установка; свои значения — в
+# .env.prod.
 extends: agent.yaml
 envFiles: [.env.prod]
 # Экземпляр агента проекта: служба agent-wg, /etc/agent-wg, /var/lib/agent-wg — рядом с агентами
@@ -29,9 +30,12 @@ update:
 log:
   format: json
 workers:
-  # На узле — настоящая система: /etc/wireguard и /var/lib/wg-admin (значения воркера по умолчанию).
+  # Настоящая система: конфиги wg-quick — /etc/wireguard (на Ubuntu AppArmor разрешает wg-quick
+  # только его), что создал воркер — /var/lib/wg-admin (тот же каталог у всех версий воркера:
+  # новая версия считает своими интерфейсы и туннели прежней).
   - path: workers/wg
     env:
       WG_DRY_RUN: "0"
       WG_CONFIG_DIR: /etc/wireguard
       WG_STATE_DIR: /var/lib/wg-admin
+  - path: workers/socks

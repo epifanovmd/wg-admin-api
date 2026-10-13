@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"wgadmin/agent/internal/desired"
+	"wgadmin/agent/internal/contract"
 	"wgadmin/agent/internal/failover"
 )
 
@@ -27,8 +27,8 @@ func TestForeignConfig(t *testing.T) {
 
 func TestRoutes(t *testing.T) {
 	tunnel := "wgt1"
-	forwards := []desired.Forward{
-		{ID: "f1", Proto: "udp", ListenPort: 51820, TargetIP: "10.99.0.2", TargetPort: 51820, Candidates: []desired.Candidate{
+	forwards := []contract.Forward{
+		{ID: "f1", Proto: "udp", ListenPort: 51820, TargetIP: "10.99.0.2", TargetPort: 51820, Candidates: []contract.Candidate{
 			{TargetIP: "10.99.0.2", Tunnel: &tunnel, NodeID: "n1"},
 			{TargetIP: "203.0.113.7", NodeID: "n2"},
 		}},

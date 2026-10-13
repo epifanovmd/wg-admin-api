@@ -87,4 +87,22 @@ describe("OwnedAccess", () => {
       { createdById: "u1" },
     ]);
   });
+
+  describe("без создателя", () => {
+    const ownerOnly = new OwnedAccess<IItem>({ owner: "ownerId" });
+
+    it("своя — только где пользователь владелец", () => {
+      expect(ownerOnly.isOwn("u1", { ownerId: "u1", createdById: null })).to.be
+        .true;
+      expect(ownerOnly.isOwn("u1", { ownerId: "u2", createdById: "u1" })).to.be
+        .false;
+    });
+
+    it("условия «своих» — по одному полю", () => {
+      expect(ownerOnly.ownedCondition("item")).to.equal(
+        "(item.ownerId = :ownedBy)",
+      );
+      expect(ownerOnly.ownedWhere("u1")).to.deep.equal([{ ownerId: "u1" }]);
+    });
+  });
 });

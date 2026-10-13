@@ -19,10 +19,7 @@ describe("WgAgentSyncService", () => {
     proxies: { proxies: [] },
   };
 
-  const make = (
-    node: Record<string, unknown> | null,
-    stored: Record<string, unknown>,
-  ) => {
+  const make = (node: Record<string, unknown> | null) => {
     const nodes = {
       findEntity: node
         ? sinon.stub().resolves(node)
@@ -30,58 +27,58 @@ describe("WgAgentSyncService", () => {
       boundNodes: sinon.stub().resolves([]),
     };
     const state = { build: sinon.stub().resolves(configs) };
-    const workers = {
-      findConfig: sinon
-        .stub()
-        .callsFake(async (_a: string, worker: string, key: string) =>
-          stored[`${worker}/${key}`] === undefined
-            ? null
-            : { data: stored[`${worker}/${key}`] },
-        ),
-      putConfig: sinon.stub().resolves({ version: 1 }),
-    };
+    const agents = { setConfig: sinon.stub().resolves(1) };
 
     return {
       service: new WgAgentSyncService(
         nodes as any,
         state as any,
-        workers as any,
+        agents as any,
       ),
-      workers,
+      agents,
       state,
     };
   };
 
-  it("записывает только изменившиеся ключи", async () => {
-    const t = make(
-      { id: "n1", agentId: "a1" },
-      {
-        "wg/state": { ...configs.state, version: 2 },
-        "wg/probes": configs.probes,
-      },
-    );
+  it("пишет все ключи только при изменении значения", async () => {
+    const t = make({ id: "n1", agentId: "a1" });
 
     await t.service.sync("n1");
 
     expect(
-      t.workers.putConfig.getCalls().map(c => `${c.args[1]}/${c.args[2]}`),
-    ).to.deep.equal(["wg/state", "socks/proxies"]);
+      t.agents.setConfig
+        .getCalls()
+        .map(c => [c.args[0], `${c.args[1]}/${c.args[2]}`, c.args[4]]),
+    ).to.deep.equal([
+      ["a1", "wg/state", { onlyIfChanged: true }],
+      ["a1", "wg/probes", { onlyIfChanged: true }],
+      ["a1", "socks/proxies", { onlyIfChanged: true }],
+    ]);
+    expect(t.agents.setConfig.firstCall.args[3]).to.deep.equal(configs.state);
+  });
+
+  it("отказ в одном ключе не мешает остальным", async () => {
+    const t = make({ id: "n1", agentId: "a1" });
+
+    t.agents.setConfig.onFirstCall().rejects(new Error("CONFIG_INVALID"));
+    await t.service.sync("n1");
+    expect(t.agents.setConfig.callCount).to.equal(3);
   });
 
   it("нода без агента или удалённая — ничего", async () => {
-    const unbound = make({ id: "n1", agentId: null }, {});
+    const unbound = make({ id: "n1", agentId: null });
 
     await unbound.service.sync("n1");
     expect(unbound.state.build.called).to.equal(false);
 
-    const gone = make(null, {});
+    const gone = make(null);
 
     await gone.service.sync("n1");
-    expect(gone.workers.putConfig.called).to.equal(false);
+    expect(gone.agents.setConfig.called).to.equal(false);
   });
 
   it("изменение во время сборки — ещё один проход, без параллельных", async () => {
-    const t = make({ id: "n1", agentId: "a1" }, {});
+    const t = make({ id: "n1", agentId: "a1" });
     let resolve!: () => void;
 
     t.state.build

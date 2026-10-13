@@ -1,11 +1,14 @@
 import { inject } from "inversify";
 
-import { EventBus, Injectable, logger } from "../../core";
 import {
   AgentDeletedEvent,
   AgentEnrolledEvent,
   AgentUpdatedEvent,
-} from "../agent";
+  EventBus,
+  Injectable,
+  logger,
+} from "../../core";
+import { AgentService } from "../agent";
 import { ISocketEventListener } from "../socket";
 import { WgNodeDeletedEvent } from "./events";
 import { WgNodeAgentService } from "./wg-node-agent.service";
@@ -20,6 +23,7 @@ export class WgNodeAgentListener implements ISocketEventListener {
   constructor(
     @inject(EventBus) private readonly _eventBus: EventBus,
     @inject(WgNodeAgentService) private readonly _agents: WgNodeAgentService,
+    @inject(AgentService) private readonly _views: AgentService,
   ) {}
 
   register(): void {
@@ -30,14 +34,14 @@ export class WgNodeAgentListener implements ISocketEventListener {
 
     this._eventBus.on(
       AgentEnrolledEvent,
-      guard("Привязка агента к ноде", ({ agent, source }) =>
-        this._agents.onEnrolled(agent, source),
+      guard("Привязка агента к ноде", async ({ agent, source }) =>
+        this._agents.onEnrolled(await this._views.toDto(agent), source),
       ),
     );
     this._eventBus.on(
       AgentUpdatedEvent,
-      guard("Состояние ноды по агенту", ({ agent }) =>
-        this._agents.onAgentUpdated(agent),
+      guard("Состояние ноды по агенту", async ({ agent }) =>
+        this._agents.onAgentUpdated(await this._views.toDto(agent)),
       ),
     );
     this._eventBus.on(

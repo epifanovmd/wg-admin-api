@@ -22,6 +22,14 @@ describe("WgAgentTelemetryService", () => {
     const mesh = { recordProbes: sinon.stub().resolves() };
     const forwards = { recordRoutes: sinon.stub().resolves() };
     const socks = { recordStats: sinon.stub().resolves() };
+    const seen = new Map<string, number>();
+    const live = {
+      incrBy: sinon.stub().callsFake(async (key: string, delta: number) => {
+        seen.set(key, (seen.get(key) ?? 0) + delta);
+
+        return seen.get(key);
+      }),
+    };
     const service = new WgAgentTelemetryService(
       nodes as any,
       interfaces as any,
@@ -31,6 +39,7 @@ describe("WgAgentTelemetryService", () => {
       mesh as any,
       forwards as any,
       socks as any,
+      live as any,
     );
 
     return { service, nodes, interfaces, ingest, links, mesh, forwards, socks };
@@ -97,7 +106,17 @@ describe("WgAgentTelemetryService", () => {
     expect(t.socks.recordStats.calledOnce).to.equal(true);
   });
 
-  it("итог применения: версия и ошибка ноды, статусы интерфейсов; итог старой версии и 202 — пропускаются", async () => {
+  it("повтор точки (та же at от агента) — пропуск: старые счётчики не считаются сбросом", async () => {
+    const t = make({ id: "n1", appliedVersion: 0 });
+    const point = { at: 2000, workers: { wg: { interfaces: [] } } };
+
+    await t.service.onMetrics("a1", point);
+    await t.service.onMetrics("a1", point);
+    await t.service.onMetrics("a2", point);
+    expect(t.ingest.ingest.callCount).to.equal(2);
+  });
+
+  it("итог применения: версия и ошибка ноды, статусы интерфейсов; итог старой версии — пропускается", async () => {
     const t = make({ id: "n1", appliedVersion: 5 });
     const node = { id: "n1", appliedVersion: 5 } as any;
 
@@ -120,30 +139,52 @@ describe("WgAgentTelemetryService", () => {
       appliedAt: 1,
       interfaces: [],
     });
-    await t.service.applyResult(node, { version: 7, interfaces: [] });
     expect(t.nodes.applyAgentState.callCount).to.equal(1);
   });
 
-  it("статус настройки wg/state: отказ — ошибка ноды; другие ключи — без реакции", async () => {
+  it("отказ воркера в настройке wg/state — ошибка ноды; применённая и другие ключи — без реакции", async () => {
     const t = make({ id: "n1", appliedVersion: 0 });
+    const applied = (key: string, ok: boolean | undefined, error?: object) =>
+      ({ agentId: "a1", worker: "wg", key, version: 3, ok, error }) as any;
 
-    await t.service.onConfigStatus({
-      agentId: "a1",
-      worker: "wg",
-      key: "probes",
-      state: "failed",
-    } as any);
+    await t.service.onConfigApplied(applied("probes", false));
+    await t.service.onConfigApplied(applied("state", true));
     expect(t.nodes.findByAgentId.called).to.equal(false);
 
-    await t.service.onConfigStatus({
-      agentId: "a1",
-      worker: "wg",
-      key: "state",
-      state: "failed",
-      error: { code: "CONFIG_REJECTED", message: "плохое состояние" },
-    } as any);
+    await t.service.onConfigApplied(
+      applied("state", false, {
+        code: "CONFIG_REJECTED",
+        message: "плохое состояние",
+      }),
+    );
     expect(t.nodes.applyAgentState.firstCall.args[1]).to.deep.equal({
       applyError: "плохое состояние",
     });
+  });
+
+  it("node.info — сведения ноды слиянием и версия wg", async () => {
+    const t = make({ id: "n1", appliedVersion: 0 });
+
+    await t.service.onNodeInfo("a1", {
+      wgVersion: "wireguard-tools v1.0.20210914",
+      wgMode: "kernel",
+      distro: "Debian 12",
+      udpPorts: [51820],
+      tcpPorts: [22],
+    });
+    expect(t.nodes.applyAgentState.firstCall.args[1]).to.deep.equal({
+      osInfoPatch: {
+        set: {
+          wgMode: "kernel",
+          distro: "Debian 12",
+          udpPorts: [51820],
+          tcpPorts: [22],
+        },
+      },
+      wgVersion: "wireguard-tools v1.0.20210914",
+    });
+
+    await t.service.onNodeInfo("a1", "не объект");
+    expect(t.nodes.applyAgentState.callCount).to.equal(1);
   });
 });

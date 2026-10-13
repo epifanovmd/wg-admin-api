@@ -1,34 +1,36 @@
 package main
 
 import (
-	"net/http"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/epifanovmd/agent/protocol"
+
 	"wgadmin/agent/internal/logx"
 	"wgadmin/agent/internal/socks"
-	"wgadmin/agent/internal/workerhttp"
 )
+
+// ConfigProxies — ключ настроек воркера.
+const ConfigProxies = "proxies"
 
 // retryEvery — повтор прокси с ошибкой (порт мог освободиться).
 const retryEvery = 25 * time.Second
+
+// maxHealthMessage — длина сообщения пульса, символов.
+const maxHealthMessage = 500
 
 // ProxiesConfig — настройка proxies.
 type ProxiesConfig struct {
 	Proxies []socks.Config `json:"proxies"`
 }
 
-// ProxiesResult — итог применения настройки proxies.
-type ProxiesResult struct {
-	Version int64          `json:"version"`
-	Proxies []socks.Status `json:"proxies"`
-	Errors  []string       `json:"errors"`
-}
-
 // Service — воркер socks: прокси и их последние статусы.
 type Service struct {
 	proxies *socks.Proxies
-	version string
 
 	mu       sync.Mutex
 	configs  []socks.Config
@@ -36,8 +38,31 @@ type Service struct {
 }
 
 // NewService — воркер поверх набора прокси.
-func NewService(proxies *socks.Proxies, version string) *Service {
-	return &Service{proxies: proxies, version: version, statuses: []socks.Status{}}
+func NewService(proxies *socks.Proxies) *Service {
+	return &Service{proxies: proxies, statuses: []socks.Status{}}
+}
+
+// Configure — ключ настроек от агента (worker.Options.Configure): data nil — ключ удалён,
+// прокси закрываются. Прокси с ошибкой (порт занят) — не отказ в настройке: он в пульсе и
+// повторяется.
+func (s *Service) Configure(_ context.Context, key string, data json.RawMessage) error {
+	if key != ConfigProxies {
+		return protocol.NewError(protocol.CodeConfigRejected, fmt.Sprintf("ключ %q воркеру socks не нужен", key))
+	}
+	if data == nil {
+		s.Close()
+
+		return nil
+	}
+	var config ProxiesConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return protocol.NewError(protocol.CodeConfigRejected, "proxies: "+err.Error())
+	}
+
+	statuses := s.Apply(config.Proxies)
+	logx.Info("Настройка proxies: прокси %d, ошибок %d", len(statuses), len(failures(statuses)))
+
+	return nil
 }
 
 // Apply — привести прокси к списку и запомнить итог.
@@ -51,36 +76,42 @@ func (s *Service) Apply(configs []socks.Config) []socks.Status {
 	return s.statuses
 }
 
-func failed(statuses []socks.Status) bool {
+// failures — «id: причина» прокси, которые не слушают.
+func failures(statuses []socks.Status) []string {
+	var result []string
+
 	for _, status := range statuses {
 		if status.Status != "listening" {
-			return true
+			result = append(result, status.ID+": "+status.Message)
 		}
 	}
 
-	return false
+	return result
 }
 
 // RetryLoop — повторять применение, пока у какого-то прокси ошибка.
-func (s *Service) RetryLoop(stop <-chan struct{}) {
+func (s *Service) RetryLoop(ctx context.Context) {
 	ticker := time.NewTicker(retryEvery)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-stop:
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
+		s.retryOnce()
+	}
+}
 
-		s.mu.Lock()
-		retry := failed(s.statuses)
-		configs := s.configs
-		s.mu.Unlock()
+func (s *Service) retryOnce() {
+	s.mu.Lock()
+	retry := len(failures(s.statuses)) > 0
+	configs := s.configs
+	s.mu.Unlock()
 
-		if retry {
-			s.Apply(configs)
-		}
+	if retry {
+		s.Apply(configs)
 	}
 }
 
@@ -94,62 +125,21 @@ func (s *Service) Close() {
 	s.statuses = []socks.Status{}
 }
 
-func (s *Service) snapshot() []socks.Status {
+// Health — пульс: прокси, который не слушает, — ok: false с причиной; метрики — счётчики
+// прокси.
+func (s *Service) Health() protocol.Health {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	failed := failures(s.statuses)
+	s.mu.Unlock()
 
-	return append([]socks.Status{}, s.statuses...)
-}
-
-// Handler — HTTP воркера socks.
-func (s *Service) Handler() http.Handler {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		workerhttp.JSON(w, http.StatusOK, map[string]any{
-			"ok":   true,
-			"info": map[string]any{"version": s.version, "proxies": s.snapshot()},
-		})
-	})
-	mux.HandleFunc("GET /manifest", func(w http.ResponseWriter, _ *http.Request) {
-		workerhttp.JSON(w, http.StatusOK, Manifest(s.version))
-	})
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
-		workerhttp.JSON(w, http.StatusOK, map[string]any{"proxies": s.proxies.Stats()})
-	})
-	mux.HandleFunc("GET /proxies", func(w http.ResponseWriter, _ *http.Request) {
-		workerhttp.JSON(w, http.StatusOK, map[string]any{"proxies": s.snapshot()})
-	})
-
-	mux.HandleFunc("PUT /config/proxies", func(w http.ResponseWriter, r *http.Request) {
-		var config ProxiesConfig
-		version, err := workerhttp.ReadConfig(r, &config)
-		if err != nil {
-			workerhttp.Error(w, http.StatusBadRequest, err.Error())
-
-			return
+	health := protocol.Health{OK: len(failed) == 0}
+	if !health.OK {
+		health.Message = strings.Join(failed, "; ")
+		if runes := []rune(health.Message); len(runes) > maxHealthMessage {
+			health.Message = string(runes[:maxHealthMessage])
 		}
+	}
+	health.Metrics, _ = json.Marshal(map[string]any{"proxies": s.proxies.Stats()})
 
-		statuses := s.Apply(config.Proxies)
-		result := ProxiesResult{Version: version, Proxies: statuses, Errors: []string{}}
-		for _, status := range statuses {
-			if status.Status != "listening" {
-				result.Errors = append(result.Errors, status.ID+": "+status.Message)
-			}
-		}
-		logx.Info("Настройка proxies v%d: прокси %d, ошибок %d", version, len(statuses), len(result.Errors))
-		workerhttp.JSON(w, http.StatusOK, result)
-	})
-	mux.HandleFunc("DELETE /config/proxies", func(w http.ResponseWriter, _ *http.Request) {
-		s.Close()
-		workerhttp.NoContent(w)
-	})
-	mux.HandleFunc("POST /cleanup", func(w http.ResponseWriter, _ *http.Request) {
-		s.Close()
-		workerhttp.NoContent(w)
-	})
-
-	mux.HandleFunc("/", workerhttp.NotFound)
-
-	return mux
+	return health
 }

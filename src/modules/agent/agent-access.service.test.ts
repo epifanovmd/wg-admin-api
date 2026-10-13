@@ -77,7 +77,7 @@ describe("AgentAccessService", () => {
 
     access.requireAll(user(["agent:config"]), "config");
     expect(() => access.requireAll(user(), "config")).to.throw(
-      /укажите агента/,
+      /Нужен id агента/,
     );
   });
 

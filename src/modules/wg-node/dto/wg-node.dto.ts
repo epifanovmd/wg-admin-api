@@ -101,16 +101,3 @@ export interface ICreatedWgNodeDto {
   node: WgNodeDto;
   install: IWgNodeInstallCommandDto;
 }
-
-/** Журнал агента или воркера ноды. */
-export interface IWgNodeLogsDto {
-  /** Строки журнала текстом: `время уровень источник: сообщение`. */
-  content: string;
-  entries: Array<{
-    at: number;
-    level: string;
-    source: string;
-    msg: string;
-    attrs?: Record<string, unknown>;
-  }>;
-}

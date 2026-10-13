@@ -1,19 +1,14 @@
 package main
 
+import (
+	"encoding/json"
+
+	"github.com/epifanovmd/agent/protocol"
+)
+
 type schema = map[string]any
 
 var (
-	proxyStatusSchema = schema{
-		"type": "object",
-		"properties": schema{
-			"id":         schema{"type": "string"},
-			"listenPort": schema{"type": "integer"},
-			"status":     schema{"type": "string", "enum": []string{"listening", "error"}},
-			"message":    schema{"type": "string"},
-		},
-		"required": []string{"id", "listenPort", "status"},
-	}
-
 	proxiesSchema = schema{
 		"type": "object",
 		"properties": schema{
@@ -49,30 +44,16 @@ var (
 	}
 )
 
-// Manifest — что воркер умеет: настройка proxies и маршрут GET /proxies.
-func Manifest(version string) map[string]any {
-	return map[string]any{
-		"version":     version,
-		"description": "SOCKS5-прокси через mTLS: клиентский сертификат из списка отпечатков, логин и пароль",
-		"configs": []any{
-			map[string]any{
-				"key":         "proxies",
-				"description": "Прокси узла: порт, сертификаты, разрешённые отпечатки клиентов, пользователи (соль и scrypt-хэш). Ответ — статус каждого прокси",
-				"schema":      proxiesSchema,
-			},
-		},
-		"routes": []any{
-			map[string]any{
-				"method":      "GET",
-				"path":        "/proxies",
-				"description": "Статусы прокси последнего применения",
-				"response": schema{
-					"type":       "object",
-					"properties": schema{"proxies": schema{"type": "array", "items": proxyStatusSchema}},
-					"required":   []string{"proxies"},
-				},
-			},
-		},
-		"events": []any{},
+// Manifest — что воркер умеет: настройка proxies (docs/PROTOCOL.md агента, §13).
+func Manifest() protocol.WorkerManifest {
+	raw, _ := json.Marshal(proxiesSchema)
+
+	return protocol.WorkerManifest{
+		Description: "SOCKS5-прокси через mTLS: клиентский сертификат из списка отпечатков, логин и пароль",
+		Configs: []protocol.ManifestConfig{{
+			Key:         ConfigProxies,
+			Description: "Прокси узла: порт, сертификаты, разрешённые отпечатки клиентов, пользователи (соль и scrypt-хэш). Прокси с ошибкой — в пульсе",
+			Schema:      raw,
+		}},
 	}
 }

@@ -1,33 +1,28 @@
 /**
- * Сокет-события модуля: дополняют контракт `socket.types` (declare module
- * работает только с модулем-объявлением, не с index).
+ * Сокет-события модуля: дополняют контракт `socket.types` (declare module работает только с
+ * модулем-объявлением, не с index).
  */
 import type { ISocketAckResponse } from "../socket/socket.types";
 import type { TAgentLogLevel } from "./agent.types";
 import type {
-  AgentAlertDto,
-  AgentConfigStatusDto,
+  AgentCommandDto,
+  AgentConfigDto,
   AgentDto,
-  IAgentActionDto,
   IAgentEventDto,
   IAgentLogEntryDto,
   IAgentMetricsPointDto,
-  IAgentReleaseNoticeDto,
 } from "./dto";
 
-/** Точка метрик агента. */
 export interface IAgentMetricsSocketDto {
   agentId: string;
   point: IAgentMetricsPointDto;
 }
 
-/** Записи журнала агента и воркеров (с уровня наблюдателя; клиент фильтрует сам). */
 export interface IAgentLogSocketDto {
   agentId: string;
   entries: IAgentLogEntryDto[];
 }
 
-/** Уровень журнала наблюдателя агента для этого сокета. */
 export interface IAgentLogLevelPayload {
   agentId: string;
   level: TAgentLogLevel;
@@ -35,7 +30,7 @@ export interface IAgentLogLevelPayload {
 
 declare module "../socket/socket.types" {
   interface ISocketEvents {
-    /** Уровень журнала в комнате агента (по умолчанию `info`); ack `{ ok }`. */
+    /** Уровень журнала наблюдения в комнате агента (по умолчанию `info`); ack `{ ok }`. */
     "agent:log-level": (
       data: IAgentLogLevelPayload,
       ack?: (res: ISocketAckResponse) => void,
@@ -43,25 +38,18 @@ declare module "../socket/socket.types" {
   }
 
   interface ISocketEmitEvents {
-    /** Агент изменился (связь, `status`, отзыв) — `agents` и `agent_<id>`. */
+    /** Агент изменился (связь, hello, состояние, отзыв) — `agents` и `agent_<id>`. */
     "agent:updated": (...args: [AgentDto]) => void;
     /** Агент удалён — `agents` и `agent_<id>`. */
     "agent:deleted": (...args: [{ id: string }]) => void;
-    /** Проблема началась или закончилась — `agents` и `agent_<id>`. */
-    "agent:alert": (...args: [AgentAlertDto]) => void;
     /** Событие воркера — `agents` и `agent_<id>`. */
     "agent:event": (...args: [IAgentEventDto]) => void;
-    /** Статус ключа настроек изменился — `agent_<id>`. */
-    "agent:config": (...args: [AgentConfigStatusDto]) => void;
-    /** Итог действия (перезапуск, обновление, ключ, журнал) — `agent_<id>`. */
-    "agent:action": (...args: [IAgentActionDto]) => void;
+    /** Ключ настроек записан, удалён или применён — `agent_<id>`. */
+    "agent:config": (...args: [AgentConfigDto]) => void;
+    /** Команда поставлена, её ход или итог — `agent_<id>`. */
+    "agent:command": (...args: [AgentCommandDto]) => void;
     /** Точка метрик — `agent_<id>`. */
     "agent:metrics": (...args: [IAgentMetricsSocketDto]) => void;
-    /**
-     * Агенты нашли новую версию агента — всем клиентам
-     * (от каждой копии бэкенда: может прийти несколько раз).
-     */
-    "agent:release": (...args: [IAgentReleaseNoticeDto]) => void;
     /** Записи журнала — `agent_<id>`. */
     "agent:log": (...args: [IAgentLogSocketDto]) => void;
   }

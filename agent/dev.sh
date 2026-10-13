@@ -1,21 +1,20 @@
 #!/bin/sh
-# Агент на машине разработчика: программа agent/agent той же версии, что agent-sdk в package.json
+# Агент на машине разработчика: программа agent/agent версии AGENT_VERSION (.env*)
 # (нет — скачивается из релиза агента со сверкой sha256), порт API и токен регистрации — из
 # .env.development (тот же AGENT_BOOTSTRAP_TOKEN, что у API), настройки — agent/agent.yaml.
 #
 #   yarn agent [команда агента …]   без команды — agent run на переднем плане (Ctrl+C — остановить
 #                                   вместе с воркерами); например, yarn agent status,
-#                                   yarn agent config check, yarn agent upgrade --check
-#   yarn agent:fetch [версия]       программа агента, сборки агента и install.sh той же (или этой)
-#                                   версии в agent/dist/v<версия> (сквозные тесты: обновление агента
-#                                   берёт и прежнюю; AGENT_PLATFORMS="linux-amd64 …")
+#                                   yarn agent config check
+#   yarn agent:fetch                программа агента, сборки агента и install.sh той же версии в
+#                                   agent/dist/v<версия> (сквозные тесты; AGENT_PLATFORMS="linux-amd64 …")
 #   yarn agent:pack                 архивы для узлов, сборки воркеров и установщик агента
 #                                   (install.sh той же версии) → agent/bundle
 #
 # Другой env-файл — ENV_FILE=…, второй агент — AGENT_DIR=.agent-2 AGENT_NAME=dev-2 (свои ключ и
-# данные), привязать к ноде — AGENT_NODE_ID=<id> (метка nodeId). Данные агента — <AGENT_DIR>/data; удалить их — агент зарегистрируется заново.
-# Откуда скачивать программу и сборки агента вместо релиза на GitHub — AGENT_DOWNLOAD_URL
-# (каталог одной версии: manifest.json и файлы).
+# данные), привязать к ноде — AGENT_NODE_ID=<id> (метка nodeId). Данные агента — <AGENT_DIR>/data;
+# удалить их — агент зарегистрируется заново и привяжется к ноде по метке или имени.
+# Каталог сборок вместо релиза на GitHub — AGENT_RELEASES_URL.
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -26,10 +25,20 @@ die() {
   exit 1
 }
 
-# Версия агента — как у agent-sdk в package.json (…/agent-sdk-<версия>.tgz).
-VERSION=$(sed -n 's/.*"agent-sdk": *"[^"]*agent-sdk-\([^"/]*\)\.tgz".*/\1/p' "$ROOT/package.json")
-[ -n "$VERSION" ] || die "не понять версию agent-sdk в package.json"
-BASE=${AGENT_DOWNLOAD_URL:-https://github.com/epifanovmd/agent/releases/download/v$VERSION}
+# env_value ИМЯ — значение переменной: окружение, затем .env.development, .env, .env.example.
+env_value() {
+  eval "v=\${$1:-}"
+  for f in .env.development .env .env.example; do
+    [ -n "$v" ] && break
+    [ -f "$ROOT/$f" ] && v=$(sed -n "s/^$1=//p" "$ROOT/$f" | tail -n 1)
+  done
+  printf '%s' "$v"
+}
+
+# Версия агента — AGENT_VERSION (окружение или файлы .env*).
+VERSION=$(env_value AGENT_VERSION)
+[ -n "$VERSION" ] || die "не задана AGENT_VERSION (.env.example)"
+BASE=${AGENT_RELEASES_URL:-https://github.com/epifanovmd/agent/releases/download/v$VERSION}
 
 sha256() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
@@ -57,9 +66,9 @@ platform() {
   echo "$os-$arch"
 }
 
-# Программа агента: есть — как есть (новые версии ставит yarn agent upgrade); нет — из релиза.
+# Программа агента версии AGENT_VERSION: нет или другая версия — из релиза.
 ensure_agent() {
-  [ -x "$AGENT" ] && return
+  [ -x "$AGENT" ] && [ "$("$AGENT" version 2>/dev/null | head -n 1)" = "$VERSION" ] && return
   tmp=$(mktemp)
   curl -fsSL "$BASE/manifest.json" -o "$tmp" || die "нет $BASE/manifest.json"
   p=$(platform)
@@ -70,12 +79,8 @@ ensure_agent() {
   get "$(field "$entry" file)" "$(field "$entry" sha256 | tr 'A-F' 'a-f')" "$AGENT"
 }
 
-# Сборки агента версии $1 (нет — той же) в agent/dist/v<версия> — для сквозных тестов.
+# Сборки агента той же версии в agent/dist/v<версия> — для сквозных тестов.
 fetch_dist() {
-  if [ -n "${1:-}" ]; then
-    VERSION=${1#v}
-    BASE=${AGENT_DOWNLOAD_URL:-https://github.com/epifanovmd/agent/releases/download/v$VERSION}
-  fi
   out="$ROOT/agent/dist/v$VERSION"
   mkdir -p "$out"
   curl -fsSL "$BASE/manifest.json" -o "$out/manifest.json.new" || die "нет $BASE/manifest.json"
@@ -115,8 +120,8 @@ cmd=${1:-run}
 [ $# -eq 0 ] || shift
 case "$cmd" in
   fetch)
-    fetch_dist "${1:-}"
-    [ -n "${1:-}" ] || ensure_agent
+    fetch_dist
+    ensure_agent
     ;;
   pack)
     ensure_agent
@@ -129,7 +134,7 @@ case "$cmd" in
   run)
     ensure_agent
     agent_env
-    # Воркеры могут пережить остановку агента — их тоже останавливаем.
+    # Воркеры переживают остановку агента — их тоже останавливаем.
     "$AGENT" run "$@" &
     pid=$!
     trap 'kill -TERM "$pid" 2>/dev/null || true' INT TERM

@@ -1,7 +1,11 @@
 import { expect } from "chai";
 
 import { EWgNodeStatus } from "./wg-node.types";
-import { wgNodeStateOf, wgNodeStatusOf } from "./wg-node-status";
+import {
+  wgNodeStateOf,
+  wgNodeStatusOf,
+  workerOsInfoPatch,
+} from "./wg-node-status";
 
 const worker = (name: string, patch: Record<string, unknown> = {}) => ({
   name,
@@ -65,49 +69,43 @@ describe("wgNodeStatusOf", () => {
 });
 
 describe("wgNodeStateOf", () => {
-  it("ОС — от агента, режим wg и порты — от воркера wg; без ответа воркера ОС не трогается", () => {
+  it("ОС — от агента слиянием в osInfo (режим wg и порты воркера не затираются)", () => {
     const state = wgNodeStateOf(
       agent({
         version: "1.0.1",
-        address: "203.0.113.5",
+        remoteIp: "203.0.113.5",
         lastSeenAt: 1000,
         host: { os: "linux", arch: "amd64", hostname: "n1", kernel: "6.8" },
-        workers: [
-          worker("wg", {
-            health: {
-              ok: true,
-              info: {
-                wgVersion: "wireguard-tools v1.0.20210914",
-                wgMode: "kernel",
-                distro: "Debian 12",
-                udpPorts: [51820, "x"],
-              },
-            },
-          }),
-          worker("socks"),
-        ],
       }),
     );
 
     expect(state).to.deep.include({
       agentVersion: "1.0.1",
-      wgVersion: "wireguard-tools v1.0.20210914",
       agentRemoteIp: "203.0.113.5",
     });
-    expect(state.osInfo).to.deep.include({
-      platform: "linux",
-      arch: "amd64",
-      distro: "Debian 12",
-      wgMode: "kernel",
-      udpPorts: [51820],
+    expect(state.osInfoPatch).to.deep.equal({
+      set: { platform: "linux", arch: "amd64", hostname: "n1", kernel: "6.8" },
     });
+    expect(state).to.not.have.property("osInfo");
+    expect(wgNodeStateOf(agent())).to.not.have.property("osInfoPatch");
+  });
+});
+
+describe("workerOsInfoPatch", () => {
+  it("сведения воркера wg — слиянием; неверные значения отброшены, нет режима — убрать", () => {
     expect(
-      wgNodeStateOf(
-        agent({
-          host: { os: "linux", arch: "amd64", hostname: "n1" },
-          workers: [worker("wg", { health: undefined }), worker("socks")],
-        }),
-      ),
-    ).to.not.have.property("osInfo");
+      workerOsInfoPatch({
+        wgMode: "userspace",
+        distro: "Debian 12",
+        udpPorts: [51820, "x"],
+        tcpPorts: "нет",
+      }),
+    ).to.deep.equal({
+      set: { wgMode: "userspace", distro: "Debian 12", udpPorts: [51820] },
+    });
+    expect(workerOsInfoPatch({ wgMode: null })).to.deep.equal({
+      set: {},
+      remove: ["wgMode"],
+    });
   });
 });

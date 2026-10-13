@@ -1,16 +1,11 @@
 import { inject } from "inversify";
-import { Readable } from "stream";
-import type { ReadableStream as WebReadableStream } from "stream/web";
 import {
   Body,
   Controller,
   Delete,
-  Get,
   Path,
   Post,
-  Produces,
   Put,
-  Query,
   Request,
   Response,
   Route,
@@ -20,221 +15,140 @@ import {
 } from "tsoa";
 
 import type { IErrorResponseDto } from "../../core";
-import {
-  getContextUser,
-  Injectable,
-  ValidateBody,
-  ValidateQuery,
-} from "../../core";
+import { getContextUser, Injectable, ValidateBody } from "../../core";
 import { KoaRequest } from "../../types/koa";
-import { withRetryAfter } from "./agent.errors";
-import { AGENT_WORKER_STATUS_HEADER } from "./agent.types";
-import { AgentWorkerService } from "./agent-worker.service";
+import { AgentService } from "./agent.service";
 import {
-  IAgentConfigEntryDto,
-  IAgentFetchBody,
-  IAgentWorkerActionBody,
-  IAgentWorkerActionResultDto,
-  ISetAgentConfigBody,
+  AgentCommandDto,
+  AgentConfigDto,
   TAgentId,
   TAgentWorkerName,
 } from "./dto";
 import {
-  AgentConfigsQuerySchema,
-  AgentFetchSchema,
-  AgentWorkerActionSchema,
-  SetAgentConfigSchema,
+  WorkerCommandBodySchema,
+  WorkerRestartBodySchema,
+  WorkerUpdateBodySchema,
 } from "./validation";
 
-/** Прервать запрос к воркеру, если клиент ушёл, не дочитав ответ. */
-const abortOnClose = (req: KoaRequest): AbortSignal => {
-  const abort = new AbortController();
-  const res = req.ctx.res;
+interface IWorkerRestartBody {
+  /** Не ждать, пока воркер занят. */
+  force?: boolean;
+}
 
-  res.on("close", () => {
-    if (!res.writableFinished) abort.abort();
-  });
+interface IWorkerUpdateBody {
+  /** Версия из каталога сборок; без неё — старшая для платформы узла. */
+  version?: string;
+  force?: boolean;
+}
 
-  return abort.signal;
-};
+interface IWorkerCommandBody {
+  /** Тип команды из манифеста воркера. */
+  type: string;
+  args?: any;
+  /** Срок ответа воркера, мс; без него — без срока. */
+  timeoutMs?: number;
+  /** Подождать итог, с (0 — сразу вернуть поставленную команду). */
+  waitSeconds?: number;
+}
 
-/**
- * Воркеры агента: перезапуск и обновление, настройки по ключам, запрос к
- * воркеру. Доступ — право модуля или политика (агент своего узла); проверяет
- * сервис. Действия и запросы выполняет копия с соединением агента (из другой
- * копии вызов пересылается); без пересылки между копиями — 503
- * `AGENT_ELSEWHERE` с `Retry-After`.
- */
+/** Воркеры агента: перезапуск, обновление, команды, настройки. */
 @Injectable()
 @Tags("Agent")
 @Response<IErrorResponseDto>("default", "Ошибка")
-@Route("api/v1/agents")
+@Route("api/v1/agents/{id}/workers/{worker}")
 export class AgentWorkerController extends Controller {
-  constructor(
-    @inject(AgentWorkerService) private readonly _workers: AgentWorkerService,
-  ) {
+  constructor(@inject(AgentService) private readonly _agents: AgentService) {
     super();
   }
 
   /**
-   * Перезапустить воркер. Свободный — перезапускается сразу (`deferred:
-   * false` после запуска). Занятый (`health.busy`) — ответ сразу (`deferred:
-   * true`, `pending`, `actionId`), замена — после окончания работы, её итог —
-   * событие сокета `agent:action` (`id = actionId`, `deferred: true`);
-   * `force` — заменить сразу.
-   * @summary Перезапуск воркера
+   * Перезапустить воркер; занятый — после окончания работы (или сразу с `force`).
+   * @summary Перезапустить воркер
    */
   @Security("jwt")
-  @ValidateBody(AgentWorkerActionSchema)
-  @Post("{id}/workers/{worker}/restart")
+  @ValidateBody(WorkerRestartBodySchema)
+  @Post("restart")
   restartAgentWorker(
     @Request() req: KoaRequest,
     @Path() id: TAgentId,
     @Path() worker: TAgentWorkerName,
-    @Body() body: IAgentWorkerActionBody,
-  ): Promise<IAgentWorkerActionResultDto> {
-    return withRetryAfter(
-      (name, value) => this.setHeader(name, value),
-      () =>
-        this._workers.restart(getContextUser(req), id, worker, !!body.force),
+    @Body() body: IWorkerRestartBody,
+  ): Promise<AgentCommandDto> {
+    return this._agents.restartWorker(
+      getContextUser(req),
+      id,
+      worker,
+      body.force,
     );
   }
 
   /**
-   * Обновить воркер (`release: true`) до новейшей сборки под агента. Свободный — сразу
-   * (версии в ответе); занятый — как у перезапуска: ответ `deferred: true`,
-   * итог — событие `agent:action`; `force` — сразу. Новая сборка не
+   * Обновить воркер сборкой из каталога сборок проекта (подпись проверяет агент); новая не
    * заработала — агент возвращает прежнюю.
-   * @summary Обновление воркера
+   * @summary Обновить воркер
    */
   @Security("jwt")
-  @ValidateBody(AgentWorkerActionSchema)
-  @Post("{id}/workers/{worker}/update")
+  @ValidateBody(WorkerUpdateBodySchema)
+  @Post("update")
   updateAgentWorker(
     @Request() req: KoaRequest,
     @Path() id: TAgentId,
     @Path() worker: TAgentWorkerName,
-    @Body() body: IAgentWorkerActionBody,
-  ): Promise<IAgentWorkerActionResultDto> {
-    return withRetryAfter(
-      (name, value) => this.setHeader(name, value),
-      () => this._workers.update(getContextUser(req), id, worker, !!body.force),
+    @Body() body: IWorkerUpdateBody,
+  ): Promise<AgentCommandDto> {
+    return this._agents.updateWorker(
+      getContextUser(req),
+      id,
+      worker,
+      body.version,
+      body.force,
     );
   }
 
   /**
-   * Запрос к воркеру через агента: метод, путь, заголовки, тело. Ответ —
-   * статус, заголовки и тело воркера потоком и заголовок
-   * `X-Agent-Worker-Status` (статус ответа воркера): по нему ответ воркера
-   * отличается от ошибки API (её тело — `{ code, message }`, заголовка нет).
-   * Служебные пути воркера (`/health`, `/metrics`, `/config/*`, `/cleanup`)
-   * недоступны. В аудит попадают изменяющие запросы (`POST`, `PUT`, `PATCH`,
-   * `DELETE`).
-   * @summary Запрос к воркеру
+   * Команда воркеру (тип — из `manifest.commands`); итог — в ответе (`waitSeconds`), по
+   * `GET /agents/{id}/commands/{commandId}` и сокету.
+   * @summary Команда воркеру
    */
   @Security("jwt")
-  @ValidateBody(AgentFetchSchema)
-  @Produces("application/octet-stream")
-  @Post("{id}/workers/{worker}/fetch")
-  async fetchAgentWorker(
+  @ValidateBody(WorkerCommandBodySchema)
+  @Post("commands")
+  sendAgentWorkerCommand(
     @Request() req: KoaRequest,
     @Path() id: TAgentId,
     @Path() worker: TAgentWorkerName,
-    @Body() body: IAgentFetchBody,
-  ): Promise<Readable> {
-    const result = await withRetryAfter(
-      (name, value) => this.setHeader(name, value),
-      () =>
-        this._workers.fetch(
-          getContextUser(req),
-          id,
-          worker,
-          body,
-          abortOnClose(req),
-        ),
-    );
-
-    this.setStatus(result.status);
-    for (const [name, value] of Object.entries(result.headers)) {
-      this.setHeader(name, value);
-    }
-    this.setHeader(AGENT_WORKER_STATUS_HEADER, String(result.status));
-
-    return result.body
-      ? Readable.fromWeb(result.body as WebReadableStream<Uint8Array>)
-      : Readable.from([]);
+    @Body() body: IWorkerCommandBody,
+  ): Promise<AgentCommandDto> {
+    return this._agents.workerCommand(getContextUser(req), id, worker, body);
   }
 
   /**
-   * Ключи настроек агента (или одного воркера): значение и статус
-   * применения — желаемая, доставленная и применённая версии, ошибка.
-   * @summary Настройки воркеров агента
+   * Записать ключ настроек воркера (тело — значение): новая версия желаемого.
+   * @summary Записать настройку воркера
    */
   @Security("jwt")
-  @ValidateQuery(AgentConfigsQuerySchema)
-  @Get("{id}/configs")
-  getAgentConfigs(
-    @Request() req: KoaRequest,
-    @Path() id: TAgentId,
-    @Query() worker?: TAgentWorkerName,
-  ): Promise<IAgentConfigEntryDto[]> {
-    return this._workers.listConfigs(getContextUser(req), id, worker);
-  }
-
-  /**
-   * Ключ настроек воркера: значение и статус применения.
-   * @summary Настройка воркера
-   */
-  @Security("jwt")
-  @Get("{id}/workers/{worker}/configs/{key}")
-  getAgentWorkerConfig(
-    @Request() req: KoaRequest,
-    @Path() id: TAgentId,
-    @Path() worker: TAgentWorkerName,
-    @Path() key: TAgentWorkerName,
-  ): Promise<IAgentConfigEntryDto> {
-    return this._workers.getConfig(getContextUser(req), id, worker, key);
-  }
-
-  /**
-   * Записать значение ключа (новая версия). Значение проверяется по схеме
-   * ключа из манифеста воркера (400 `AGENT_CONFIG_INVALID`); агент получит
-   * его сразу или при подключении, итог — в статусе и событии сокета.
-   * @summary Запись настройки воркера
-   */
-  @Security("jwt")
-  @ValidateBody(SetAgentConfigSchema)
-  @Put("{id}/workers/{worker}/configs/{key}")
+  @Put("configs/{key}")
   setAgentWorkerConfig(
     @Request() req: KoaRequest,
     @Path() id: TAgentId,
     @Path() worker: TAgentWorkerName,
     @Path() key: TAgentWorkerName,
-    @Body() body: ISetAgentConfigBody,
-  ): Promise<IAgentConfigEntryDto> {
-    return this._workers.setConfig(
-      getContextUser(req),
-      id,
-      worker,
-      key,
-      body.data,
-    );
+    @Body() data: any,
+  ): Promise<AgentConfigDto> {
+    return this._agents.setConfig(getContextUser(req), id, worker, key, data);
   }
 
-  /**
-   * Удалить ключ: агент удалит его у себя и у воркера. Ключа нет — 404.
-   * @summary Удаление настройки воркера
-   */
+  /** @summary Удалить настройку воркера */
   @Security("jwt")
-  @SuccessResponse(204, "No Content")
-  @Delete("{id}/workers/{worker}/configs/{key}")
+  @SuccessResponse(204)
+  @Delete("configs/{key}")
   async deleteAgentWorkerConfig(
     @Request() req: KoaRequest,
     @Path() id: TAgentId,
     @Path() worker: TAgentWorkerName,
     @Path() key: TAgentWorkerName,
   ): Promise<void> {
-    await this._workers.deleteConfig(getContextUser(req), id, worker, key);
+    await this._agents.deleteConfig(getContextUser(req), id, worker, key);
     this.setStatus(204);
   }
 }

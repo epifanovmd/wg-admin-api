@@ -1,7 +1,10 @@
 import { inject } from "inversify";
 
-import { Injectable } from "../../core";
-import type { AgentConfigStatusDto, IAgentMetricsPointDto } from "../agent";
+import {
+  type AgentConfigAppliedEvent,
+  type IAgentMetrics,
+  Injectable,
+} from "../../core";
 import { WgForwardService } from "../wg-forward";
 import {
   EWgInterfaceStatus,
@@ -14,23 +17,36 @@ import {
   WG_WORKER,
   WgNode,
   WgNodeService,
+  workerOsInfoPatch,
 } from "../wg-node";
 import { WgSocksAppService } from "../wg-socks";
 import {
   IWgNodeSysMetrics,
   WgLinkHealthService,
+  WgLiveStore,
   WgMeshService,
   WgStatsIngestService,
 } from "../wg-stats";
 import {
   ISocksWorkerMetrics,
   IWgForwardRouteReport,
+  IWgNodeInfoEvent,
   IWgStateResult,
   IWgWorkerMetrics,
 } from "./wg-worker.contract";
 
 /** Предел текста ошибки применения. */
 const APPLY_ERROR_MAX = 4000;
+
+/** Длина версии wg в колонке. */
+const WG_VERSION_MAX = 64;
+
+/**
+ * Сколько помнить принятые точки метрик, с: агент пересылает пачку, ответ на
+ * которую до него не дошёл, — повтор старых счётчиков после новых ingest
+ * принял бы за сброс счётчика. Повтор идёт сразу за потерянным ответом.
+ */
+const POINT_SEEN_TTL_SEC = 10 * 60;
 
 const num = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
@@ -87,8 +103,9 @@ export const applyErrorOf = (result: IWgStateResult): string | null => {
 
 /**
  * Данные воркеров ноды → домен: точки метрик (пиры, метрики узла, пробы
- * туннелей и нод, маршруты пробросов, прокси) и итоги применения желаемого
- * состояния (применённая версия, ошибка, статусы интерфейсов, маршруты).
+ * туннелей и нод, маршруты пробросов, прокси), итоги применения желаемого
+ * состояния (применённая версия, ошибка, статусы интерфейсов, маршруты) и
+ * сведения об узле от воркера wg.
  */
 @Injectable()
 export class WgAgentTelemetryService {
@@ -104,19 +121,27 @@ export class WgAgentTelemetryService {
     @inject(WgMeshService) private readonly _mesh: WgMeshService,
     @inject(WgForwardService) private readonly _forwards: WgForwardService,
     @inject(WgSocksAppService) private readonly _socks: WgSocksAppService,
+    @inject(WgLiveStore) private readonly _live: WgLiveStore,
   ) {}
 
   /**
    * Точка метрик агента: статистика пиров и узла — в историю и живые
    * события; пробы и маршруты — состояние «сейчас», из досылки не берутся.
+   * Повтор точки (та же `at` от того же агента, в любой копии API) — пропуск.
    */
-  async onMetrics(
-    agentId: string,
-    point: IAgentMetricsPointDto,
-  ): Promise<void> {
+  async onMetrics(agentId: string, point: IAgentMetrics): Promise<void> {
     const node = await this._nodes.findByAgentId(agentId);
 
     if (!node) return;
+    if (
+      (await this._live.incrBy(
+        `agent-point:${agentId}:${point.at}`,
+        1,
+        POINT_SEEN_TTL_SEC,
+      )) > 1
+    ) {
+      return;
+    }
 
     const wg = objectOf<IWgWorkerMetrics>(point.workers?.[WG_WORKER]);
     const socks = objectOf<ISocksWorkerMetrics>(point.workers?.[SOCKS_WORKER]);
@@ -143,35 +168,27 @@ export class WgAgentTelemetryService {
   }
 
   /**
-   * Статус настройки `wg/state` изменился: применена — итог воркера,
-   * отказ — ошибка применения ноды.
+   * Воркер отказал в настройке `wg/state` (не прошла проверку) — ошибка
+   * применения ноды. Применённая — итог придёт событием `state.result`.
    */
-  async onConfigStatus(status: AgentConfigStatusDto): Promise<void> {
-    if (status.worker !== WG_WORKER || status.key !== WG_STATE_CONFIG) return;
+  async onConfigApplied(event: AgentConfigAppliedEvent): Promise<void> {
+    if (event.worker !== WG_WORKER || event.key !== WG_STATE_CONFIG) return;
+    if (event.ok !== false) return;
 
-    const node = await this._nodes.findByAgentId(status.agentId);
+    const node = await this._nodes.findByAgentId(event.agentId);
 
     if (!node) return;
 
-    if (status.state === "applied") {
-      const result = objectOf<IWgStateResult>(status.result);
-
-      if (result) await this.applyResult(node, result);
-
-      return;
-    }
-    if (status.state === "failed") {
-      await this._nodes.applyAgentState(node.id, {
-        applyError: (
-          status.error?.message ??
-          status.error?.code ??
-          "Настройка не применена"
-        ).slice(0, APPLY_ERROR_MAX),
-      });
-    }
+    await this._nodes.applyAgentState(node.id, {
+      applyError: (
+        event.error?.message ??
+        event.error?.code ??
+        "Настройка не применена"
+      ).slice(0, APPLY_ERROR_MAX),
+    });
   }
 
-  /** Событие `state.result` воркера wg (итог повтора применения). */
+  /** Событие `state.result` воркера wg: итог применения. */
   async onStateResult(agentId: string, data: unknown): Promise<void> {
     const result = objectOf<IWgStateResult>(data);
     const node = result ? await this._nodes.findByAgentId(agentId) : null;
@@ -190,13 +207,30 @@ export class WgAgentTelemetryService {
   }
 
   /**
+   * Событие `node.info` воркера wg: версия и режим WireGuard, дистрибутив,
+   * ядро и занятые порты — в сведения ноды (поверх сведений агента).
+   */
+  async onNodeInfo(agentId: string, data: unknown): Promise<void> {
+    const info = objectOf<IWgNodeInfoEvent>(data);
+    const node = info ? await this._nodes.findByAgentId(agentId) : null;
+
+    if (!node || !info) return;
+
+    await this._nodes.applyAgentState(node.id, {
+      osInfoPatch: workerOsInfoPatch(info),
+      wgVersion:
+        typeof info.wgVersion === "string" && info.wgVersion
+          ? info.wgVersion.slice(0, WG_VERSION_MAX)
+          : null,
+    });
+  }
+
+  /**
    * Итог применения: версия (только растёт; итог старой версии не
    * перетирает ошибку новой), ошибка, статусы интерфейсов, маршруты.
    */
   async applyResult(node: WgNode, result: IWgStateResult): Promise<void> {
     if (typeof result.version !== "number") return;
-    // Без appliedAt — применение ещё идёт (ответ 202): итог придёт событием.
-    if (result.appliedAt === undefined) return;
     if (result.version < node.appliedVersion) return;
 
     await this._nodes.applyAgentState(node.id, {

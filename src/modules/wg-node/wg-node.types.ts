@@ -32,8 +32,6 @@ export interface IWgNodeOsInfo {
 export const WG_NODE_NAME_MAX = 120;
 export const WG_NODE_DESCRIPTION_MAX = 2000;
 export const WG_NODE_HOST_MAX = 255;
-export const WG_AGENT_LOGS_DEFAULT_LINES = 200;
-export const WG_AGENT_LOGS_MAX_LINES = 5000;
 
 /** Метка агента, по которой он привязывается к ноде (токен установки). */
 export const WG_NODE_ID_LABEL = "nodeId";
@@ -43,6 +41,9 @@ export const WG_WORKER = "wg";
 
 /** Воркер SOCKS5-прокси на агенте ноды. */
 export const SOCKS_WORKER = "socks";
+
+/** Команда воркера wg: перезапуск интерфейса `{ name }`. */
+export const WG_INTERFACE_RESTART_COMMAND = "interface.restart";
 
 /** Воркеры агента ноды — едут в архиве папки агента (agent/agent.yaml). */
 export const WG_NODE_WORKERS = [WG_WORKER, SOCKS_WORKER] as const;

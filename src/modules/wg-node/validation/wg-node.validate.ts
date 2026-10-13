@@ -1,10 +1,6 @@
 import { z } from "zod";
 
-import {
-  WG_AGENT_LOGS_MAX_LINES,
-  WG_NODE_DESCRIPTION_MAX,
-  WG_NODE_NAME_MAX,
-} from "../wg-node.types";
+import { WG_NODE_DESCRIPTION_MAX, WG_NODE_NAME_MAX } from "../wg-node.types";
 import { wgHostSchema } from "./wg-shared.validate";
 
 const name = z
@@ -55,16 +51,4 @@ export const CreateWgNodeInstallCommandSchema = z.object({
 
 export const BindWgNodeAgentSchema = z.object({
   agentId: z.string().regex(/^[0-9a-f]{32}$/, "Некорректный id агента"),
-});
-
-export const UpdateWgNodeWorkerSchema = z.object({
-  force: z.boolean().optional(),
-});
-
-export const WgNodeLogsQuerySchema = z.object({
-  lines: z.coerce.number().int().min(1).max(WG_AGENT_LOGS_MAX_LINES).optional(),
-  worker: z
-    .string()
-    .regex(/^[a-z][a-z0-9-]{0,31}$/, "Некорректное имя воркера")
-    .optional(),
 });

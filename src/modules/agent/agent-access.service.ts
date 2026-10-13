@@ -1,12 +1,12 @@
 import { inject, multiInject, optional } from "inversify";
 
 import type { TokenProvider } from "../../core";
-import { AccessService, Injectable } from "../../core";
-import { AgentError } from "./agent.errors";
+import { AccessService, AgentError, Injectable } from "../../core";
+import { AgentAccessError } from "./agent.errors";
 import { AgentPermissions } from "./agent.permissions";
 
 /** Действие над агентом: по нему выбирается право и решение политики. */
-export type TAgentAction = "view" | "manage" | "config" | "fetch" | "logs";
+export type TAgentAction = "view" | "manage" | "config" | "command" | "logs";
 
 /** Кто действует: id, роли и права (контекст запроса или права из БД). */
 export interface IAgentActor {
@@ -45,7 +45,7 @@ const ACTION_PERMISSIONS: Record<TAgentAction, string> = {
   view: AgentPermissions.VIEW,
   manage: AgentPermissions.MANAGE,
   config: AgentPermissions.CONFIG,
-  fetch: AgentPermissions.FETCH,
+  command: AgentPermissions.COMMAND,
   logs: AgentPermissions.LOGS,
 };
 
@@ -104,7 +104,7 @@ export class AgentAccessService {
   ): Promise<void> {
     if (await this.can(actor, agentId, action)) return;
     if (action !== "view" && (await this.can(actor, agentId, "view"))) {
-      throw AgentError.FORBIDDEN();
+      throw AgentAccessError.FORBIDDEN();
     }
 
     throw AgentError.NOT_FOUND();
@@ -120,7 +120,7 @@ export class AgentAccessService {
       for (const id of await policy.agentIds(actor, action)) ids.add(id);
     }
 
-    if (ids.size === 0) throw AgentError.FORBIDDEN();
+    if (ids.size === 0) throw AgentAccessError.FORBIDDEN();
 
     return ids;
   }
@@ -130,7 +130,7 @@ export class AgentAccessService {
    * обязателен (403).
    */
   requireAll(actor: IAgentActor, action: TAgentAction): void {
-    if (!this.hasAll(actor, action)) throw AgentError.AGENT_REQUIRED();
+    if (!this.hasAll(actor, action)) throw AgentAccessError.AGENT_REQUIRED();
   }
 }
 

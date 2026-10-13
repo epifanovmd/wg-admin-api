@@ -1,5 +1,6 @@
 import { inject } from "inversify";
 import { type EntityManager, IsNull } from "typeorm";
+import { isDeepStrictEqual } from "util";
 
 import type { IPaginatedDto, Pagination } from "../../core";
 import {
@@ -47,13 +48,27 @@ export interface IWgNodeAgentState {
   osInfo?: IWgNodeOsInfo | null;
   agentRemoteIp?: string | null;
   lastSeenAt?: Date | null;
+  /**
+   * Слить поля в `osInfo` (и убрать `remove`) одним запросом к БД, без чтения:
+   * сведения агента и воркера wg приходят одновременно и не затирают друг друга.
+   */
+  osInfoPatch?: IWgNodeOsInfoPatch;
 }
 
-/** Поля состояния, которые сравниваются по значению (jsonb — по JSON). */
+/** Слияние сведений узла: поля `set` поверх прежних, ключи `remove` — убрать. */
+export interface IWgNodeOsInfoPatch {
+  set: IWgNodeOsInfo;
+  remove?: Array<keyof IWgNodeOsInfo>;
+}
+
+/**
+ * Поля состояния, которые сравниваются по значению: jsonb — без учёта порядка
+ * ключей (Postgres хранит их в своём порядке).
+ */
 const sameValue = (a: unknown, b: unknown): boolean =>
   a instanceof Date || b instanceof Date
     ? (a as Date | null)?.getTime?.() === (b as Date | null)?.getTime?.()
-    : JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    : isDeepStrictEqual(a ?? null, b ?? null);
 
 const mapSaveError = (err: unknown): unknown => {
   if (isUniqueViolation(err)) return WgNodeError.NAME_TAKEN();
@@ -270,11 +285,12 @@ export class WgNodeService {
   /**
    * Состояние ноды от агента: пишутся только изменившиеся колонки (полный
    * save затёр бы `configVersion`, поднятый параллельной транзакцией);
-   * `appliedVersion` только растёт. Изменилось — событие ноды.
+   * `appliedVersion` только растёт, `osInfoPatch` сливается в БД. Изменилось —
+   * событие ноды.
    */
   async applyAgentState(
     nodeId: string,
-    state: IWgNodeAgentState,
+    { osInfoPatch, ...state }: IWgNodeAgentState,
   ): Promise<void> {
     const node = await this._repo.findOne({ where: { id: nodeId } });
 
@@ -283,7 +299,7 @@ export class WgNodeService {
     const patch: Partial<WgNode> = {};
 
     for (const [key, value] of Object.entries(state) as [
-      keyof IWgNodeAgentState,
+      Exclude<keyof IWgNodeAgentState, "osInfoPatch">,
       unknown,
     ][]) {
       if (value === undefined) continue;
@@ -299,12 +315,17 @@ export class WgNodeService {
     }
 
     const changed = Object.keys(patch);
+    const osChanged = osInfoPatch
+      ? await this._mergeOsInfo(nodeId, osInfoPatch)
+      : false;
     const quiet =
-      changed.length > 0 && changed.every(key => key === "lastSeenAt");
+      !osChanged &&
+      changed.length > 0 &&
+      changed.every(key => key === "lastSeenAt");
 
-    if (changed.length === 0) return;
+    if (changed.length === 0 && !osChanged) return;
 
-    await this._repo.update({ id: nodeId }, patch);
+    if (changed.length > 0) await this._repo.update({ id: nodeId }, patch);
     // Одна отметка «последний раз на связи» не стоит события.
     if (quiet) return;
 
@@ -315,6 +336,24 @@ export class WgNodeService {
         ? new WgNodeStatusChangedEvent(dto)
         : new WgNodeUpdatedEvent(dto),
     );
+  }
+
+  /** Слить сведения узла в `osInfo`; `true` — значение изменилось. */
+  private async _mergeOsInfo(
+    nodeId: string,
+    { set, remove = [] }: IWgNodeOsInfoPatch,
+  ): Promise<boolean> {
+    const merged =
+      "(COALESCE(os_info, '{}'::jsonb) || CAST(:set AS jsonb)) - CAST(:remove AS text[])";
+    const result = await this._repo
+      .createQueryBuilder()
+      .update(WgNode)
+      .set({ osInfo: () => merged })
+      .where(`id = :id AND os_info IS DISTINCT FROM ${merged}`, { id: nodeId })
+      .setParameters({ set: JSON.stringify(set), remove })
+      .execute();
+
+    return (result.affected ?? 0) > 0;
   }
 
   /** Ноды с агентами: id ноды и агента. */

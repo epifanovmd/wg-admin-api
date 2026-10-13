@@ -7,15 +7,15 @@ export const AgentPermissions = definePermissions(
   {
     VIEW: {
       name: "agent:view",
-      label: "Просмотр: агенты, воркеры, настройки, события, метрики",
+      label: "Просмотр: агенты, воркеры, настройки, команды, события, метрики",
     },
     MANAGE: {
       name: "agent:manage",
       label:
-        "Управление: отзыв, удаление, ключ, обновление, перезапуск воркеров",
+        "Управление: отзыв, удаление, ключ, обновление агента и воркеров, перезапуск воркеров",
     },
-    CONFIG: { name: "agent:config", label: "Настройки воркеров" },
-    FETCH: { name: "agent:fetch", label: "Запросы к воркерам" },
+    CONFIG: { name: "agent:config", label: "Настройки воркеров (значения)" },
+    COMMAND: { name: "agent:command", label: "Команды воркерам" },
     LOGS: { name: "agent:logs", label: "Журнал агента и воркеров" },
     ENROLL: {
       name: "agent:enroll",

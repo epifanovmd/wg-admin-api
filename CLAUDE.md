@@ -7,9 +7,10 @@
 ## Проект
 
 WG Admin — админка WireGuard: бэкенд (модульный монолит на Node.js + TypeScript) и
-воркеры узла на Go (`agent/workers`: `wg`, `socks`), которые запускает агент 1.3.0
-([github.com/epifanovmd/agent](https://github.com/epifanovmd/agent)) на нодах; на
-бэкенде связь с агентами — пакет `agent-sdk` в модуле `agent`. Бэкенд: Koa + tsoa (маршруты и OpenAPI из декораторов),
+воркеры узла на Go (`agent/workers`: `wg`, `socks`, пакет `worker` агента), которые
+запускает агент ([github.com/epifanovmd/agent](https://github.com/epifanovmd/agent), версия —
+`AGENT_VERSION`) на нодах; сторона сервера протокола агента — ядро `src/core/agent`
+(переносится из шаблона как есть), REST и права — модуль `agent`. Бэкенд: Koa + tsoa (маршруты и OpenAPI из декораторов),
 Inversify (DI), TypeORM + PostgreSQL, pg-boss (очередь задач на Postgres), Redis
 (между процессами), Socket.IO, Zod, pino, prom-client, Sentry; тесты —
 Mocha, Chai, Sinon; сборка `tsc`. Node >= 24. Роль процесса — `APP_ROLE=api|worker|all`.
@@ -32,7 +33,7 @@ yarn gen:module <name>    # каркас модуля по конвенциям 
 yarn migration:generate src/migrations/<Name> | migration:run | migration:revert
 yarn agent                # локальный агент на переднем плане (agent/agent.yaml; agent/dev.sh)
 yarn agent:pack           # архивы папки агента для узлов в agent/bundle (воркеры wg, socks — сборкой Go)
-yarn agent:fetch [версия] # скачать сборки агента с GitHub в agent/dist (e2e; прежняя — 1.4.0)
+yarn agent:fetch          # скачать сборки агента версии AGENT_VERSION с GitHub в agent/dist (e2e)
 scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]   # воркеры: Go в контейнере
 ```
 
@@ -40,8 +41,8 @@ scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]   # воркер
 `yarn test`; при изменении API, схемы БД или инфраструктуры — ещё `yarn test:e2e`; при
 изменении воркеров (`agent/`) — gofmt, `go vet`, `go test` и поднять
 `agent/workers/<имя>/VERSION` изменённого воркера (общий код `agent/internal`, `go.mod`,
-`go.sum` — оба). Формат настроек, ответов и метрик воркеров (`agent/internal/desired`, манифесты
-воркеров) — зеркало `src/modules/wg-agent/wg-worker.contract.ts`, менять синхронно.
+`go.sum` — оба). Формат настроек, команд, событий и метрик воркеров (`agent/internal/contract`,
+манифесты воркеров) — зеркало `src/modules/wg-agent/wg-worker.contract.ts`, менять синхронно.
 
 ## Никогда не редактировать вручную
 

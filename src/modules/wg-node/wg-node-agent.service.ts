@@ -1,20 +1,18 @@
 import { inject } from "inversify";
 
-import { Injectable, logger } from "../../core";
-import type { AuthContext } from "../../types/koa";
 import {
-  AgentDto,
   AgentEnrollmentService,
-  AgentService,
-  AgentWorkerService,
+  AgentError,
+  Agents,
   IAgentEnrollmentSource,
-  IAgentUpdateResultDto,
-  IAgentWorkerActionResultDto,
-} from "../agent";
+  Injectable,
+  logger,
+} from "../../core";
+import type { AuthContext } from "../../types/koa";
+import { AgentDto, AgentService } from "../agent";
 import type {
   ICreateWgNodeInstallCommandBody,
   IWgNodeInstallCommandDto,
-  IWgNodeLogsDto,
 } from "./dto";
 import { WgNode } from "./wg-node.entity";
 import { WgNodeError } from "./wg-node.errors";
@@ -22,7 +20,7 @@ import { WgNodePermissions } from "./wg-node.permissions";
 import { WgNodeService } from "./wg-node.service";
 import {
   WG_AGENT_INSTANCE,
-  WG_AGENT_LOGS_DEFAULT_LINES,
+  WG_INTERFACE_RESTART_COMMAND,
   WG_NODE_ID_LABEL,
   WG_NODE_INSTALL_TOKEN_TTL_MINUTES,
   WG_WORKER,
@@ -33,6 +31,9 @@ const MINUTE_MS = 60_000;
 
 /** Срок перезапуска интерфейса: wg-quick down/up на воркере. */
 const RESTART_TIMEOUT_MS = 90_000;
+
+/** Сколько ждать итог перезапуска (команда доходит до агента и воркера). */
+const RESTART_WAIT_MS = RESTART_TIMEOUT_MS + 10_000;
 
 /** Выпущенный для ноды токен регистрации. */
 export interface IWgNodeEnrollmentToken {
@@ -47,28 +48,19 @@ export interface IWgInterfaceRestartResult {
   status: string;
 }
 
-const formatEntry = (entry: IWgNodeLogsDto["entries"][number]): string =>
-  `${new Date(entry.at).toISOString()} ${entry.level} ${entry.source}: ${entry.msg}`;
-
-const messageOf = (body: unknown): string | null =>
-  body && typeof body === "object" && "message" in body
-    ? String((body as { message: unknown }).message)
-    : typeof body === "string" && body
-      ? body
-      : null;
-
 /**
- * Агент ноды (agent-sdk): токен регистрации с меткой ноды и команда
- * установки, привязка агента после регистрации, состояние ноды по агенту,
- * запросы к воркеру wg (перезапуск интерфейса), журнал, обновления агента и
- * воркеров, отвязка при отзыве и удалении.
+ * Агент ноды: токен регистрации с меткой ноды и команда установки, привязка
+ * агента после регистрации, состояние ноды по агенту, команды воркеру wg
+ * (перезапуск интерфейса), отвязка при отзыве и удалении. Действия с самим
+ * агентом (журнал, обновления, перезапуск воркеров) — маршруты агентов: к
+ * агенту ноды открывают доступ права ноды (`WgNodeAgentAccessPolicy`).
  */
 @Injectable()
 export class WgNodeAgentService {
   constructor(
     @inject(WgNodeService) private readonly _nodes: WgNodeService,
     @inject(AgentService) private readonly _agents: AgentService,
-    @inject(AgentWorkerService) private readonly _workers: AgentWorkerService,
+    @inject(Agents) private readonly _core: Agents,
     @inject(AgentEnrollmentService)
     private readonly _enrollment: AgentEnrollmentService,
   ) {}
@@ -151,9 +143,9 @@ export class WgNodeAgentService {
   ): string {
     return this._agents.installCommand({
       ...auth,
-      ...(baseUrl && { baseUrl }),
+      ...(baseUrl && { server: baseUrl }),
       name: node.name,
-    }).command;
+    });
   }
 
   /** Экземпляр агента проекта на ноде (`instance` в agent/agent.prod.yaml). */
@@ -262,82 +254,30 @@ export class WgNodeAgentService {
     actorId: string,
   ): Promise<IWgInterfaceRestartResult> {
     const agentId = await this._requireAgent(nodeId);
-    const response = await this._workers.request(
+
+    // Агент без связи — сразу 503: команда дождалась бы его, а ответ — нет.
+    if (!this._core.isOnline(await this._core.get(agentId))) {
+      throw AgentError.OFFLINE();
+    }
+
+    const queued = await this._core.workerCommand(
       agentId,
       WG_WORKER,
-      `/interfaces/${encodeURIComponent(name)}/restart`,
-      { method: "POST", actorId, timeoutMs: RESTART_TIMEOUT_MS },
+      WG_INTERFACE_RESTART_COMMAND,
+      { name },
+      { timeoutMs: RESTART_TIMEOUT_MS, actor: actorId },
     );
+    const done = await this._core.wait(queued.id, RESTART_WAIT_MS);
 
-    if (response.status >= 300) {
+    if (!done) throw AgentError.TIMEOUT();
+    if (!done.ok) {
       throw WgNodeError.WORKER_FAILED(
-        { status: response.status },
-        messageOf(response.body) ?? undefined,
+        { code: done.error?.code },
+        done.error?.message ?? "Интерфейс не перезапущен",
       );
     }
 
-    return response.body as IWgInterfaceRestartResult;
-  }
-
-  /** Журнал агента (или воркера) ноды с узла. */
-  async logs(
-    actor: AuthContext,
-    id: string,
-    query: { lines?: number; worker?: string },
-  ): Promise<IWgNodeLogsDto> {
-    await this._nodes.findFor(actor, id, WgNodePermissions.NODE_LOGS);
-
-    const agentId = await this._requireAgent(id);
-    const entries = await this._agents.logsOf(agentId, {
-      lines: query.lines ?? WG_AGENT_LOGS_DEFAULT_LINES,
-      ...(query.worker && { worker: query.worker }),
-    });
-
-    return { content: entries.map(formatEntry).join("\n"), entries };
-  }
-
-  /** Обновить агента ноды до новой версии. */
-  async updateAgent(
-    actor: AuthContext,
-    id: string,
-  ): Promise<IAgentUpdateResultDto> {
-    await this._nodes.findFor(actor, id, WgNodePermissions.NODE_AGENT);
-
-    return this._agents.updateAs(actor.userId, await this._requireAgent(id));
-  }
-
-  /** Обновить воркер агента ноды с сервера. */
-  async updateWorker(
-    actor: AuthContext,
-    id: string,
-    worker: string,
-    force: boolean,
-  ): Promise<IAgentWorkerActionResultDto> {
-    await this._nodes.findFor(actor, id, WgNodePermissions.NODE_AGENT);
-
-    return this._workers.updateAs(
-      actor.userId,
-      await this._requireAgent(id),
-      worker,
-      force,
-    );
-  }
-
-  /** Перезапустить воркер агента ноды. */
-  async restartWorker(
-    actor: AuthContext,
-    id: string,
-    worker: string,
-    force: boolean,
-  ): Promise<IAgentWorkerActionResultDto> {
-    await this._nodes.findFor(actor, id, WgNodePermissions.NODE_AGENT);
-
-    return this._workers.restartAs(
-      actor.userId,
-      await this._requireAgent(id),
-      worker,
-      force,
-    );
+    return done.result as IWgInterfaceRestartResult;
   }
 
   private async _requireAgent(nodeId: string): Promise<string> {

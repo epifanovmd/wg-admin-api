@@ -1,27 +1,22 @@
 import { randomBytes } from "crypto";
-import WebSocket from "ws";
 
 import { BASE_URL } from "./harness";
 
 /**
- * Фейковый агент ноды для сценариев домена: говорит с сервером по формату
- * agent-sdk (регистрация, WebSocket, hello, status, metrics, события,
- * ответы на настройки, запросы и действия), а вместо воркеров wg и socks —
- * их ответы. Настоящий агент с воркером — `real-agent.ts`.
+ * Фейковый агент ноды для сценариев домена: говорит с сервером по протоколу
+ * агента (`/agent/v1`: регистрация, hello, поток SSE с желаемым и командами,
+ * итоги, события, состояние, метрики), а вместо воркеров wg и socks — их
+ * ответы. Настоящий агент с воркерами — `agent.ts`.
  */
 
-interface IEnvelope {
-  type: string;
-  id?: string;
-  re?: string;
-  seq?: number;
-  data?: any;
-}
+/** Адрес протокола агента (сервер стенда известен после запуска). */
+const api = (): string => `${BASE_URL}/agent/v1`;
 
-/** Ответ воркера на запрос (`fetch`). */
-export interface IFakeFetchResponse {
-  status: number;
-  body?: unknown;
+/** Ответ воркера на команду (`worker.command`). */
+export interface IFakeCommandResult {
+  ok: boolean;
+  result?: unknown;
+  error?: { code: string; message: string };
 }
 
 export interface IFakeAgentOptions {
@@ -32,16 +27,16 @@ export interface IFakeAgentOptions {
 }
 
 const WG_MANIFEST = {
-  version: "1.0.0",
   configs: [{ key: "state" }, { key: "probes" }],
-  routes: [
-    { method: "POST", path: "/interfaces/{name}/restart" },
-    { method: "GET", path: "/state" },
+  commands: [{ type: "interface.restart" }],
+  events: [
+    { type: "state.result" },
+    { type: "route.changed" },
+    { type: "node.info" },
   ],
-  events: [{ type: "state.result" }, { type: "route.changed" }],
 };
 
-const SOCKS_MANIFEST = { version: "1.0.0", configs: [{ key: "proxies" }] };
+const SOCKS_MANIFEST = { configs: [{ key: "proxies" }] };
 
 const newId = (): string => randomBytes(16).toString("hex");
 
@@ -62,32 +57,34 @@ export const defaultStateResult = (state: any) => ({
 export class FakeNodeAgent {
   /** Последние значения настроек: `воркер/ключ` → `{ version, data }`. */
   readonly configs = new Map<string, { version: number; data: any }>();
-  /** Запросы к воркерам: `воркер METHOD path`. */
-  readonly fetches: Array<{ worker: string; method: string; path: string }> =
+  /** Команды воркерам: воркер, тип, аргументы. */
+  readonly workerCommands: Array<{ worker: string; type: string; args?: any }> =
     [];
-  /** Встроенные действия: имя и аргументы. */
-  readonly actions: Array<{ name: string; args?: any }> = [];
-  /** Последний `watch` сервера. */
+  /** Команды агенту (кроме `worker.command`): тип и аргументы. */
+  readonly commands: Array<{ type: string; args?: any }> = [];
+  /** Последнее наблюдение сервера (`watch` желаемого). */
   watch: any = null;
   stateResult: (state: any) => unknown;
-  /** Ответ на запрос к воркеру; по умолчанию — перезапуск интерфейса. */
-  onFetch: (
-    worker: string,
-    method: string,
-    path: string,
-  ) => IFakeFetchResponse = (_worker, _method, path) => {
-    const name = /^\/interfaces\/([^/]+)\/restart$/.exec(path)?.[1];
+  /** Ответ воркера на команду; по умолчанию — перезапуск интерфейса. */
+  onCommand: (worker: string, type: string, args: any) => IFakeCommandResult = (
+    _worker,
+    type,
+    args,
+  ) =>
+    type === "interface.restart"
+      ? { ok: true, result: { name: args?.name, status: "up" } }
+      : {
+          ok: false,
+          error: { code: "COMMAND_UNDECLARED", message: `нет команды ${type}` },
+        };
 
-    return name
-      ? { status: 200, body: { name: decodeURIComponent(name), status: "up" } }
-      : { status: 404, body: { message: "нет маршрута" } };
-  };
-
-  private _ws: WebSocket | null = null;
-  private _seq = 0;
+  private _stream: AbortController | null = null;
+  private _after = 0;
+  private _rev = 0;
   private _waiters: Array<() => void> = [];
-  private readonly _acks = new Map<string, () => void>();
   private _lastPut = 0;
+  private _health: Partial<Record<"wg" | "socks", Record<string, unknown>>> =
+    {};
 
   private constructor(
     readonly agentId: string,
@@ -106,7 +103,7 @@ export class FakeNodeAgent {
   ): Promise<FakeNodeAgent> {
     const name = options.name ?? `fake-${newId().slice(0, 8)}`;
     const labels = options.labels ?? {};
-    const res = await fetch(`${BASE_URL}/api/v1/agent-link/enroll`, {
+    const res = await fetch(`${api()}/enroll`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -135,96 +132,105 @@ export class FakeNodeAgent {
     return agent;
   }
 
-  /** Подключиться заново (после `disconnect`). */
+  /** hello и поток (после `disconnect` — заново). */
   async connect(): Promise<void> {
-    const ws = new WebSocket(
-      `${BASE_URL.replace(/^http/, "ws")}/api/v1/agent-link`,
-      "agent.v2",
-      {
-        headers: { authorization: `Agent ${this.agentId}.${this._secret}` },
+    await this._post("/hello", {
+      agent: {
+        version: "1.0.0",
+        bootId: newId(),
+        startedAt: Date.now(),
+        updateMode: "self",
+        install: "systemd",
       },
-    );
+      host: { os: "linux", arch: "amd64", hostname: this.name },
+      name: this.name,
+      labels: this._labels,
+      workers: [
+        { name: "wg", version: "2.0.0", release: true, manifest: WG_MANIFEST },
+        {
+          name: "socks",
+          version: "2.0.0",
+          release: true,
+          manifest: SOCKS_MANIFEST,
+        },
+      ],
+    });
 
-    this._ws = ws;
-    ws.on("message", raw => this._onMessage(JSON.parse(raw.toString())));
-    await new Promise<void>((resolve, reject) => {
-      ws.once("open", () => resolve());
-      ws.once("error", reject);
-      ws.once("unexpected-response", (_req, r) =>
-        reject(new Error(`HTTP ${r.statusCode}`)),
-      );
+    const controller = new AbortController();
+    const res = await fetch(`${api()}/stream?after=${this._after}`, {
+      headers: this._auth(),
+      signal: controller.signal,
     });
-    this._seq = 0;
-    this._send({
-      type: "hello",
-      data: {
-        agent: { version: "1.0.0", bootId: newId(), startedAt: Date.now() },
-        host: { os: "linux", arch: "amd64", hostname: this.name },
-        ...(Object.keys(this._labels).length && { labels: this._labels }),
-        workers: this._workers(),
-        ...(this.configs.size && { configs: this._configVersions() }),
-      },
-    });
-    await this.waitFor(() => this._welcomed, 5000, "welcome");
-    this.status();
+
+    if (res.status !== 200 || !res.body) {
+      throw new Error(`stream: ${res.status} ${await res.text()}`);
+    }
+    this._stream = controller;
+    void this._read(res.body).catch(() => undefined);
+    await this.waitFor(() => this._rev > 0, 5000, "желаемое");
+    await this.state();
   }
 
-  /** Закрыть соединение (агент пропал). */
+  /** Закрыть поток (агент пропал). */
   async disconnect(): Promise<void> {
-    const ws = this._ws;
-
-    this._ws = null;
-    this._welcomed = false;
-    if (!ws || ws.readyState === WebSocket.CLOSED) return;
-    await new Promise<void>(resolve => {
-      ws.once("close", () => resolve());
-      ws.close(1001);
-    });
+    this._stream?.abort();
+    this._stream = null;
   }
 
-  /** Состояние воркеров (поток `status`). */
-  status(
+  /** Состояние воркеров; `patch` — поля воркера (пульс и т. п.). */
+  async state(
     patch: Partial<Record<"wg" | "socks", Record<string, unknown>>> = {},
-  ): void {
-    this._stream("status", {
-      workers: this._workers(patch),
+  ): Promise<void> {
+    for (const [worker, value] of Object.entries(patch)) {
+      this._health[worker as "wg" | "socks"] = value;
+    }
+    await this._post("/state", {
+      desiredRev: this._rev,
       outbox: 0,
+      workers: (["wg", "socks"] as const).map(worker => ({
+        name: worker,
+        state: "running",
+        version: "2.0.0",
+        release: true,
+        restarts: 0,
+        health: { ok: true },
+        configs: this._applied(worker),
+        ...this._health[worker],
+      })),
     });
   }
 
   /** Точка метрик: воркеры (`wg`, `socks`) и узел (`host`). */
-  metrics(point: {
+  async metrics(point: {
     wg?: unknown;
     socks?: unknown;
     host?: Record<string, unknown>;
-    collectedAt?: number;
-  }): void {
-    this._stream("metrics", {
-      collectedAt: point.collectedAt ?? Date.now(),
-      ...(point.host && { host: point.host }),
-      workers: {
-        ...(point.wg !== undefined && { wg: point.wg }),
-        ...(point.socks !== undefined && { socks: point.socks }),
+    at?: number;
+  }): Promise<void> {
+    await this._post("/metrics", [
+      {
+        at: point.at ?? Date.now(),
+        ...(point.host && { host: point.host }),
+        workers: {
+          ...(point.wg !== undefined && { wg: point.wg }),
+          ...(point.socks !== undefined && { socks: point.socks }),
+        },
       },
-    });
+    ]);
   }
 
-  /** Событие воркера (важное): ждёт подтверждения сервера. */
+  /** Событие воркера: сервер принимает его в ответе. */
   async event(worker: string, type: string, data: unknown): Promise<void> {
     const id = newId();
-    const acked = new Promise<void>(resolve => this._acks.set(id, resolve));
+    const reply = (await this._post("/events", [
+      { id, worker, type, data, at: Date.now() },
+    ])) as { accepted?: string[]; rejected?: unknown[] };
 
-    this._send({
-      type: "event",
-      id,
-      data: { worker, type, data, at: Date.now() },
-    });
-    await Promise.race([
-      acked,
-      sleep(5000).then(() => {
-        throw new Error(`событие ${type} не подтверждено`);
-      }),
-    ]);
+    if (!reply.accepted?.includes(id)) {
+      throw new Error(
+        `событие ${type} не принято: ${JSON.stringify(reply.rejected)}`,
+      );
+    }
   }
 
   /** Значение настройки или `undefined`. */
@@ -279,184 +285,139 @@ export class FakeNodeAgent {
     }
   }
 
-  private _welcomed = false;
-
-  private _workers(
-    patch: Partial<Record<"wg" | "socks", Record<string, unknown>>> = {},
-  ) {
-    const configs = (worker: string) =>
-      Object.fromEntries(
-        [...this.configs]
-          .filter(([key]) => key.startsWith(`${worker}/`))
-          .map(([key, value]) => [
-            key.slice(worker.length + 1),
-            { version: value.version, ok: true },
-          ]),
-      );
-
-    return [
-      {
-        name: "wg",
-        state: "running",
-        version: "1.0.0",
-        release: true,
-        restarts: 0,
-        health: {
-          ok: true,
-          info: {
-            wgVersion: "wireguard-tools v1.0.0",
-            wgMode: "kernel",
-            udpPorts: [],
-            tcpPorts: [],
-          },
-        },
-        manifest: WG_MANIFEST,
-        configs: configs("wg"),
-        ...patch.wg,
-      },
-      {
-        name: "socks",
-        state: "running",
-        version: "1.0.0",
-        release: true,
-        restarts: 0,
-        health: { ok: true },
-        manifest: SOCKS_MANIFEST,
-        configs: configs("socks"),
-        ...patch.socks,
-      },
-    ];
+  private _auth(): Record<string, string> {
+    return { authorization: `Agent ${this.agentId}.${this._secret}` };
   }
 
-  private _configVersions() {
-    const out: Record<string, Record<string, number>> = {};
+  private async _post(path: string, body: unknown): Promise<unknown> {
+    const res = await fetch(`${api()}${path}`, {
+      method: "POST",
+      headers: { ...this._auth(), "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
 
-    for (const [key, value] of this.configs) {
-      const [worker, name] = key.split("/");
-
-      (out[worker] ??= {})[name] = value.version;
+    if (res.status >= 300) {
+      throw new Error(`POST ${path}: ${res.status} ${text}`);
     }
 
-    return out;
+    return text ? JSON.parse(text) : {};
   }
 
-  private _send(env: IEnvelope): void {
-    if (this._ws?.readyState === WebSocket.OPEN) {
-      this._ws.send(JSON.stringify(env));
-    }
+  private _applied(worker: string) {
+    return Object.fromEntries(
+      [...this.configs]
+        .filter(([key]) => key.startsWith(`${worker}/`))
+        .map(([key, value]) => [
+          key.slice(worker.length + 1),
+          { version: value.version, ok: true },
+        ]),
+    );
   }
 
-  private _stream(type: string, data: unknown): void {
-    this._seq += 1;
-    this._send({ type, seq: this._seq, data });
-  }
+  /** Поток SSE: события `desired` и `command`. */
+  private async _read(body: ReadableStream<Uint8Array>): Promise<void> {
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-  private _onMessage(env: IEnvelope): void {
-    switch (env.type) {
-      case "welcome":
-        this._welcomed = true;
-        break;
-      case "config.put":
-        this._onConfig(env.data);
-        break;
-      case "config.delete":
-        this.configs.delete(`${env.data.worker}/${env.data.key}`);
-        this.status();
-        break;
-      case "fetch":
-        this._onFetch(env);
-        break;
-      case "action":
-        this._onAction(env);
-        break;
-      case "watch":
-        this.watch = env.data;
-        break;
-      case "ack":
-        for (const id of env.data?.ids ?? []) {
-          this._acks.get(id)?.();
-          this._acks.delete(id);
+    for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
+      buffer += decoder.decode(chunk, { stream: true });
+
+      let end: number;
+
+      while ((end = buffer.indexOf("\n\n")) >= 0) {
+        const block = buffer.slice(0, end);
+
+        buffer = buffer.slice(end + 2);
+
+        let type = "";
+        const data: string[] = [];
+
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event:")) type = line.slice(6).trim();
+          else if (line.startsWith("data:")) data.push(line.slice(5).trim());
         }
-        break;
+        if (type && data.length) {
+          await this._onEvent(type, JSON.parse(data.join("\n"))).catch(
+            () => undefined,
+          );
+        }
+        for (const waiter of this._waiters.splice(0)) waiter();
+      }
+    }
+  }
+
+  private async _onEvent(type: string, data: any): Promise<void> {
+    if (type === "desired") await this._onDesired(data);
+    else if (type === "command") await this._onCommand(data);
+  }
+
+  /** Желаемое целиком: изменившиеся ключи — «применить», итог `wg/state` — событием. */
+  private async _onDesired(desired: any): Promise<void> {
+    this.watch = desired.watch ?? null;
+
+    const seen = new Set<string>();
+    let changed = false;
+
+    for (const [worker, part] of Object.entries<any>(desired.workers ?? {})) {
+      for (const [key, value] of Object.entries<any>(part.configs ?? {})) {
+        const id = `${worker}/${key}`;
+
+        seen.add(id);
+        if (this.configs.get(id)?.version === value.version) continue;
+        this.configs.set(id, { version: value.version, data: value.data });
+        this._lastPut = Date.now();
+        changed = true;
+        if (id === "wg/state") {
+          await this.event("wg", "state.result", this.stateResult(value.data));
+        }
+      }
+    }
+    for (const id of [...this.configs.keys()]) {
+      if (!seen.has(id)) {
+        this.configs.delete(id);
+        changed = true;
+      }
+    }
+    this._rev = desired.rev ?? this._rev;
+    if (changed) await this.state();
+  }
+
+  private async _onCommand(command: any): Promise<void> {
+    this._after = Math.max(this._after, command.seq ?? 0);
+
+    let reply: IFakeCommandResult;
+
+    if (command.type === "worker.command") {
+      const { worker, type, args } = command.args ?? {};
+
+      this.workerCommands.push({ worker, type, args });
+      reply = this.onCommand(worker, type, args);
+    } else {
+      this.commands.push({ type: command.type, args: command.args });
+      reply = { ok: true, result: this._agentResult(command) };
+    }
+    await this._post("/results", [{ re: command.id, ...reply }]);
+  }
+
+  private _agentResult(command: any): unknown {
+    switch (command.type) {
+      case "agent.logs":
+        return {
+          entries: [
+            {
+              at: Date.now(),
+              level: "info",
+              source: command.args?.worker ?? "agent",
+              msg: "журнал фейкового агента",
+            },
+          ],
+        };
+      case "agent.update":
+      case "worker.update":
+        return { version: command.args?.version ?? "2.0.0", previous: "2.0.0" };
       default:
+        return {};
     }
-    for (const waiter of this._waiters.splice(0)) waiter();
-  }
-
-  private _onConfig(data: any): void {
-    const key = `${data.worker}/${data.key}`;
-    const result =
-      data.worker === "wg" && data.key === "state"
-        ? this.stateResult(data.data)
-        : undefined;
-
-    this.configs.set(key, { version: data.version, data: data.data });
-    this._lastPut = Date.now();
-    this._send({
-      type: "config.applied",
-      id: newId(),
-      data: {
-        worker: data.worker,
-        key: data.key,
-        version: data.version,
-        ok: true,
-        ...(result !== undefined && { result }),
-      },
-    });
-    this.status();
-  }
-
-  private _onFetch(env: IEnvelope): void {
-    const { worker, method, path } = env.data;
-
-    this.fetches.push({ worker, method, path });
-
-    const response = this.onFetch(worker, method, path);
-
-    this._send({
-      type: "fetch.head",
-      re: env.id,
-      data: {
-        status: response.status,
-        headers: { "content-type": "application/json" },
-      },
-    });
-    if (response.body !== undefined) {
-      this._send({
-        type: "fetch.chunk",
-        re: env.id,
-        data: { data: JSON.stringify(response.body), encoding: "utf8" },
-      });
-    }
-    this._send({ type: "fetch.end", re: env.id, data: {} });
-  }
-
-  private _onAction(env: IEnvelope): void {
-    const { name, args } = env.data;
-
-    this.actions.push({ name, args });
-
-    const result =
-      name === "agent.logs"
-        ? {
-            entries: [
-              {
-                at: Date.now(),
-                level: "info",
-                source: args?.worker ?? "agent",
-                msg: "журнал фейкового агента",
-              },
-            ],
-          }
-        : name === "agent.update" || name === "worker.update"
-          ? { version: args?.version ?? "1.0.0", previous: "1.0.0" }
-          : undefined;
-
-    this._send({
-      type: "action.result",
-      id: newId(),
-      re: env.id,
-      data: { ok: true, ...(result !== undefined && { result }) },
-    });
   }
 }

@@ -1,8 +1,8 @@
 /**
  * Контракт воркеров агента ноды (`agent/workers/wg`, `agent/workers/socks`):
- * значения настроек, итоги их применения, метрики и события. Формат связи с
- * агентом — agent-sdk; здесь — только то, что понимают воркеры проекта
- * (их манифест — `GET /manifest`). Менять вместе с воркерами.
+ * значения настроек, команды, события и метрики пульса. Связь с агентом —
+ * ядро (`src/core/agent`); здесь — только то, что понимают воркеры проекта
+ * (их манифест — `manifest.go`). Менять вместе с воркерами.
  */
 import type { EWgForwardActiveRoute, EWgForwardRoute } from "../wg-forward";
 import type { IWgSocksAgentConfig } from "../wg-socks";
@@ -95,8 +95,9 @@ export interface IWgForwardRouteReport {
 }
 
 /**
- * Итог применения `state` (тело ответа на `PUT /config/state` и событие
- * `state.result` после повтора): ошибки частей не прерывают остальное.
+ * Итог применения `state` — событие `state.result` после каждого применения
+ * (новая версия, повтор после ошибки, смена маршрута): ошибки частей не
+ * прерывают остальное.
  */
 export interface IWgStateResult {
   version: number;
@@ -116,7 +117,7 @@ export interface IWgWorkerPeerStat {
   endpoint: string | null;
 }
 
-/** Ответ `GET /metrics` воркера wg. */
+/** Метрики пульса воркера wg. */
 export interface IWgWorkerMetrics {
   interfaces?: Array<{ name: string; peers: IWgWorkerPeerStat[] }>;
   tunnels?: IWgTunnelProbe[];
@@ -135,7 +136,7 @@ export interface ISocksProxiesConfig {
   proxies: IWgSocksAgentConfig[];
 }
 
-/** Ответ `GET /metrics` воркера socks. */
+/** Метрики пульса воркера socks. */
 export interface ISocksWorkerMetrics {
   proxies?: Array<{
     id: string;
@@ -145,9 +146,26 @@ export interface ISocksWorkerMetrics {
   }>;
 }
 
+/**
+ * Событие `node.info`: сведения об узле от воркера wg — при изменении
+ * (версия и режим WireGuard, дистрибутив, ядро, занятые порты).
+ */
+export interface IWgNodeInfoEvent {
+  wgVersion?: string | null;
+  wgMode?: string | null;
+  distro?: string;
+  kernel?: string;
+  udpPorts?: number[];
+  tcpPorts?: number[];
+}
+
 /** События воркера wg. */
 export const WG_EVENT_STATE_RESULT = "state.result";
 export const WG_EVENT_ROUTE_CHANGED = "route.changed";
+export const WG_EVENT_NODE_INFO = "node.info";
+
+/** Команда воркера wg: перезапуск интерфейса `{ name }` → `{ name, status }`. */
+export const WG_COMMAND_RESTART = "interface.restart";
 
 /** MTU IPIP-туннеля: 1500 − 20 байт заголовка IPIP. */
 export const WG_TUNNEL_MTU = 1480;

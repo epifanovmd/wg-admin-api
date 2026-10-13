@@ -39,6 +39,10 @@ jobs:
     defaults:
       run:
         working-directory: agent
+    # Модуль агента (пакеты protocol и worker) — прямо с GitHub, мимо прокси и базы сумм Go:
+    # версия агента перевыпускается под тем же номером, сумма — в go.sum.
+    env:
+      GOPRIVATE: github.com/epifanovmd/*
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,7 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # shellcheck предустановлен в образе ubuntu-latest.
-      - run: shellcheck scripts/*.sh scripts/db/*.sh test/smoke/*.sh agent/*.sh agent/workers/*/*.sh agent/workers/*/build agent/workers/*/run
+      - run: shellcheck scripts/*.sh scripts/db/*.sh agent/*.sh agent/workers/*/*.sh agent/workers/*/build agent/workers/*/run agent/workers/*/cleanup
 
   migrations:
     runs-on: ubuntu-latest

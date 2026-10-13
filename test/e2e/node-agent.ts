@@ -64,21 +64,16 @@ export const agentState = async (agent: FakeNodeAgent) => {
 };
 
 /**
- * Итог применения от воркера wg (событие `state.result`) и сведения о нём
- * (`status`: версия wg, режим, порты).
+ * Итог применения от воркера wg (событие `state.result`) и сведения об узле
+ * (событие `node.info`: версия wg, режим, порты).
  */
 export const report = async (agent: FakeNodeAgent, body: any) => {
   if (body.wgVersion !== undefined || body.os) {
-    agent.status({
-      wg: {
-        health: {
-          ok: true,
-          info: {
-            wgVersion: body.wgVersion,
-            ...(body.os ?? {}),
-          },
-        },
-      },
+    await agent.event("wg", "node.info", {
+      wgVersion: body.wgVersion ?? null,
+      udpPorts: [],
+      tcpPorts: [],
+      ...(body.os ?? {}),
     });
   }
   if (body.interfaces) {
@@ -109,7 +104,7 @@ export const report = async (agent: FakeNodeAgent, body: any) => {
 export const stats = async (agent: FakeNodeAgent, body: any) => {
   const sys = body.sys;
 
-  agent.metrics({
+  await agent.metrics({
     wg: {
       interfaces: body.interfaces ?? [],
       ...(body.tunnels && { tunnels: body.tunnels }),

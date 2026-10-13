@@ -1,4 +1,4 @@
-/** Комната списка агентов: изменения агентов, проблемы, события воркеров. */
+/** Комната списка агентов: изменения агентов и события воркеров. */
 export const AGENTS_ROOM = "agents";
 
 /** Тип комнаты одного агента для `room:subscribe { type, id }`. */
@@ -6,10 +6,7 @@ export const AGENT_ROOM_TYPE = "agent";
 
 const AGENT_ROOM_PREFIX = "agent_";
 
-/**
- * Комната агента: точки метрик и журнал (пока клиент в комнате — `watch`),
- * события воркеров, статусы настроек, итоги действий, изменения агента.
- */
+/** Комната агента: метрики, журнал (пока клиент в комнате — наблюдение), команды, настройки. */
 export const agentRoom = (agentId: string): string =>
   `${AGENT_ROOM_PREFIX}${agentId}`;
 
@@ -19,75 +16,34 @@ export const agentIdOfRoom = (room: string): string | null =>
     ? room.slice(AGENT_ROOM_PREFIX.length)
     : null;
 
-/** Id агента, который выдаёт SDK: 32 шестнадцатеричных символа. */
+/** Id агента: 32 шестнадцатеричных символа. */
 export const AGENT_ID_PATTERN = /^[0-9a-f]{32}$/;
 
 export const isAgentId = (value: unknown): value is string =>
   typeof value === "string" && AGENT_ID_PATTERN.test(value);
 
-/** Длина id агента в колонках. */
-export const AGENT_ID_MAX = 64;
-
 /** Имя воркера и ключа настроек — как у агента. */
 export const WORKER_NAME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 
-/** Длина имени воркера и ключа настроек. */
-export const WORKER_NAME_MAX = 32;
+/** Тип команды и события воркера. */
+export const COMMAND_TYPE_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/;
 
-/** Тип события воркера. */
-export const EVENT_TYPE_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/;
+/** Способ установки агента: служба (root), служба пользователя, без установки. */
+export const AGENT_INSTALL_MODES = ["systemd", "rootless", "run"] as const;
 
-/** Длина типа события. */
-export const EVENT_TYPE_MAX = 64;
+export type AgentInstallMode = (typeof AGENT_INSTALL_MODES)[number];
 
-/** Уровни журнала агента — от подробного к важному. */
 export const AGENT_LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 
 export type TAgentLogLevel = (typeof AGENT_LOG_LEVELS)[number];
 
-/** Наблюдение (`watch`), пока клиент в комнате агента. */
+/** Наблюдение, пока клиент в комнате агента: метрики раз в секунду, срок — продлевается. */
 export const AGENT_WATCH = {
-  /** Частота метрик, мс. */
   metricsIntervalMs: 1_000,
-  /** Срок наблюдателя без продления (процесс упал), мс; SDK продлевает на половине срока. */
-  ttlMs: 30_000,
-  /** Уровень журнала по умолчанию. */
+  ttlMs: 60_000,
+  renewMs: 20_000,
   logLevel: "info" as TAgentLogLevel,
 };
 
-/** Канал NOTIFY: агенты, изменённые в другом процессе (payload — JSON). */
-export const AGENTS_CHANGED_CHANNEL = "agents_changed";
-
-/** Заголовок ответа прокси запроса к воркеру: статус ответа воркера. */
-export const AGENT_WORKER_STATUS_HEADER = "X-Agent-Worker-Status";
-
-/** Запросы к воркеру, которые попадают в аудит: изменяющие. */
-export const AGENT_AUDITED_FETCH_METHODS: readonly string[] = [
-  "POST",
-  "PUT",
-  "PATCH",
-  "DELETE",
-];
-
-/** Очередь cron-уборки событий и истории метрик. */
-export const AGENT_PRUNE_QUEUE = "agents.prune";
-
-/** «Агент на связи с другим процессом»: повторить через, с. */
-export const AGENT_ELSEWHERE_RETRY_SECONDS = 2;
-
-/** Срок запроса к воркеру по умолчанию и предел, мс. */
-export const AGENT_FETCH_TIMEOUT = { defaultMs: 30_000, maxMs: 600_000 };
-
-/** Тело запроса к воркеру — не больше, байт (предел агента — 4 МБ). */
-export const AGENT_FETCH_BODY_MAX = 4 * 1024 * 1024;
-
-/** Встроенное действие агента. */
-export type TAgentActionName =
-  | "worker.restart"
-  | "worker.update"
-  | "agent.update"
-  | "agent.rotateKey"
-  | "agent.logs";
-
-/** Длина открытой части токена регистрации (`<prefix>.<secret>`), символов. */
-export const ENROLLMENT_TOKEN_PREFIX_LENGTH = 8;
+/** Сколько ждать итог команды воркеру из REST по умолчанию и не дольше, с. */
+export const AGENT_COMMAND_WAIT = { default: 0, max: 120 };

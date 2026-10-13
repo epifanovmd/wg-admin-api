@@ -8,7 +8,7 @@ import (
 
 	"wgadmin/agent/internal/apply"
 	"wgadmin/agent/internal/cleanup"
-	"wgadmin/agent/internal/desired"
+	"wgadmin/agent/internal/contract"
 	"wgadmin/agent/internal/failover"
 	"wgadmin/agent/internal/probe"
 	"wgadmin/agent/internal/sysinfo"
@@ -56,7 +56,7 @@ func (s *realSystem) Info() HostInfo {
 	return info
 }
 
-func (s *realSystem) Apply(state desired.State, health *failover.Health) apply.Result {
+func (s *realSystem) Apply(state contract.State, health *failover.Health) apply.Result {
 	return s.applier.Apply(state, health)
 }
 
@@ -67,34 +67,34 @@ func (s *realSystem) Cleanup() {
 	s.applier = apply.New(s.configDir, s.stateFile)
 }
 
-func (s *realSystem) Dump(names []string) []desired.InterfaceStats {
+func (s *realSystem) Dump(names []string) []contract.InterfaceStats {
 	dump, err := wg.ReadDump()
 	if err != nil {
-		return []desired.InterfaceStats{}
+		return []contract.InterfaceStats{}
 	}
 
 	return pickInterfaces(dump, names)
 }
 
 // pickInterfaces — интерфейсы names из дампа, в порядке names.
-func pickInterfaces(dump wg.Dump, names []string) []desired.InterfaceStats {
-	result := []desired.InterfaceStats{}
+func pickInterfaces(dump wg.Dump, names []string) []contract.InterfaceStats {
+	result := []contract.InterfaceStats{}
 
 	for _, name := range names {
 		if peers, ok := dump[name]; ok {
-			result = append(result, desired.InterfaceStats{Name: name, Peers: peers})
+			result = append(result, contract.InterfaceStats{Name: name, Peers: peers})
 		}
 	}
 
 	return result
 }
 
-func (s *realSystem) ProbeTunnels(tunnels []desired.Tunnel) []desired.TunnelProbe {
+func (s *realSystem) ProbeTunnels(tunnels []contract.Tunnel) []contract.TunnelProbe {
 	return probe.Tunnels(tunnels)
 }
 
 func (s *realSystem) ProbeIPs(ips []string) map[string]bool { return probe.IPs(ips) }
 
-func (s *realSystem) ProbeNodes(targets []desired.ProbeTarget) []desired.NodeProbe {
+func (s *realSystem) ProbeNodes(targets []contract.ProbeTarget) []contract.NodeProbe {
 	return probe.Nodes(targets)
 }

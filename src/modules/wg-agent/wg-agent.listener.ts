@@ -1,21 +1,33 @@
 import { inject } from "inversify";
 
-import { EventBus, Injectable, logger } from "../../core";
-import { AgentConfigChangedEvent, AgentMetricsReceivedEvent } from "../agent";
+import {
+  AgentConfigAppliedEvent,
+  AgentEventReceivedEvent,
+  AgentMetricsReceivedEvent,
+  EventBus,
+  Injectable,
+  logger,
+} from "../../core";
 import { ISocketEventListener } from "../socket";
 import {
+  WG_WORKER,
   WgNodeCreatedEvent,
   WgNodeDeletedEvent,
   WgNodeHostChangedEvent,
 } from "../wg-node";
 import { WgAgentSyncService } from "./wg-agent-sync.service";
 import { WgAgentTelemetryService } from "./wg-agent-telemetry.service";
+import {
+  WG_EVENT_NODE_INFO,
+  WG_EVENT_ROUTE_CHANGED,
+  WG_EVENT_STATE_RESULT,
+} from "./wg-worker.contract";
 
 /**
  * События агентов → домен: точки метрик (статистика, пробы, маршруты,
- * прокси) и статусы настройки `wg/state` (применённая версия, ошибки,
- * статусы интерфейсов). Появление, удаление и смена адреса ноды меняют цели
- * проб у всех нод — их настройки пересобираются.
+ * прокси), отказ воркера в настройке `wg/state`, события воркера wg (итог
+ * применения, смена маршрутов, сведения об узле). Появление, удаление и смена
+ * адреса ноды меняют цели проб у всех нод — их настройки пересобираются.
  */
 @Injectable()
 export class WgAgentListener implements ISocketEventListener {
@@ -39,9 +51,15 @@ export class WgAgentListener implements ISocketEventListener {
       ),
     );
     this._eventBus.on(
-      AgentConfigChangedEvent,
-      guard("Статус настройки агента не принят", ({ status }) =>
-        this._telemetry.onConfigStatus(status),
+      AgentConfigAppliedEvent,
+      guard("Итог настройки агента не принят", event =>
+        this._telemetry.onConfigApplied(event),
+      ),
+    );
+    this._eventBus.on(
+      AgentEventReceivedEvent,
+      guard("Событие воркера wg не принято", ({ agentId, event }) =>
+        this._onWorkerEvent(agentId, event.worker, event.type, event.data),
       ),
     );
 
@@ -50,5 +68,22 @@ export class WgAgentListener implements ISocketEventListener {
     this._eventBus.on(WgNodeCreatedEvent, resyncAll);
     this._eventBus.on(WgNodeDeletedEvent, resyncAll);
     this._eventBus.on(WgNodeHostChangedEvent, resyncAll);
+  }
+
+  private async _onWorkerEvent(
+    agentId: string,
+    worker: string,
+    type: string,
+    data: unknown,
+  ): Promise<void> {
+    if (worker !== WG_WORKER) return;
+
+    if (type === WG_EVENT_STATE_RESULT) {
+      await this._telemetry.onStateResult(agentId, data);
+    } else if (type === WG_EVENT_ROUTE_CHANGED) {
+      await this._telemetry.onRouteChanged(agentId, data);
+    } else if (type === WG_EVENT_NODE_INFO) {
+      await this._telemetry.onNodeInfo(agentId, data);
+    }
   }
 }

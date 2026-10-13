@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"wgadmin/agent/internal/desired"
+	"wgadmin/agent/internal/contract"
 	"wgadmin/agent/internal/logx"
 	"wgadmin/agent/internal/shell"
 )
@@ -28,7 +28,7 @@ var (
 // TunnelMatches — существующий туннель совпадает с желаемым (тот же remote,
 // адрес, MTU и поднят): пересоздание рвёт трафик через релей.
 // link — `ip -d -o link show`, addr — `ip -o -4 addr show dev`.
-func TunnelMatches(link, addr string, tunnel desired.Tunnel) bool {
+func TunnelMatches(link, addr string, tunnel contract.Tunnel) bool {
 	flags := []string{}
 	if match := linkFlags.FindStringSubmatch(link); match != nil {
 		flags = strings.Split(match[1], ",")
@@ -63,7 +63,7 @@ func TunnelMatches(link, addr string, tunnel desired.Tunnel) bool {
 }
 
 // ApplyTunnels приводит IPIP-туннели к желаемому списку.
-func ApplyTunnels(wanted []desired.Tunnel, previous []string) error {
+func ApplyTunnels(wanted []contract.Tunnel, previous []string) error {
 	if len(wanted) > 0 {
 		shell.Run("modprobe ipip || true", commandTimeout)
 	}
@@ -109,7 +109,7 @@ func ApplyTunnels(wanted []desired.Tunnel, previous []string) error {
 // ForwardRules — аргументы iptables пробросов: DNAT входящего порта,
 // masquerade к цели и разрешение пересылки в обе стороны (без него на
 // хосте с Docker — FORWARD policy DROP — проброс молча режется).
-func ForwardRules(forwards []desired.Forward) [][]string {
+func ForwardRules(forwards []contract.Forward) [][]string {
 	var rules [][]string
 
 	for _, forward := range forwards {
@@ -129,7 +129,7 @@ func ForwardRules(forwards []desired.Forward) [][]string {
 
 // ApplyForwards пересобирает цепочки пробросов; переход в FORWARD — первым
 // правилом, раньше политики DROP и цепочек Docker.
-func ApplyForwards(forwards []desired.Forward) error {
+func ApplyForwards(forwards []contract.Forward) error {
 	shell.Run("sysctl -qw net.ipv4.ip_forward=1 || true", commandTimeout)
 
 	for _, hook := range []struct{ table, chain, parent, insert string }{

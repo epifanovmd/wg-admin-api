@@ -1,42 +1,31 @@
-import type { Watch } from "agent-sdk/server";
 import { inject } from "inversify";
 
-import { Injectable, logger } from "../../core";
+import { Agents, Injectable, logger } from "../../core";
 import { SocketServerService } from "../socket";
-import { AgentRuntime } from "./agent.runtime";
 import { AGENT_WATCH, agentIdOfRoom, TAgentLogLevel } from "./agent.types";
 
-/** Сокет смотрит агента: наблюдатель SDK (продлевается сам до close). */
-interface IWatch {
-  agentId: string;
-  socketId: string;
-  level: TAgentLogLevel;
-  /** Открытие наблюдателя; undefined — не открылся. */
-  handle: Promise<Watch | undefined>;
-}
-
-/** Наблюдатель сокета: id — от сокета (уникален среди всех процессов). */
-export const watchIdOf = (socketId: string): string => `socket:${socketId}`;
-
-const watchKey = (socketId: string, agentId: string): string =>
-  `${socketId}:${agentId}`;
+const LEVEL_RANK: Record<TAgentLogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
 
 /**
- * Пока сокет этого процесса в комнате `agent_<id>`, держит наблюдателя
- * `watch`: агент присылает метрики раз в секунду и журнал с уровня клиента.
- * Наблюдатель живёт в копии с соединением агента: в другой копии `watch` —
- * `AGENT_ELSEWHERE`, наблюдения нет (липкий балансировщик приводит сокет и
- * агента в одну копию). SDK продлевает его сам; снимается при выходе из
- * комнаты (и при отключении сокета); процесс упал — истекает сам.
+ * Пока сокеты этой копии в комнате `agent_<id>`, агент под наблюдением (желаемое `watch`):
+ * метрики раз в секунду, журнал — с самого подробного уровня зрителей. Срок наблюдения
+ * продлевается, пока зрители есть; ушли — наблюдение истекает само.
  */
 @Injectable()
 export class AgentWatchService {
-  private readonly _watches = new Map<string, IWatch>();
+  /** agentId → socketId → уровень. */
+  private readonly _viewers = new Map<string, Map<string, TAgentLogLevel>>();
+  private _timer: NodeJS.Timeout | null = null;
   private _detach: (() => void) | null = null;
 
   constructor(
     @inject(SocketServerService) private readonly _server: SocketServerService,
-    @inject(AgentRuntime) private readonly _runtime: AgentRuntime,
+    @inject(Agents) private readonly _agents: Agents,
   ) {}
 
   start(): void {
@@ -52,93 +41,82 @@ export class AgentWatchService {
       adapter.off("join-room", onJoin);
       adapter.off("leave-room", onLeave);
     };
+    this._timer = setInterval(() => {
+      for (const agentId of this._viewers.keys()) void this.renew(agentId);
+    }, AGENT_WATCH.renewMs);
+    this._timer.unref();
   }
 
-  async stop(): Promise<void> {
+  stop(): void {
     this._detach?.();
-    this._detach = null;
-
-    const watches = [...this._watches.values()];
-
-    this._watches.clear();
-    await Promise.allSettled(watches.map(watch => this.unwatch(watch)));
+    if (this._timer) clearInterval(this._timer);
+    this._viewers.clear();
   }
 
-  /** Уровень журнала наблюдателя сокета; `false` — сокет не смотрит агента. */
+  /** Уровень журнала зрителя; `false` — сокет не смотрит агента. */
   setLogLevel(
     socketId: string,
     agentId: string,
     level: TAgentLogLevel,
   ): boolean {
-    const watch = this._watches.get(watchKey(socketId, agentId));
+    const viewers = this._viewers.get(agentId);
 
-    if (!watch) return false;
-    if (watch.level !== level) {
-      // Новые параметры — новым наблюдателем с тем же id.
-      const previous = watch.handle;
-
-      watch.level = level;
-      watch.handle = previous
-        .then(handle => handle?.close())
-        .catch(() => {})
-        .then(() => this.open(watch));
-    }
+    if (!viewers?.has(socketId)) return false;
+    viewers.set(socketId, level);
+    void this.renew(agentId);
 
     return true;
   }
 
   private join(room: string, socketId: string): void {
     const agentId = agentIdOfRoom(room);
-    const key = agentId && watchKey(socketId, agentId);
 
-    if (!agentId || !key || this._watches.has(key)) return;
+    if (!agentId) return;
+    const viewers =
+      this._viewers.get(agentId) ?? new Map<string, TAgentLogLevel>();
 
-    const watch: IWatch = {
-      agentId,
-      socketId,
-      level: AGENT_WATCH.logLevel,
-      handle: Promise.resolve(undefined),
-    };
-
-    watch.handle = this.open(watch);
-    this._watches.set(key, watch);
+    viewers.set(socketId, AGENT_WATCH.logLevel);
+    this._viewers.set(agentId, viewers);
+    void this.renew(agentId);
   }
 
   private leave(room: string, socketId: string): void {
     const agentId = agentIdOfRoom(room);
-    const watch = agentId && this._watches.get(watchKey(socketId, agentId));
+    const viewers = agentId ? this._viewers.get(agentId) : undefined;
 
-    if (!watch) return;
-
-    this._watches.delete(watchKey(socketId, watch.agentId));
-    void this.unwatch(watch);
+    if (!agentId || !viewers) return;
+    viewers.delete(socketId);
+    if (!viewers.size) this._viewers.delete(agentId);
   }
 
-  private async open(watch: IWatch): Promise<Watch | undefined> {
+  private async renew(agentId: string): Promise<void> {
+    const viewers = this._viewers.get(agentId);
+
+    if (!viewers?.size) return;
+    const level = [...viewers.values()].sort(
+      (a, b) => LEVEL_RANK[a] - LEVEL_RANK[b],
+    )[0];
+
     try {
-      return await this._runtime.agents.watch(watch.agentId, {
-        id: watchIdOf(watch.socketId),
+      const agent = await this._agents.find(agentId);
+
+      if (!agent || agent.revokedAt) return;
+      const current = agent.watch;
+      const fresh =
+        current?.until &&
+        current.until - Date.now() >
+          AGENT_WATCH.ttlMs - AGENT_WATCH.renewMs - 5_000;
+
+      if (fresh && current?.logLevel === level) return;
+      await this._agents.setWatch(agentId, {
         metricsIntervalMs: AGENT_WATCH.metricsIntervalMs,
-        logLevel: watch.level,
-        ttlMs: AGENT_WATCH.ttlMs,
+        logLevel: level,
+        until: Date.now() + AGENT_WATCH.ttlMs,
       });
     } catch (err) {
       logger.warn(
-        { err, agentId: watch.agentId },
-        "[Agent] Наблюдение за агентом не началось",
-      );
-
-      return undefined;
-    }
-  }
-
-  private async unwatch(watch: IWatch): Promise<void> {
-    try {
-      await (await watch.handle)?.close();
-    } catch (err) {
-      logger.warn(
-        { err, agentId: watch.agentId },
-        "[Agent] Наблюдение за агентом не снято",
+        { err, agentId },
+        "[Agent] Наблюдение за агентом не продлено",
       );
     }
   }

@@ -23,77 +23,114 @@ import {
 } from "../../core";
 import { UUID } from "../../core/http";
 import { KoaRequest } from "../../types/koa";
-import { AgentEnrollmentService } from "./agent-enrollment.service";
+import { AgentService } from "./agent.service";
 import {
   AgentEnrollmentTokenDto,
-  ICreateAgentEnrollmentTokenBody,
+  IAgentInstallCommandDto,
+  IAgentReleaseDto,
   ICreatedAgentEnrollmentTokenDto,
 } from "./dto";
 import {
-  CreateAgentEnrollmentTokenSchema,
+  CreateEnrollmentTokenSchema,
+  InstallCommandBodySchema,
   PageQuerySchema,
 } from "./validation";
 
+interface ICreateEnrollmentTokenBody {
+  name: string;
+  /** Метки зарегистрированных агентов (агент их не перепишет). */
+  labels?: Record<string, string>;
+  maxUses?: number;
+  expiresAt?: Date;
+}
+
+interface IInstallCommandBody {
+  /** Токен регистрации (или `tokenFile` — путь к файлу с ним на узле). */
+  token?: string;
+  tokenFile?: string;
+  name?: string;
+  /** Адрес API для узла; без него — `AGENT_PUBLIC_URL`. */
+  baseUrl?: string;
+  mode?: "systemd" | "rootless" | "run";
+}
+
+/** Регистрация агентов: токены, команда установки, каталог сборок воркеров. */
 @Injectable()
 @Tags("Agent")
 @Response<IErrorResponseDto>("default", "Ошибка")
-@Route("api/v1/agent-enrollment-tokens")
+@Route("api/v1/agent-enrollment")
 export class AgentEnrollmentController extends Controller {
-  constructor(
-    @inject(AgentEnrollmentService)
-    private readonly _enrollment: AgentEnrollmentService,
-  ) {
+  constructor(@inject(AgentService) private readonly _agents: AgentService) {
     super();
   }
 
   /**
-   * Создать токен регистрации агентов. Полный токен (`token`) — только в
-   * этом ответе: он кладётся в настройки агента (`enroll.token`) или в
-   * команду установки. `maxUses` не задан — многоразовый (парк машин).
-   * @summary Создание токена регистрации
+   * Создать токен регистрации; полный токен — только в этом ответе.
+   * @summary Создать токен регистрации
    */
-  @Security("jwt", ["permission:agent:enroll"])
-  @ValidateBody(CreateAgentEnrollmentTokenSchema)
-  @SuccessResponse(201, "Created")
-  @Post()
+  @Security("jwt")
+  @SuccessResponse(201)
+  @ValidateBody(CreateEnrollmentTokenSchema)
+  @Post("tokens")
   async createAgentEnrollmentToken(
     @Request() req: KoaRequest,
-    @Body() body: ICreateAgentEnrollmentTokenBody,
+    @Body() body: ICreateEnrollmentTokenBody,
   ): Promise<ICreatedAgentEnrollmentTokenDto> {
-    const created = await this._enrollment.createToken(
-      getContextUser(req).userId,
-      body,
-    );
+    const created = await this._agents.createToken(getContextUser(req), body);
 
     this.setStatus(201);
 
     return created;
   }
 
-  /**
-   * Токены регистрации, новые первыми; секреты не возвращаются.
-   * @summary Список токенов регистрации
-   */
-  @Security("jwt", ["permission:agent:enroll"])
+  /** @summary Токены регистрации */
+  @Security("jwt")
   @ValidateQuery(PageQuerySchema)
-  @Get()
+  @Get("tokens")
   getAgentEnrollmentTokens(
+    @Request() req: KoaRequest,
     @Query() offset?: number,
     @Query() limit?: number,
   ): Promise<IPaginatedDto<AgentEnrollmentTokenDto>> {
-    return this._enrollment.listTokens(offset, limit);
+    return this._agents.listTokens(getContextUser(req), offset, limit);
+  }
+
+  /** @summary Отозвать токен регистрации */
+  @Security("jwt")
+  @SuccessResponse(204)
+  @Post("tokens/{id}/revoke")
+  async revokeAgentEnrollmentToken(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+  ): Promise<void> {
+    await this._agents.revokeToken(getContextUser(req), id);
+    this.setStatus(204);
   }
 
   /**
-   * Отозвать токен: новые регистрации по нему невозможны, агенты остаются.
-   * Повторный отзыв — 204.
-   * @summary Отзыв токена регистрации
+   * Команда установки агента на узел из архива этого сервера.
+   * @summary Команда установки агента
    */
   @Security("jwt", ["permission:agent:enroll"])
-  @SuccessResponse(204, "No Content")
-  @Post("{id}/revoke")
-  async revokeAgentEnrollmentToken(@Path() id: UUID): Promise<void> {
-    await this._enrollment.revokeToken(id);
-    this.setStatus(204);
+  @ValidateBody(InstallCommandBodySchema)
+  @Post("install-command")
+  createAgentInstallCommand(
+    @Body() body: IInstallCommandBody,
+  ): IAgentInstallCommandDto {
+    const { baseUrl, ...rest } = body;
+
+    return {
+      command: this._agents.installCommand({ ...rest, server: baseUrl }),
+    };
+  }
+
+  /**
+   * Каталог сборок воркеров проекта (`AGENT_BUNDLE_DIR/release`).
+   * @summary Сборки воркеров
+   */
+  @Security("jwt")
+  @Get("release")
+  getAgentRelease(@Request() req: KoaRequest): IAgentReleaseDto {
+    return this._agents.release(getContextUser(req));
   }
 }

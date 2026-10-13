@@ -4,8 +4,5 @@ export * from "./agent.service";
 export * from "./agent.socket-events";
 export * from "./agent.types";
 export * from "./agent-access.service";
-export * from "./agent-bundle";
-export * from "./agent-enrollment.service";
-export * from "./agent-worker.service";
 export * from "./dto";
 export * from "./events";

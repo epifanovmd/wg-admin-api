@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"wgadmin/agent/internal/desired"
+	"wgadmin/agent/internal/contract"
 	"wgadmin/agent/internal/shell"
 )
 
@@ -70,15 +70,15 @@ func ping(count int, args ...string) *Ping {
 
 // Tunnels — 3 пакета до дальнего конца через сам туннель; живой — ещё и
 // пакет полного размера с запретом фрагментации (MTU − 28 байт IP/ICMP).
-func Tunnels(tunnels []desired.Tunnel) []desired.TunnelProbe {
-	results := make([]*desired.TunnelProbe, len(tunnels))
+func Tunnels(tunnels []contract.Tunnel) []contract.TunnelProbe {
+	results := make([]*contract.TunnelProbe, len(tunnels))
 
 	var wg sync.WaitGroup
 
 	for i, tunnel := range tunnels {
 		wg.Add(1)
 
-		go func(i int, tunnel desired.Tunnel) {
+		go func(i int, tunnel contract.Tunnel) {
 			defer wg.Done()
 
 			parsed := ping(quickPackets, "-I", tunnel.Name, tunnel.RemoteTunnelIP)
@@ -86,7 +86,7 @@ func Tunnels(tunnels []desired.Tunnel) []desired.TunnelProbe {
 				return
 			}
 
-			probe := &desired.TunnelProbe{Name: tunnel.Name, RttMs: parsed.RttMs, LossPercent: parsed.LossPercent}
+			probe := &contract.TunnelProbe{Name: tunnel.Name, RttMs: parsed.RttMs, LossPercent: parsed.LossPercent}
 
 			if parsed.LossPercent < 100 {
 				mtu := ping(quickPackets, "-M", "do", "-s", strconv.Itoa(tunnel.MTU-28), "-I", tunnel.Name, tunnel.RemoteTunnelIP)
@@ -99,7 +99,7 @@ func Tunnels(tunnels []desired.Tunnel) []desired.TunnelProbe {
 	}
 	wg.Wait()
 
-	out := []desired.TunnelProbe{}
+	out := []contract.TunnelProbe{}
 	for _, probe := range results {
 		if probe != nil {
 			out = append(out, *probe)
@@ -111,29 +111,29 @@ func Tunnels(tunnels []desired.Tunnel) []desired.TunnelProbe {
 
 // Nodes — связность нод: nodePackets пакетов до publicHost; закрытый ICMP —
 // 100% потерь, тоже результат.
-func Nodes(targets []desired.ProbeTarget) []desired.NodeProbe {
+func Nodes(targets []contract.ProbeTarget) []contract.NodeProbe {
 	return pingTargets(targets, nodePackets)
 }
 
-func pingTargets(targets []desired.ProbeTarget, count int) []desired.NodeProbe {
-	results := make([]*desired.NodeProbe, len(targets))
+func pingTargets(targets []contract.ProbeTarget, count int) []contract.NodeProbe {
+	results := make([]*contract.NodeProbe, len(targets))
 
 	var wg sync.WaitGroup
 
 	for i, target := range targets {
 		wg.Add(1)
 
-		go func(i int, target desired.ProbeTarget) {
+		go func(i int, target contract.ProbeTarget) {
 			defer wg.Done()
 
 			if parsed := ping(count, target.Host); parsed != nil {
-				results[i] = &desired.NodeProbe{NodeID: target.NodeID, RttMs: parsed.RttMs, LossPercent: parsed.LossPercent}
+				results[i] = &contract.NodeProbe{NodeID: target.NodeID, RttMs: parsed.RttMs, LossPercent: parsed.LossPercent}
 			}
 		}(i, target)
 	}
 	wg.Wait()
 
-	out := []desired.NodeProbe{}
+	out := []contract.NodeProbe{}
 	for _, probe := range results {
 		if probe != nil {
 			out = append(out, *probe)
@@ -145,9 +145,9 @@ func pingTargets(targets []desired.ProbeTarget, count int) []desired.NodeProbe {
 
 // IPs — доступность адресов (реплики без туннеля): адрес → ответил ли.
 func IPs(ips []string) map[string]bool {
-	targets := make([]desired.ProbeTarget, len(ips))
+	targets := make([]contract.ProbeTarget, len(ips))
 	for i, ip := range ips {
-		targets[i] = desired.ProbeTarget{NodeID: ip, Host: ip}
+		targets[i] = contract.ProbeTarget{NodeID: ip, Host: ip}
 	}
 
 	result := map[string]bool{}

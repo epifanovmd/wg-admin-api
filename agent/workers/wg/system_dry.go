@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"wgadmin/agent/internal/apply"
-	"wgadmin/agent/internal/desired"
+	"wgadmin/agent/internal/contract"
 	"wgadmin/agent/internal/failover"
 	"wgadmin/agent/internal/logx"
 	"wgadmin/agent/internal/state"
@@ -29,7 +29,7 @@ type drySystem struct {
 	started   time.Time
 
 	mu      sync.Mutex
-	applied desired.State
+	applied contract.State
 }
 
 func newDrySystem(configDir, stateDir string) *drySystem {
@@ -42,9 +42,9 @@ func (s *drySystem) Info() HostInfo {
 	return HostInfo{WgVersion: "dry-run", WgMode: "userspace", UDPPorts: []int{}, TCPPorts: []int{}}
 }
 
-func (s *drySystem) Apply(target desired.State, health *failover.Health) apply.Result {
+func (s *drySystem) Apply(target contract.State, health *failover.Health) apply.Result {
 	owned := state.LoadOwned(s.stateFile)
-	result := apply.Result{Interfaces: []desired.InterfaceStatus{}, Errors: []string{}}
+	result := apply.Result{Interfaces: []contract.InterfaceStatus{}, Errors: []string{}}
 
 	if err := os.MkdirAll(s.configDir, 0o700); err != nil {
 		result.Errors = append(result.Errors, "каталог конфигов: "+err.Error())
@@ -69,14 +69,14 @@ func (s *drySystem) Apply(target desired.State, health *failover.Health) apply.R
 			existing, err := os.ReadFile(file)
 			if err := apply.ForeignConfig(iface.Name, existing, err == nil, rendered, false); err != nil {
 				result.Errors = append(result.Errors, iface.Name+": "+err.Error())
-				result.Interfaces = append(result.Interfaces, desired.InterfaceStatus{Name: iface.Name, Status: "error", Message: err.Error()})
+				result.Interfaces = append(result.Interfaces, contract.InterfaceStatus{Name: iface.Name, Status: "error", Message: err.Error()})
 
 				continue
 			}
 		}
 		if err := os.WriteFile(file, rendered, 0o600); err != nil {
 			result.Errors = append(result.Errors, iface.Name+": "+err.Error())
-			result.Interfaces = append(result.Interfaces, desired.InterfaceStatus{Name: iface.Name, Status: "error", Message: err.Error()})
+			result.Interfaces = append(result.Interfaces, contract.InterfaceStatus{Name: iface.Name, Status: "error", Message: err.Error()})
 
 			continue
 		}
@@ -86,7 +86,7 @@ func (s *drySystem) Apply(target desired.State, health *failover.Health) apply.R
 		if iface.Enabled {
 			status = "up"
 		}
-		result.Interfaces = append(result.Interfaces, desired.InterfaceStatus{Name: iface.Name, Status: status})
+		result.Interfaces = append(result.Interfaces, contract.InterfaceStatus{Name: iface.Name, Status: status})
 	}
 
 	owned.Tunnels = []string{}
@@ -124,14 +124,14 @@ func (s *drySystem) Cleanup() {
 	_ = os.Remove(s.stateFile)
 
 	s.mu.Lock()
-	s.applied = desired.State{}
+	s.applied = contract.State{}
 	s.mu.Unlock()
 	logx.Info("Имитация: созданное воркером убрано")
 }
 
 // Dump — пиры включённых интерфейсов: счётчики растут со временем работы
 // воркера, рукопожатие — только что.
-func (s *drySystem) Dump(names []string) []desired.InterfaceStats {
+func (s *drySystem) Dump(names []string) []contract.InterfaceStats {
 	s.mu.Lock()
 	applied := s.applied
 	s.mu.Unlock()
@@ -145,12 +145,12 @@ func (s *drySystem) Dump(names []string) []desired.InterfaceStats {
 			continue
 		}
 
-		peers := []desired.PeerStat{}
+		peers := []contract.PeerStat{}
 		for i, peer := range iface.Peers {
 			handshake := now
 			endpoint := fmt.Sprintf("203.0.113.%d:51820", i%254+1)
 			weight := int64(i + 1)
-			peers = append(peers, desired.PeerStat{
+			peers = append(peers, contract.PeerStat{
 				PublicKey:     peer.PublicKey,
 				RxBytes:       elapsed * 2048 * weight,
 				TxBytes:       elapsed * 8192 * weight,
@@ -173,12 +173,12 @@ func rtt(name string) *float64 {
 	return &value
 }
 
-func (s *drySystem) ProbeTunnels(tunnels []desired.Tunnel) []desired.TunnelProbe {
-	result := []desired.TunnelProbe{}
+func (s *drySystem) ProbeTunnels(tunnels []contract.Tunnel) []contract.TunnelProbe {
+	result := []contract.TunnelProbe{}
 	mtuOk := true
 
 	for _, tunnel := range tunnels {
-		result = append(result, desired.TunnelProbe{Name: tunnel.Name, RttMs: rtt(tunnel.Name), MtuOk: &mtuOk})
+		result = append(result, contract.TunnelProbe{Name: tunnel.Name, RttMs: rtt(tunnel.Name), MtuOk: &mtuOk})
 	}
 
 	return result
@@ -193,10 +193,10 @@ func (s *drySystem) ProbeIPs(ips []string) map[string]bool {
 	return result
 }
 
-func (s *drySystem) ProbeNodes(targets []desired.ProbeTarget) []desired.NodeProbe {
-	result := []desired.NodeProbe{}
+func (s *drySystem) ProbeNodes(targets []contract.ProbeTarget) []contract.NodeProbe {
+	result := []contract.NodeProbe{}
 	for _, target := range targets {
-		result = append(result, desired.NodeProbe{NodeID: target.NodeID, RttMs: rtt(target.Host)})
+		result = append(result, contract.NodeProbe{NodeID: target.NodeID, RttMs: rtt(target.Host)})
 	}
 
 	return result

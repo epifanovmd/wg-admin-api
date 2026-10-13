@@ -5,8 +5,8 @@
 #      под одной версией и агент не заменит воркер. Код воркера — его каталог,
 #      общий код (agent/internal, go.mod, go.sum) — код всех воркеров. Тесты и
 #      *.md не в счёт.
-#   2. Версия Go в Dockerfile-ах (GO_VERSION) совпадает с toolchain в
-#      agent/go.mod: CI и scripts/go-agent.sh берут её из go.mod, образы — из ARG.
+#   2. Версия Go в Dockerfile (GO_VERSION) совпадает с toolchain в agent/go.mod:
+#      CI и scripts/go-agent.sh берут её из go.mod, образ — из ARG.
 # Нужна история с тегами (actions/checkout: fetch-depth: 0).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,13 +14,11 @@ cd "$ROOT"
 fail=0
 
 go_version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' agent/go.mod)
-for file in Dockerfile test/smoke/Dockerfile.agent; do
-  declared=$(sed -n 's/^ARG GO_VERSION=\([0-9][0-9.]*\).*/\1/p' "$file")
-  if [ "$declared" != "$go_version" ]; then
-    echo "::error file=$file::GO_VERSION=$declared, а в agent/go.mod — toolchain go$go_version"
-    fail=1
-  fi
-done
+declared=$(sed -n 's/^ARG GO_VERSION=\([0-9][0-9.]*\).*/\1/p' Dockerfile)
+if [ "$declared" != "$go_version" ]; then
+  echo "::error file=Dockerfile::GO_VERSION=$declared, а в agent/go.mod — toolchain go$go_version"
+  fail=1
+fi
 
 last_tag=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
 if [ -z "$last_tag" ]; then

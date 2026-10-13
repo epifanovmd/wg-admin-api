@@ -4,9 +4,9 @@
 хранит желаемое состояние каждой ноды — интерфейсы и пиры, точки подключения
 через релей, реплики интерфейсов, пробросы портов, SOCKS5-прокси через mTLS.
 На ноде (VPS) работает универсальный агент
-[github.com/epifanovmd/agent](https://github.com/epifanovmd/agent) 1.3.0: он
-держит исходящее соединение с бэкендом (WebSocket; в продакшене — через HTTPS),
-хранит настройки, присылает метрики узла и обновляется сам. Работу с WireGuard
+[github.com/epifanovmd/agent](https://github.com/epifanovmd/agent) (версия —
+`AGENT_VERSION`): он сам держит связь с бэкендом (HTTPS: поток SSE вниз, POST
+вверх), хранит настройки, присылает метрики узла и обновляется сам. Работу с WireGuard
 делают воркеры проекта `wg` и `socks`, которые запускает агент: бэкенд передаёт
 им желаемое состояние настройками, воркеры приводят сервер в соответствие и
 отдают метрики. Входящие порты агенту не нужны; агент ставится одной командой
@@ -25,8 +25,8 @@
   декораторов), Inversify (DI), TypeORM + PostgreSQL, pg-boss (очередь задач
   на Postgres), Redis (между процессами), Socket.IO, Zod, pino, prom-client,
   Sentry, Nodemailer + EJS; сборка `tsc`.
-- Агенты: agent 1.3.0 на узлах (служба systemd), на бэкенде — пакет `agent-sdk`
-  той же версии (зависимость из GitHub Release).
+- Агенты: агент версии `AGENT_VERSION` на узлах (служба systemd); сторона
+  сервера протокола — ядро `src/core/agent`, воркеры — на пакете `worker` агента.
 - Воркеры узла: Go 1.26.9 (toolchain в `agent/go.mod`), сборки linux и darwin ×
   amd64 и arm64.
 - Тесты: Mocha + Chai + Sinon (юнит и e2e), `go test`.
@@ -47,7 +47,6 @@ src/
 agent/               ← папка агента: настройки, воркеры узла wg и socks (Go), архивы для узлов
 templates/           ← шаблоны писем
 test/e2e/            ← интеграционный набор (настоящий сервер + Postgres, Redis, Mailpit)
-test/smoke/          ← образ узла для smoke-стенда
 scripts/             ← генератор модуля, Go в контейнере, проверка версий воркеров, дамп БД
 docs/                ← устройство системы
 ```
@@ -176,17 +175,14 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
   последний тест проверяет, что вызван каждый эндпоинт спецификации. Стенд
   пересоздаёт базу (только с `e2e`/`test` в имени) и чистит отдельную базу
   Redis. Параметры — `E2E_*`. Сценарии домена идут с фейковым агентом на
-  WebSocket (`test/e2e/fake-agent.ts`, `node-agent.ts`); `agents.e2e.ts` и
-  `agent-update.e2e.ts` — настоящий агент и воркеры. Агент — сборки с GitHub,
-  скачанные заранее (`yarn agent:fetch` и `yarn agent:fetch 1.4.0` — для
-  обновления агента): стенд раздаёт их агентам как каталог сборок со своего
-  сервера, в GitHub тесты не ходят. Архив для узлов стенд собирает сам (`agent pack` с воркерами
-  wg и socks), подписывая воркеры своим ключом проекта. Чего нет — сценарии
-  пропускаются.
-- **Воркеры** — `go test` в `agent/` (`scripts/go-agent.sh test`); воркер wg на
-  настоящем Linux — `agent/workers/wg/linux-check.sh`.
-- **Smoke** — `test/smoke`: образ узла (`Dockerfile.agent`, `agent.yaml`) готов,
-  сценарий `wg-smoke.sh` написан под прежний API бэкенда и сейчас не работает.
+  протоколе агента (`test/e2e/fake-agent.ts`, `node-agent.ts`); `agents.e2e.ts` —
+  настоящий агент и воркеры wg (имитация) и socks из архива стенда. Агент — сборки
+  версии `AGENT_VERSION` с GitHub, скачанные заранее (`yarn agent:fetch`): стенд
+  раздаёт их как каталог сборок со своего сервера, в GitHub тесты не ходят. Архив
+  для узлов стенд собирает сам (`agent pack` с воркерами wg и socks), подписывая
+  воркеры своим ключом проекта.
+- **Воркеры** — `go test` в `agent/` (`scripts/go-agent.sh test`); воркер wg с
+  настоящим агентом на настоящем Linux — `agent/workers/wg/linux-check.sh`.
 
 ### Миграции
 
@@ -203,7 +199,8 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
 собираются архивы папки агента для узлов (`/app/agent/bundle` =
 `AGENT_BUNDLE_DIR`, стадия `agent-bundle`: `agent pack --env prod` для
 linux/amd64 и linux/arm64 — агент, настройки, воркеры wg и socks и их сборки
-для обновления); их раздаёт API (`/api/v1/agent-link/bundle/…`). Новые версии
+для обновления); их раздаёт API (`/agent/v1/bundle/…`), версия агента —
+build-аргумент `AGENT_VERSION` (по умолчанию — из `.env.example`). Новые версии
 агента узлы находят сами в своём каталоге сборок (релизы GitHub агента) и
 сообщают бэкенду — ради новой версии агента образ не пересобирают. Подписать
 воркеры ключом проекта — необязательный секрет BuildKit `agent_signing_key`
@@ -224,10 +221,9 @@ Redis — `docker-compose.redis.yml`, Postgres — `docker-compose.postgres.yml`
 `.env.production`. HTTPS — reverse proxy инфраструктуры (Traefik): маршрут по меткам
 контейнера `api` в её сети `infra_edge`. Секреты — `.env.production`; обязателен `WG_SECRETS_KEY`
 (`openssl rand -hex 32`): им шифруются ключи WireGuard в БД; значения настроек
-воркеров шифруются ключом `AGENT_CONFIGS_KEY`. Вызов агента (запрос к воркеру,
-действие) выполняет копия `api`, с которой агент на связи; в другой копии — 503
-`AGENT_ELSEWHERE` с `Retry-After`, поэтому реплики `api` — только за липким
-балансировщиком.
+воркеров шифруются ключом `AGENT_CONFIGS_KEY`. Реплики `api` — за любым
+балансировщиком: поток агента держит одна копия, остальные будят её через Postgres
+NOTIFY. Прокси перед `api` не должен буферизовать поток `/agent/v1/stream` (SSE).
 
 ```sh
 export COMPOSE_FILE=docker-compose.yml:docker-compose.redis.yml:docker-compose.postgres.yml

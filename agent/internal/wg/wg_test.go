@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"wgadmin/agent/internal/desired"
+	"wgadmin/agent/internal/contract"
 )
 
 func ptr[T any](value T) *T { return &value }
 
-var iface = desired.Interface{
+var iface = contract.Interface{
 	Name:        "wg0",
 	Enabled:     true,
 	ListenPort:  51820,
@@ -18,7 +18,7 @@ var iface = desired.Interface{
 	PrivateKey:  "PRIV",
 	MTU:         ptr(1420),
 	NatEnabled:  true,
-	Peers: []desired.Peer{
+	Peers: []contract.Peer{
 		{PublicKey: "PUB1", PresharedKey: ptr("PSK1"), AllowedIPs: "10.0.0.2/32"},
 		{PublicKey: "PUB2", AllowedIPs: "10.0.0.3/32"},
 	},

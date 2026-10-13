@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"wgadmin/agent/internal/desired"
+	"wgadmin/agent/internal/contract"
 	"wgadmin/agent/internal/shell"
 )
 
@@ -20,7 +20,7 @@ import (
 const quickTimeout = 1500 * time.Millisecond
 
 // Dump — интерфейс → пиры.
-type Dump map[string][]desired.PeerStat
+type Dump map[string][]contract.PeerStat
 
 // ParseDump разбирает `wg show all dump`: 5 полей — интерфейс, 9 — пир.
 func ParseDump(output string) Dump {
@@ -36,10 +36,10 @@ func ParseDump(output string) Dump {
 		switch len(parts) {
 		case 5:
 			if _, ok := result[parts[0]]; !ok {
-				result[parts[0]] = []desired.PeerStat{}
+				result[parts[0]] = []contract.PeerStat{}
 			}
 		case 9:
-			peer := desired.PeerStat{PublicKey: parts[1]}
+			peer := contract.PeerStat{PublicKey: parts[1]}
 
 			if parts[3] != "(none)" {
 				endpoint := parts[3]
@@ -124,7 +124,7 @@ func SubnetOf(addressCidr string) string {
 	return network.String()
 }
 
-func peerLines(peers []desired.Peer) []string {
+func peerLines(peers []contract.Peer) []string {
 	var lines []string
 
 	for _, peer := range peers {
@@ -139,7 +139,7 @@ func peerLines(peers []desired.Peer) []string {
 }
 
 // RenderConfig — полный конфиг wg-quick интерфейса.
-func RenderConfig(iface desired.Interface, egress string) string {
+func RenderConfig(iface contract.Interface, egress string) string {
 	address := iface.AddressCidr
 	if iface.AddressV6Cidr != nil && *iface.AddressV6Cidr != "" {
 		address += ", " + *iface.AddressV6Cidr
@@ -183,7 +183,7 @@ func RenderConfig(iface desired.Interface, egress string) string {
 }
 
 // RenderStripped — конфиг для `wg syncconf` (без полей wg-quick).
-func RenderStripped(iface desired.Interface) string {
+func RenderStripped(iface contract.Interface) string {
 	lines := []string{
 		"[Interface]",
 		"PrivateKey = " + iface.PrivateKey,
@@ -199,7 +199,7 @@ func RenderStripped(iface desired.Interface) string {
 // Fingerprint — отпечаток interface-секции: изменение требует down/up, а
 // не syncconf. Формат (JSON-массив) фиксирован: его смена перезапустит
 // интерфейсы при обновлении воркера.
-func Fingerprint(iface desired.Interface, egress string) string {
+func Fingerprint(iface contract.Interface, egress string) string {
 	var buf bytes.Buffer
 
 	encoder := json.NewEncoder(&buf)

@@ -1,32 +1,34 @@
 import { inject } from "inversify";
 
-import { EventBus, Injectable } from "../../core";
-import { ISocketEventListener, SocketEmitterService } from "../socket";
-import { agentRoom, AGENTS_ROOM } from "./agent.types";
 import {
-  AgentActionFinishedEvent,
-  AgentAlertChangedEvent,
+  AgentCommandFinishedEvent,
+  AgentCommandProgressEvent,
+  AgentCommandQueuedEvent,
+  AgentConfigAppliedEvent,
   AgentConfigChangedEvent,
   AgentDeletedEvent,
   AgentEventReceivedEvent,
   AgentLogReceivedEvent,
   AgentMetricsReceivedEvent,
-  AgentReleaseChangedEvent,
+  Agents,
   AgentUpdatedEvent,
-} from "./events";
+  EventBus,
+  Injectable,
+  logger,
+} from "../../core";
+import { ISocketEventListener, SocketEmitterService } from "../socket";
+import { AgentService } from "./agent.service";
+import { agentRoom, AGENTS_ROOM } from "./agent.types";
+import { toCommandDto, toConfigDto, toLogEntryDto } from "./dto";
 
-/** Комната списка и комната агента. */
 const roomsOf = (agentId: string): string[] => [
   AGENTS_ROOM,
   agentRoom(agentId),
 ];
 
 /**
- * События агентов → сокет. Список (`agents`) получает изменения агентов,
- * проблемы и события воркеров; комната агента — то же по нему и вдобавок
- * метрики, журнал, статусы настроек и итоги действий. Сокет в обеих
- * комнатах получает событие один раз. Новая версия агента, найденная агентами, —
- * всем клиентам (версия агента видна любому вошедшему).
+ * События агентов → сокет. Список (`agents`) — изменения агентов и события воркеров; комната
+ * агента — то же по нему и вдобавок метрики, журнал, настройки и команды.
  */
 @Injectable()
 export class AgentListener implements ISocketEventListener {
@@ -34,38 +36,95 @@ export class AgentListener implements ISocketEventListener {
     @inject(EventBus) private readonly _eventBus: EventBus,
     @inject(SocketEmitterService)
     private readonly _emitter: SocketEmitterService,
+    @inject(AgentService) private readonly _service: AgentService,
+    @inject(Agents) private readonly _agents: Agents,
   ) {}
 
   register(): void {
     const on = this._eventBus.on.bind(this._eventBus);
     const emitter = this._emitter;
 
-    on(AgentUpdatedEvent, ({ agent }) =>
-      emitter.toRooms(roomsOf(agent.id), "agent:updated", agent),
+    on(AgentUpdatedEvent, async ({ agent }) =>
+      emitter.toRooms(
+        roomsOf(agent.id),
+        "agent:updated",
+        await this._service.toDto(agent),
+      ),
     );
     on(AgentDeletedEvent, ({ agentId }) =>
       emitter.toRooms(roomsOf(agentId), "agent:deleted", { id: agentId }),
     );
-    on(AgentAlertChangedEvent, ({ alert }) =>
-      emitter.toRooms(roomsOf(alert.agentId), "agent:alert", alert),
+    on(AgentEventReceivedEvent, ({ agentId, event }) =>
+      emitter.toRooms(roomsOf(agentId), "agent:event", {
+        agentId,
+        id: event.id,
+        worker: event.worker,
+        type: event.type,
+        data: event.data,
+        at: event.at,
+        receivedAt: Date.now(),
+      }),
     );
-    on(AgentEventReceivedEvent, ({ event }) =>
-      emitter.toRooms(roomsOf(event.agentId), "agent:event", event),
+    const config = async (agentId: string, worker: string, key: string) => {
+      const agent = await this._agents.find(agentId);
+      const status =
+        agent &&
+        (await this._agents.configStatus(agent)).find(
+          s => s.worker === worker && s.key === key,
+        );
+
+      if (status)
+        emitter.toRoom(
+          agentRoom(agentId),
+          "agent:config",
+          toConfigDto(agentId, status),
+        );
+    };
+
+    on(AgentConfigChangedEvent, e => {
+      if (e.deleted) {
+        emitter.toRoom(agentRoom(e.agentId), "agent:config", {
+          agentId: e.agentId,
+          worker: e.worker,
+          key: e.key,
+          version: e.version,
+          state: "pending",
+          deleted: true,
+          updatedAt: Date.now(),
+        });
+
+        return;
+      }
+      config(e.agentId, e.worker, e.key).catch(err =>
+        logger.warn({ err }, "[Agent] agent:config"),
+      );
+    });
+    on(AgentConfigAppliedEvent, e =>
+      config(e.agentId, e.worker, e.key).catch(err =>
+        logger.warn({ err }, "[Agent] agent:config"),
+      ),
     );
-    on(AgentConfigChangedEvent, ({ status }) =>
-      emitter.toRoom(agentRoom(status.agentId), "agent:config", status),
-    );
-    on(AgentActionFinishedEvent, ({ action }) =>
-      emitter.toRoom(agentRoom(action.agentId), "agent:action", action),
-    );
+    for (const Event of [
+      AgentCommandQueuedEvent,
+      AgentCommandProgressEvent,
+      AgentCommandFinishedEvent,
+    ]) {
+      on(Event, ({ command }) =>
+        emitter.toRoom(
+          agentRoom(command.agentId),
+          "agent:command",
+          toCommandDto(command),
+        ),
+      );
+    }
     on(AgentMetricsReceivedEvent, ({ agentId, point }) =>
       emitter.toRoom(agentRoom(agentId), "agent:metrics", { agentId, point }),
     );
-    on(AgentReleaseChangedEvent, ({ release }) =>
-      emitter.broadcast("agent:release", release),
-    );
     on(AgentLogReceivedEvent, ({ agentId, entries }) =>
-      emitter.toRoom(agentRoom(agentId), "agent:log", { agentId, entries }),
+      emitter.toRoom(agentRoom(agentId), "agent:log", {
+        agentId,
+        entries: entries.map(toLogEntryDto),
+      }),
     );
   }
 }

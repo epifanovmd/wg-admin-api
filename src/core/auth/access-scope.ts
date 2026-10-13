@@ -27,10 +27,13 @@ export const resolveScope = (
   return hasPermission(permissions, ownPermission(permission)) ? "own" : null;
 };
 
-/** Поля сущности, по которым она «своя»: назначенный владелец и создатель. */
+/**
+ * Поля сущности, по которым она «своя»: владелец и (если есть) создатель.
+ * У сущности только с владельцем `creator` не указывается.
+ */
 export interface IOwnershipKeys<T> {
   owner: keyof T & string;
-  creator: keyof T & string;
+  creator?: keyof T & string;
 }
 
 /**
@@ -38,20 +41,27 @@ export interface IOwnershipKeys<T> {
  * владелец или создатель.
  *
  * @example
- * const access = new OwnedAccess<WgPeer>({ owner: "userId", creator: "createdById" });
- * access.can(actor, WgPeerPermissions.PEER_UPDATE, peer);
+ * const access = new OwnedAccess<Report>({ owner: "ownerId", creator: "createdById" });
+ * access.can(actor, ReportPermissions.UPDATE, report);
  */
 export class OwnedAccess<T extends object> {
   constructor(readonly keys: IOwnershipKeys<T>) {}
+
+  /** Поля «своих» без повторов: владелец, затем создатель. */
+  private get _fields(): string[] {
+    const { owner, creator } = this.keys;
+
+    return creator && creator !== owner ? [owner, creator] : [owner];
+  }
 
   scope(actor: AuthContext, permission: string): AccessScope | null {
     return resolveScope(actor.roles, actor.permissions, permission);
   }
 
   isOwn(userId: string, entity: T): boolean {
-    return (
-      entity[this.keys.owner] === userId || entity[this.keys.creator] === userId
-    );
+    const values = entity as Record<string, unknown>;
+
+    return this._fields.some(field => values[field] === userId);
   }
 
   can(actor: AuthContext, permission: string, entity: T): boolean {
@@ -64,12 +74,14 @@ export class OwnedAccess<T extends object> {
 
   /** Условие «своих» для QueryBuilder; значение — параметр `:ownedBy`. */
   ownedCondition(alias: string): string {
-    return `(${alias}.${this.keys.owner} = :ownedBy OR ${alias}.${this.keys.creator} = :ownedBy)`;
+    return `(${this._fields
+      .map(field => `${alias}.${field} = :ownedBy`)
+      .join(" OR ")})`;
   }
 
   /** Условие «своих» для `find`: OR владелец / создатель. */
   ownedWhere(userId: string): Array<Record<string, string>> {
-    return [{ [this.keys.owner]: userId }, { [this.keys.creator]: userId }];
+    return this._fields.map(field => ({ [field]: userId }));
   }
 
   /**

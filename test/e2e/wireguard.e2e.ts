@@ -51,7 +51,7 @@ describe("wireguard", () => {
 
       nodeA = resA.data.node;
       expect(resA.data.install.command).to.match(
-        /\/api\/v1\/agent-link\/bundle\/install\.sh' \| sudo sh -s -- '--server' '[^']+' '--bundle' '[^']+\/api\/v1\/agent-link\/bundle\/linux-\{arch\}\.tar\.gz' '--token' '[^']+\.[^']+' '--name' 'node-a'/,
+        /\/agent\/v1\/bundle\/install\.sh' \| sudo sh -s -- --server '[^']+' --bundle '[^']+\/agent\/v1\/bundle\/linux-\{arch\}\.tar\.gz' --token '[^']+\.[^']+' --name 'node-a'/,
       );
       expect(resA.data.install.command).not.to.include("--worker");
       expect(nodeA.status).to.equal("created");
@@ -163,7 +163,7 @@ describe("wireguard", () => {
       // Токен одноразовый.
       expect(
         (
-          await fetch(`${BASE_URL}/api/v1/agent-link/enroll`, {
+          await fetch(`${BASE_URL}/agent/v1/enroll`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -1177,62 +1177,54 @@ describe("wireguard", () => {
       );
     });
 
-    it("агент ноды: сборки, установщик, обновление агента и воркера, журнал", async () => {
+    it("агент ноды: сборки, установщик, обновление агента и воркера — маршруты агентов с правами ноды", async () => {
       const release = expectStatus(
-        await call(admin, "GET", "/api/v1/agent-releases"),
+        await call(admin, "GET", "/api/v1/agent-enrollment/release"),
         200,
       ).data;
 
-      expect(release).to.have.property("candidates");
+      expect(release).to.have.property("workers");
 
-      // Установщик публичный: без секретов, адрес сервера вписан.
-      const script = await call(
-        null,
-        "GET",
-        "/api/v1/agent-link/bundle/install.sh",
-      );
+      // Установщик публичный: без секретов.
+      const script = await call(null, "GET", "/agent/v1/bundle/install.sh");
 
       expect(script.status).to.equal(200);
       expect(script.data).to.include("#!/bin/sh");
 
-      const updated = await call(
-        admin,
-        "POST",
-        `/api/v1/wg/nodes/${nodeA.id}/agent/update`,
-      );
+      const agentPath = `/api/v1/agents/${nodeAKey.agentId}`;
+      const updated = await call(admin, "POST", `${agentPath}/update`, {});
 
-      // Среди сборок стенда нет сборки под фейковый агент — обновлять нечем.
-      expect([200, 409]).to.include(updated.status);
-      expectStatus(
-        await call(user, "POST", `/api/v1/wg/nodes/${nodeA.id}/agent/update`),
-        403,
-      );
+      // Новой версии для фейкового агента нет — обновлять нечем.
+      expect([200, 404, 409]).to.include(updated.status);
+      expect(
+        (await call(user, "POST", `${agentPath}/update`, {})).status,
+      ).to.be.oneOf([403, 404]);
 
       const worker = await call(
         admin,
         "POST",
-        `/api/v1/wg/nodes/${nodeA.id}/workers/wg/update`,
+        `${agentPath}/workers/wg/update`,
         {},
       );
 
-      expect([200, 409]).to.include(worker.status);
+      expect([200, 404, 409]).to.include(worker.status);
 
       const restarted = expectStatus(
-        await call(
-          admin,
-          "POST",
-          `/api/v1/wg/nodes/${nodeA.id}/workers/socks/restart`,
-          { force: true },
-        ),
+        await call(admin, "POST", `${agentPath}/workers/socks/restart`, {
+          force: true,
+        }),
         200,
       ).data;
 
-      expect(restarted.deferred).to.equal(false);
-      expect(
-        nodeAKey.actions.some(
-          a => a.name === "worker.restart" && a.args?.name === "socks",
-        ),
-      ).to.equal(true);
+      expect(restarted).to.include({ type: "worker.restart" });
+      await nodeAKey.waitFor(
+        () =>
+          nodeAKey.commands.some(
+            c => c.type === "worker.restart" && c.args?.worker === "socks",
+          ),
+        5000,
+        "worker.restart",
+      );
     });
 
     it("связность нод: цели проверки и матрица", async () => {
@@ -2052,33 +2044,29 @@ describe("wireguard", () => {
   });
 
   describe("журнал и перезапуск интерфейса через агента", () => {
-    it("журнал агента и воркера — с узла", async () => {
+    it("журнал агента и воркера — с узла, по правам ноды", async () => {
+      const agentPath = `/api/v1/agents/${nodeAKey.agentId}`;
       const logs = expectStatus(
-        await call(admin, "GET", `/api/v1/wg/nodes/${nodeA.id}/logs?lines=50`),
+        await call(admin, "GET", `${agentPath}/logs?lines=50`),
         200,
       );
 
-      expect(logs.data.content).to.include("журнал фейкового агента");
+      expect(logs.data.entries[0].msg).to.include("журнал фейкового агента");
       expect(logs.data.entries[0].source).to.equal("agent");
 
       const worker = expectStatus(
-        await call(
-          admin,
-          "GET",
-          `/api/v1/wg/nodes/${nodeA.id}/logs?lines=10&worker=wg`,
-        ),
+        await call(admin, "GET", `${agentPath}/logs?lines=10&worker=wg`),
         200,
       );
 
       expect(worker.data.entries[0].source).to.equal("wg");
       expect(
-        nodeAKey.actions.some(
-          a => a.name === "agent.logs" && a.args?.lines === 10,
+        nodeAKey.commands.some(
+          c => c.type === "agent.logs" && c.args?.lines === 10,
         ),
       ).to.equal(true);
-      expectStatus(
-        await call(user, "GET", `/api/v1/wg/nodes/${nodeA.id}/logs`),
-        403,
+      expect((await call(user, "GET", `${agentPath}/logs`)).status).to.be.oneOf(
+        [403, 404],
       );
     });
 
@@ -2089,28 +2077,28 @@ describe("wireguard", () => {
       );
 
       expect(res.data).to.deep.equal({ name: "wg0", status: "up" });
-      expect(nodeAKey.fetches.at(-1)).to.deep.equal({
+      expect(nodeAKey.workerCommands.at(-1)).to.deep.equal({
         worker: "wg",
-        method: "POST",
-        path: "/interfaces/wg0/restart",
+        type: "interface.restart",
+        args: { name: "wg0" },
       });
-      expect(relayKey.fetches.some(f => f.path.includes("restart"))).to.equal(
-        false,
-      );
+      expect(
+        relayKey.workerCommands.some(c => c.type === "interface.restart"),
+      ).to.equal(false);
 
       // Воркер отказал — ошибка с его текстом.
-      nodeAKey.onFetch = () => ({
-        status: 409,
-        body: { message: "интерфейс выключен" },
+      nodeAKey.onCommand = () => ({
+        ok: false,
+        error: { code: "INTERFACE_DISABLED", message: "интерфейс выключен" },
       });
       expectStatus(
         await call(admin, "POST", `/api/v1/wg/interfaces/${iface.id}/restart`),
         502,
         "WG_NODE_WORKER_FAILED",
       );
-      nodeAKey.onFetch = (_w, _m, path) => ({
-        status: 200,
-        body: { name: path.split("/")[2], status: "up" },
+      nodeAKey.onCommand = (_w, _t, args) => ({
+        ok: true,
+        result: { name: args?.name, status: "up" },
       });
     });
   });

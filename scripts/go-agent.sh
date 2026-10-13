@@ -6,6 +6,8 @@
 #                                           (без аргументов — PLATFORMS или linux и darwin × amd64 и arm64)
 #   scripts/go-agent.sh <любая команда>     например: go test -run TestHealth ./workers/wg
 set -euo pipefail
+# Модуль агента — прямо с GitHub, мимо прокси и базы сумм Go (версия агента перевыпускается под тем
+# же номером; сумма — в go.sum).
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GO_VERSION=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' "$ROOT/agent/go.mod")
 IMAGE=${GO_IMAGE:-golang:$GO_VERSION-bookworm}
@@ -13,7 +15,7 @@ WORKERS="wg socks"
 run() {
   docker run --rm -v "$ROOT/agent:/src" -w /src \
     -v wg-agent-gomod:/go/pkg/mod -v wg-agent-gocache:/root/.cache/go-build \
-    -e CGO_ENABLED=0 "$@"
+    -e CGO_ENABLED=0 -e GOPRIVATE="github.com/epifanovmd/*" "$@"
 }
 case "${1:-test}" in
   test) run "$IMAGE" go test ./... ;;

@@ -1,7 +1,7 @@
 /**
  * План установки агента на VPS: последовательность shell-шагов. Токен
  * регистрации — файлом в рабочем каталоге, в аргументы команд он не
- * попадает; остальные значения команды экранирует SDK.
+ * попадает; остальные значения команды экранирует ядро агента.
  */
 export interface IProvisionStep {
   title: string;
@@ -26,47 +26,81 @@ export const workFiles = (workDir: string) => ({
 });
 
 /**
- * Служба `wg-admin-agent` — агент нод без воркеров, который сам держал
- * интерфейсы. Два агента на одних интерфейсах мешали бы друг другу: перед
- * установкой служба останавливается (по SIGTERM она снимает свои
- * интерфейсы, туннели и правила — воркер wg поднимет их заново) и
- * удаляется вместе со своими файлами. Пакеты и параметры ядра остаются.
+ * Снять агента прежнего поколения экземпляра `instance` (данные без `agent.db`):
+ * служба останавливается без уборки — его воркеры по SIGTERM ничего не
+ * разбирают, интерфейсы, туннели и правила WireGuard остаются работать, а
+ * `/etc/wireguard` и `/var/lib/wg-admin` новый воркер wg считает своими.
+ * Процессы воркеров (pid из `processes/*.json`) завершаются, только если это
+ * действительно они (рабочий каталог или программа — в каталогах агента);
+ * программа, настройки, данные и служба удаляются: новый агент ставится по тем
+ * же путям. Нового агента и узел без агента шаг не трогает.
  */
-export const REMOVE_WG_ADMIN_AGENT = [
-  "if [ -f /etc/systemd/system/wg-admin-agent.service ]; then",
-  "systemctl disable --now wg-admin-agent.service || true;",
-  "rm -f /etc/systemd/system/wg-admin-agent.service;",
-  "systemctl daemon-reload;",
-  "rm -f /usr/local/bin/wg-admin-agent /usr/local/bin/wg-admin-agent.prev /etc/sysctl.d/99-wg-admin.conf;",
-  "rm -rf /etc/wg-admin;",
-  'echo "Служба wg-admin-agent снята";',
-  "fi",
-].join(" ");
+export const removePreviousAgent = (instance: string): string => {
+  const data = `/var/lib/agent-${instance}`;
+  const opt = `/opt/agent-${instance}`;
 
-/** Команда SDK для запуска от root: `sudo` добавляет `withSudo` при нужде. */
-export const withoutSudo = (command: string): string =>
-  command.replace("| sudo sh -s --", "| sh -s --");
+  return [
+    `if [ -f ${data}/agent.status ] && [ ! -f ${data}/agent.db ]; then`,
+    `systemctl disable --now agent-${instance}.service 2>/dev/null || true;`,
+    "pids=;",
+    `for f in ${data}/processes/*.json; do`,
+    String.raw`p=$(sed -n 's/.*"pid":\([0-9]*\).*/\1/p' "$f" 2>/dev/null);`,
+    `case "$(readlink /proc/$p/cwd 2>/dev/null) $(readlink /proc/$p/exe 2>/dev/null)" in`,
+    `*${data}/*|*${opt}/*) pids="$pids $p" ;; esac;`,
+    "done;",
+    'if [ -n "$pids" ]; then kill -TERM $pids 2>/dev/null || true;',
+    "for i in $(seq 30); do alive=; for p in $pids; do kill -0 $p 2>/dev/null && alive=1; done;",
+    '[ -z "$alive" ] && break; sleep 1; done;',
+    "kill -KILL $pids 2>/dev/null || true; fi;",
+    `rm -f /etc/systemd/system/agent-${instance}.service /usr/local/bin/agent-${instance};`,
+    "systemctl daemon-reload;",
+    `rm -rf ${opt} /etc/agent-${instance} ${data};`,
+    'echo "Прежний агент снят: интерфейсы, туннели и правила WireGuard работают";',
+    "fi",
+  ].join(" ");
+};
+
+/** Команда установки `curl -fsSL '<install.sh>' | [sudo ]sh -s -- <флаги>`. */
+const INSTALL_COMMAND = /^curl -fsSL ('[^']+') \| (?:sudo )?sh -s -- (.+)$/;
+
+/**
+ * Команда установки для запуска от root (`sudo` добавляет `withSudo` при
+ * нужде), установщик — файлом в рабочем каталоге: в `curl … | sh` провал
+ * скачивания (404, сеть) терялся бы — `sh` получил бы пустой скрипт и вышел
+ * с успехом.
+ */
+export const installViaFile = (command: string, workDir: string): string => {
+  const match = INSTALL_COMMAND.exec(command);
+
+  if (!match) return command.replace("| sudo sh -s --", "| sh -s --");
+
+  const script = `${workDir}/install.sh`;
+
+  return `curl -fsSL ${match[1]} -o ${script} && sh ${script} ${match[2]}`;
+};
 
 /**
  * Установка по SSH — та же команда, что для ручной установки (`install.sh`
  * с бэкенда → `agent install`): агент службой systemd, воркеры wg и socks с
- * сервера, пакеты и параметры ядра. Токен — файлом (`--token-file`): в
+ * сервера, пакеты и параметры ядра. Перед ней — снятие агента прежнего
+ * поколения (`removePreviousAgent`). Токен — файлом (`--token-file`): в
  * аргументах команды его видел бы любой пользователь хоста всё время
  * установки.
  */
 export const buildProvisionPlan = (
   workDir: string,
   installCommand: string,
+  instance: string,
 ): IProvisionStep[] => [
   {
-    title: "Подготовка узла",
-    command: REMOVE_WG_ADMIN_AGENT,
+    title: "Подготовка узла (снятие прежнего агента)",
+    command: removePreviousAgent(instance),
     timeoutMs: 180_000,
   },
   {
     title: "Установка агента (пакеты, воркеры, служба systemd)",
     command:
-      `${withoutSudo(installCommand)}; ` +
+      `${installViaFile(installCommand, workDir)}; ` +
       `code=$?; rm -rf ${workDir}; exit $code`,
     timeoutMs: 900_000,
   },
@@ -77,10 +111,10 @@ export const agentBinaryPath = (instance: string | undefined): string =>
   instance ? `/opt/agent-${instance}/bin/agent` : "/opt/agent/bin/agent";
 
 /**
- * Удаление агента: воркеры убирают созданное ими (`POST /cleanup`:
- * интерфейсы, туннели, правила), служба, программа, настройки, данные и
- * пакеты, поставленные установкой (`--purge`). Другие экземпляры агента на
- * узле не затрагиваются.
+ * Удаление агента: воркеры убирают созданное ими (`./cleanup`: интерфейсы,
+ * туннели, правила), служба, программа, настройки, данные и пакеты,
+ * поставленные установкой (`--purge`). Другие экземпляры агента на узле не
+ * затрагиваются.
  */
 export const buildUninstallPlan = (
   instance: string | undefined,

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { Injectable } from "../../core";
 import { ISocketHandler, onValidated, TSocket } from "../socket";
-import { AgentError } from "./agent.errors";
+import { AgentAccessError } from "./agent.errors";
 import { AGENT_ID_PATTERN, AGENT_LOG_LEVELS } from "./agent.types";
 import { AgentWatchService } from "./agent-watch.service";
 
@@ -25,9 +25,8 @@ export class AgentSocketHandler implements ISocketHandler {
       "agent:log-level",
       LogLevelSchema,
       ({ agentId, level }) => {
-        if (!this._watch.setLogLevel(socket.id, agentId, level)) {
-          throw AgentError.NOT_WATCHED();
-        }
+        if (!this._watch.setLogLevel(socket.id, agentId, level))
+          throw AgentAccessError.NOT_WATCHED();
       },
       { rateLimit: { perSecond: 2, burst: 5 } },
     );

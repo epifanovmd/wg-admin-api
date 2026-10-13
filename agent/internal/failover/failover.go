@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"sync"
 
-	"wgadmin/agent/internal/desired"
+	"wgadmin/agent/internal/contract"
 )
 
 // FailoverAfterFailures — неудачных проб подряд (~10 с каждая) до ухода.
@@ -51,12 +51,12 @@ func (h *Health) IsDown(key string) bool {
 
 // Resolved — проброс с выбранной целью.
 type Resolved struct {
-	desired.Forward
+	contract.Forward
 	ActiveRoute     string
 	ActiveCandidate *int
 }
 
-func healthKey(candidate desired.Candidate) string {
+func healthKey(candidate contract.Candidate) string {
 	if candidate.Tunnel != nil && *candidate.Tunnel != "" {
 		return *candidate.Tunnel
 	}
@@ -70,7 +70,7 @@ func healthKey(candidate desired.Candidate) string {
 func hasTunnel(tunnel *string) bool { return tunnel != nil && *tunnel != "" }
 
 // DirectCandidateIPs — адреса кандидатов без туннеля: их воркер пингует сам.
-func DirectCandidateIPs(forwards []desired.Forward) []string {
+func DirectCandidateIPs(forwards []contract.Forward) []string {
 	seen := map[string]bool{}
 
 	var ips []string
@@ -98,7 +98,7 @@ func DirectCandidateIPs(forwards []desired.Forward) []string {
 // Resolve — цель каждого проброса: реплики — первая живая (одна —
 // закреплённая); `auto` уходит напрямую только после нескольких неудач
 // туннеля подряд и возвращается при первой удачной пробе.
-func Resolve(forwards []desired.Forward, health *Health) []Resolved {
+func Resolve(forwards []contract.Forward, health *Health) []Resolved {
 	result := make([]Resolved, 0, len(forwards))
 
 	for _, forward := range forwards {
@@ -172,7 +172,7 @@ func LookupIPv4(host string) string {
 // ResolveHosts — DNAT принимает только IP: доменные цели разрешаются в
 // IPv4. Не разрешившийся прямой адрес отключает аварийный путь; основная
 // цель остаётся как есть (iptables вернёт ошибку в отчёт).
-func ResolveHosts(forwards []desired.Forward, lookup func(string) string) []desired.Forward {
+func ResolveHosts(forwards []contract.Forward, lookup func(string) string) []contract.Forward {
 	resolve := func(host string) string {
 		if host == "" || ipv4.MatchString(host) {
 			return host
@@ -181,7 +181,7 @@ func ResolveHosts(forwards []desired.Forward, lookup func(string) string) []desi
 		return lookup(host)
 	}
 
-	result := make([]desired.Forward, 0, len(forwards))
+	result := make([]contract.Forward, 0, len(forwards))
 
 	for _, forward := range forwards {
 		resolved := forward
@@ -197,7 +197,7 @@ func ResolveHosts(forwards []desired.Forward, lookup func(string) string) []desi
 			}
 		}
 		if forward.Candidates != nil {
-			resolved.Candidates = make([]desired.Candidate, len(forward.Candidates))
+			resolved.Candidates = make([]contract.Candidate, len(forward.Candidates))
 
 			for i, candidate := range forward.Candidates {
 				if candidate.ProbeHost == "" {
@@ -220,11 +220,11 @@ func ResolveHosts(forwards []desired.Forward, lookup func(string) string) []desi
 // сменившейся целью: DNAT применяется к первому пакету потока, дальше
 // ядро держит запись, пока идут пакеты (keepalive WireGuard — постоянно).
 func StaleFlowArgs(before []Resolved, after []Resolved) [][]string {
-	key := func(forward desired.Forward) string {
+	key := func(forward contract.Forward) string {
 		return forward.Proto + "/" + strconv.Itoa(forward.ListenPort)
 	}
 
-	previous := map[string]desired.Forward{}
+	previous := map[string]contract.Forward{}
 	for _, forward := range before {
 		previous[key(forward.Forward)] = forward.Forward
 	}

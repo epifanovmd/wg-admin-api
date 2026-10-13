@@ -3,7 +3,7 @@ import "reflect-metadata";
 import { expect } from "chai";
 import sinon from "sinon";
 
-import { AgentActionAuditedEvent, AgentActionFinishedEvent } from "../agent";
+import { AgentActionAuditedEvent } from "../agent";
 import { ApiKeyCreatedEvent, ApiKeyRevokedEvent } from "../api-key";
 import {
   AccountLockedEvent,
@@ -120,35 +120,27 @@ describe("AuditListener", () => {
     });
   });
 
-  it("records an agent action and its result; log reads are skipped", async () => {
+  it("records an agent action with the acting user and the target", async () => {
     await fire(
       new AgentActionAuditedEvent("agent.revoke", "u1", "a1", "a1", {}),
     );
-    const finished = (name: string) =>
-      new AgentActionFinishedEvent({
-        id: "x1",
-        agentId: "a1",
-        name: name as never,
-        actor: "u1",
-        status: "done",
-        createdAt: 1,
-        finishedAt: 2,
-      });
+    await fire(
+      new AgentActionAuditedEvent("job.enqueue", null, "j1", null, {
+        queue: "demo.echo",
+      }),
+    );
 
-    await fire(finished("agent.logs"));
-    await fire(finished("worker.restart"));
-
-    expect(record.callCount).to.equal(2);
     expect(record.firstCall.args[0]).to.deep.equal({
       type: AuditEventType.AGENT_ACTION,
       actorId: "u1",
       subjectId: "a1",
       meta: { action: "agent.revoke", agentId: "a1" },
     });
-    expect(record.secondCall.args[0]).to.deep.include({
-      type: AuditEventType.AGENT_ACTION_RESULT,
-      actorId: "u1",
-      subjectId: "a1",
+    expect(record.secondCall.args[0]).to.deep.equal({
+      type: AuditEventType.AGENT_ACTION,
+      actorId: null,
+      subjectId: "j1",
+      meta: { action: "job.enqueue", queue: "demo.echo" },
     });
   });
 });

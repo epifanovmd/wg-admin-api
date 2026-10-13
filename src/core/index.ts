@@ -1,3 +1,4 @@
+export * from "./agent";
 export * from "./auth";
 export * from "./bootstrap";
 export * from "./core.module";
@@ -16,3 +17,4 @@ export * from "./paths";
 export * from "./redis";
 export * from "./repository";
 export * from "./routing";
+export * from "./worker-requests";

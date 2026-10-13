@@ -11,7 +11,7 @@ const WORK_DIR = "/tmp/wg-admin.Ab3dEf9h";
 
 /** Команда установки, как её собирает `installCommand` модуля agent. */
 const installCommand = (tokenFile: string, baseUrl = "http://api") =>
-  `curl -fsSL '${baseUrl}/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- --token-file '${tokenFile}' --name 'node-a'`;
+  `curl -fsSL '${baseUrl}/agent/v1/bundle/install.sh' | sudo sh -s -- --token-file '${tokenFile}' --name 'node-a'`;
 
 const makeAgents = () => ({
   commandFor: sinon
@@ -82,20 +82,23 @@ describe("WgProvisionNodeJob", () => {
     const mktemp = runner.calls.findIndex(call => call.includes("mktemp -d"));
     const token = runner.calls.indexOf(`upload:${WORK_DIR}/agent.token`);
     const install = runner.calls.findIndex(call =>
-      call.includes(`| sh -s -- --token-file '${WORK_DIR}/agent.token'`),
+      call.includes(
+        `sh ${WORK_DIR}/install.sh --token-file '${WORK_DIR}/agent.token'`,
+      ),
     );
 
     expect(mktemp).to.be.greaterThan(-1);
     expect(token).to.be.greaterThan(mktemp);
     expect(install).to.be.greaterThan(token);
     expect(runner.calls[install]).to.not.include("sudo sh");
+    expect(runner.calls[install]).to.include(`-o ${WORK_DIR}/install.sh &&`);
     expect(agents.commandFor.firstCall.args[2]).to.equal("http://api");
     expect(runner.upload.firstCall.args[1].toString()).to.equal("enroll-token");
 
     const commands = runner.calls.filter(call => call.startsWith("exec:"));
 
     expect(commands.join("\n")).to.not.include("enroll-token");
-    expect(commands.some(c => c.includes("wg-admin-agent.service"))).to.be.true;
+    expect(commands.some(c => c.includes("agent-wg.service"))).to.be.true;
     expect(runner.calls.at(-1)).to.equal(`exec:rm -rf ${WORK_DIR}`);
     expect(runner.end.calledOnce).to.be.true;
   });
@@ -108,7 +111,7 @@ describe("WgProvisionNodeJob", () => {
     runner.exec.callsFake(async (command: string) =>
       command.startsWith("mktemp")
         ? { code: 0, stdout: WORK_DIR, stderr: "" }
-        : command.includes("agent-link/bundle")
+        : command.includes("agent/v1/bundle")
           ? { code: 1, stdout: "", stderr: "boom" }
           : { code: 0, stdout: "", stderr: "" },
     );
@@ -173,7 +176,7 @@ describe("WgProvisionNodeJob", () => {
         if (command.startsWith("mktemp")) {
           return { code: 0, stdout: WORK_DIR, stderr: "" };
         }
-        if (!command.includes("agent-link/bundle")) {
+        if (!command.includes("agent/v1/bundle")) {
           return { code: 0, stdout: "", stderr: "" };
         }
         onLine?.("▶ [0s] Зависимости");

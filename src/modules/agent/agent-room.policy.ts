@@ -1,16 +1,13 @@
 import { inject } from "inversify";
 
-import { Injectable } from "../../core";
+import { Agents, Injectable } from "../../core";
 import { ISocketRoomPolicy } from "../socket";
-import { AgentRuntime } from "./agent.runtime";
 import { AGENT_ROOM_TYPE, agentRoom, isAgentId } from "./agent.types";
 import { AgentAccessService } from "./agent-access.service";
 
 /**
- * Комната агента `agent_<id>` (`room:subscribe { type: "agent", id }`):
- * право `agent:view` или доступ к агенту через политику (агент своего
- * узла), и агент существует. Пока клиент в комнате, сервер держит
- * наблюдателя (`AgentWatchService`): метрики и журнал приходят чаще.
+ * Комната агента `agent_<id>` (`room:subscribe { type: "agent", id }`): доступ на просмотр и
+ * агент существует. Пока клиент в комнате, агент под наблюдением (`AgentWatchService`).
  */
 @Injectable()
 export class AgentRoomPolicy implements ISocketRoomPolicy {
@@ -18,7 +15,7 @@ export class AgentRoomPolicy implements ISocketRoomPolicy {
 
   constructor(
     @inject(AgentAccessService) private readonly _access: AgentAccessService,
-    @inject(AgentRuntime) private readonly _runtime: AgentRuntime,
+    @inject(Agents) private readonly _agents: Agents,
   ) {}
 
   room(id: string): string {
@@ -29,7 +26,7 @@ export class AgentRoomPolicy implements ISocketRoomPolicy {
     return (
       isAgentId(id) &&
       (await this._access.canUser(userId, id, "view")) &&
-      !!(await this._runtime.agents.getAgent(id))
+      !!(await this._agents.find(id))
     );
   }
 }

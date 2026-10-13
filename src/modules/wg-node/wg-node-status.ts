@@ -1,23 +1,14 @@
-import type { AgentDto, IAgentWorkerDto } from "../agent";
-import type { IWgNodeAgentState } from "./wg-node.service";
-import {
-  EWgMode,
-  EWgNodeStatus,
-  IWgNodeOsInfo,
-  WG_NODE_WORKERS,
-  WG_WORKER,
-} from "./wg-node.types";
+import type { AgentDto, IAgentHostDto, IAgentWorkerDto } from "../agent";
+import type { IWgNodeAgentState, IWgNodeOsInfoPatch } from "./wg-node.service";
+import { EWgMode, EWgNodeStatus, WG_NODE_WORKERS } from "./wg-node.types";
 
-/** Длина версии wg в колонке. */
-const WG_VERSION_MAX = 64;
 /** Длина версии агента в колонке. */
 const AGENT_VERSION_MAX = 32;
 /** Длина IP в колонке. */
 const IP_MAX = 45;
 
-/** Сведения воркера wg из `GET /health` (`info`). */
-interface IWgWorkerInfo {
-  wgVersion?: unknown;
+/** Сведения воркера wg (событие `node.info`). */
+export interface IWgWorkerInfo {
   wgMode?: unknown;
   distro?: unknown;
   kernel?: unknown;
@@ -47,7 +38,7 @@ export const workerProblem = (agent: AgentDto, name: string): string | null => {
 
   if (!worker) return `Нет воркера ${name} в настройках агента`;
   if (worker.state === "invalid") {
-    return `Воркер ${name} не зарегистрирован: ${worker.message ?? "нет ответа на /health или /manifest"}`;
+    return `Воркер ${name} не зарегистрирован: ${worker.message ?? "нет регистрации"}`;
   }
   if (worker.state === "backoff" || worker.state === "stopped") {
     return `Воркер ${name} не работает`;
@@ -83,38 +74,47 @@ export const wgNodeStatusOf = (
   return { status: EWgNodeStatus.Online, statusMessage: null };
 };
 
+/** Сведения узла от агента (ОС, архитектура, имя, ядро) — слияние в `osInfo`. */
+export const hostOsInfoPatch = (host: IAgentHostDto): IWgNodeOsInfoPatch => ({
+  set: {
+    platform: host.os,
+    arch: host.arch,
+    hostname: host.hostname,
+    ...(host.kernel && { kernel: host.kernel }),
+  },
+});
+
 /**
- * Состояние ноды из записи агента: статус, версии, ОС (узел — от агента,
- * режим wg и занятые порты — от воркера wg), адрес и время связи.
+ * Сведения узла от воркера wg (режим wg, дистрибутив, ядро, занятые порты) —
+ * слияние в `osInfo`: сведения агента остаются; неверные значения
+ * отбрасываются, режима нет — он убирается.
  */
-export const wgNodeStateOf = (agent: AgentDto): IWgNodeAgentState => {
-  const wg = agent.workers.find(worker => worker.name === WG_WORKER);
-  const info = (wg?.health?.info ?? {}) as IWgWorkerInfo;
-  const osInfo: IWgNodeOsInfo = {
-    ...(agent.host && {
-      platform: agent.host.os,
-      arch: agent.host.arch,
-      hostname: agent.host.hostname,
-      ...(agent.host.kernel && { kernel: agent.host.kernel }),
-    }),
-    ...(asString(info.kernel) && { kernel: asString(info.kernel) }),
-    ...(asString(info.distro) && { distro: asString(info.distro) }),
-    ...(asMode(info.wgMode) && { wgMode: asMode(info.wgMode) }),
-    ...(asPorts(info.udpPorts) && { udpPorts: asPorts(info.udpPorts) }),
-    ...(asPorts(info.tcpPorts) && { tcpPorts: asPorts(info.tcpPorts) }),
-  };
+export const workerOsInfoPatch = (info: IWgWorkerInfo): IWgNodeOsInfoPatch => {
+  const mode = asMode(info.wgMode);
 
   return {
-    ...wgNodeStatusOf(agent),
-    agentVersion: agent.version?.slice(0, AGENT_VERSION_MAX) ?? null,
-    ...(wg?.health && {
-      wgVersion: asString(info.wgVersion)?.slice(0, WG_VERSION_MAX) ?? null,
-    }),
-    // Без ответа воркера (перезапуск) прежние порты и режим остаются.
-    ...(agent.host && wg?.health && { osInfo }),
-    ...(agent.address && { agentRemoteIp: agent.address.slice(0, IP_MAX) }),
-    ...(agent.lastSeenAt !== undefined && {
-      lastSeenAt: new Date(agent.lastSeenAt),
-    }),
+    set: {
+      ...(asString(info.kernel) && { kernel: asString(info.kernel) }),
+      ...(asString(info.distro) && { distro: asString(info.distro) }),
+      ...(mode && { wgMode: mode }),
+      ...(asPorts(info.udpPorts) && { udpPorts: asPorts(info.udpPorts) }),
+      ...(asPorts(info.tcpPorts) && { tcpPorts: asPorts(info.tcpPorts) }),
+    },
+    ...(!mode && { remove: ["wgMode"] }),
   };
 };
+
+/**
+ * Состояние ноды из записи агента: статус, версия агента, сведения узла
+ * (слиянием: режим wg и порты присылает воркер wg событием `node.info`),
+ * адрес и время связи.
+ */
+export const wgNodeStateOf = (agent: AgentDto): IWgNodeAgentState => ({
+  ...wgNodeStatusOf(agent),
+  agentVersion: agent.version?.slice(0, AGENT_VERSION_MAX) ?? null,
+  ...(agent.host && { osInfoPatch: hostOsInfoPatch(agent.host) }),
+  ...(agent.remoteIp && { agentRemoteIp: agent.remoteIp.slice(0, IP_MAX) }),
+  ...(agent.lastSeenAt !== undefined && {
+    lastSeenAt: new Date(agent.lastSeenAt),
+  }),
+});

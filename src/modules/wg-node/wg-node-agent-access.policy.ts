@@ -12,7 +12,7 @@ const NODE_PERMISSION: Record<TAgentAction, string> = {
   logs: WgNodePermissions.NODE_LOGS,
   manage: WgNodePermissions.NODE_AGENT,
   config: WgNodePermissions.NODE_AGENT,
-  fetch: WgNodePermissions.NODE_AGENT,
+  command: WgNodePermissions.NODE_AGENT,
 };
 
 /**

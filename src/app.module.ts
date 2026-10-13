@@ -51,7 +51,7 @@ import { WgStatsModule } from "./modules/wg-stats";
     PasskeysModule,
     BiometricModule,
 
-    // Агенты на узлах (agent-sdk)
+    // Агенты на узлах (ядро агента — src/core/agent)
     AgentModule,
 
     // Модули проекта

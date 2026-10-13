@@ -93,6 +93,7 @@ export class WgProvisionNodeJob implements IJobHandler<IWgProvisionJobData> {
           { tokenFile: files.token },
           data.backendUrl,
         ),
+        this._agents.instance(),
       );
 
       await runSshPlan(ctx, runner, plan, data.username, {

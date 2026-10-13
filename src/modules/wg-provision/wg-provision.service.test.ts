@@ -1,6 +1,7 @@
 import "reflect-metadata";
 
 import { expect } from "chai";
+import { execFileSync } from "child_process";
 import sinon from "sinon";
 
 import { uuid, uuid2 } from "../../test/helpers";
@@ -8,34 +9,65 @@ import {
   agentBinaryPath,
   buildProvisionPlan,
   buildUninstallPlan,
-  REMOVE_WG_ADMIN_AGENT,
-  withoutSudo,
+  installViaFile,
+  removePreviousAgent,
   withSudo,
 } from "./provision-plan";
 import { WgProvisionService } from "./wg-provision.service";
 
 const COMMAND =
-  "curl -fsSL 'https://api.example.com/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- --token-file '/tmp/wg-admin.x1/agent.token' --name 'node-a'";
+  "curl -fsSL 'https://api.example.com/agent/v1/bundle/install.sh' | sudo sh -s -- --token-file '/tmp/wg-admin.x1/agent.token' --name 'node-a'";
 
 describe("provision-plan", () => {
-  it("сначала снимается служба wg-admin-agent, затем — команда установки без sudo; каталог удаляется", () => {
-    const [prepare, install] = buildProvisionPlan("/tmp/wg-admin.x1", COMMAND);
-
-    expect(prepare.command).to.equal(REMOVE_WG_ADMIN_AGENT);
-    expect(prepare.command).to.include(
-      "systemctl disable --now wg-admin-agent",
+  it("сначала снимается агент прежнего поколения, затем — команда установки без sudo; каталог удаляется", () => {
+    const [prepare, install] = buildProvisionPlan(
+      "/tmp/wg-admin.x1",
+      COMMAND,
+      "wg",
     );
+
+    expect(prepare.command).to.equal(removePreviousAgent("wg"));
     expect(install.command).to.include(
-      "| sh -s -- --token-file '/tmp/wg-admin.x1/agent.token'",
+      "curl -fsSL 'https://api.example.com/agent/v1/bundle/install.sh' -o /tmp/wg-admin.x1/install.sh && sh /tmp/wg-admin.x1/install.sh --token-file '/tmp/wg-admin.x1/agent.token'",
     );
     expect(install.command).to.not.include("sudo");
+    expect(install.command).to.not.include("| sh");
     expect(install.command).to.include("rm -rf /tmp/wg-admin.x1");
     expect(install.timeoutMs).to.be.greaterThan(300_000);
   });
 
-  it("withoutSudo меняет только запуск установщика", () => {
-    expect(withoutSudo(COMMAND)).to.include("| sh -s -- --token-file");
-    expect(withoutSudo("ls")).to.equal("ls");
+  it("снятие прежнего агента: только данные без agent.db, служба без уборки, его процессы, его файлы", () => {
+    const command = removePreviousAgent("wg");
+
+    expect(() => execFileSync("sh", ["-n", "-c", command])).to.not.throw();
+    expect(command).to.include(
+      "[ -f /var/lib/agent-wg/agent.status ] && [ ! -f /var/lib/agent-wg/agent.db ]",
+    );
+    expect(command).to.include("systemctl disable --now agent-wg.service");
+    expect(command).to.not.include("uninstall");
+    expect(command).to.include("/var/lib/agent-wg/processes/*.json");
+    expect(command).to.include(
+      "rm -rf /opt/agent-wg /etc/agent-wg /var/lib/agent-wg",
+    );
+    expect(command).to.not.include("/etc/wireguard");
+    expect(command).to.not.include("/var/lib/wg-admin");
+  });
+
+  it("установщик — файлом: провал скачивания — провал шага, а не пустой sh с успехом", () => {
+    const command = installViaFile(COMMAND, "/tmp/wg-admin.x1");
+
+    expect(command).to.match(
+      /^curl -fsSL '[^']+' -o \/tmp\/wg-admin\.x1\/install\.sh && sh /,
+    );
+    expect(
+      execFileSync("sh", [
+        "-c",
+        `${command.replace(/^curl \S+ \S+ -o (\S+)/, "false -o $1")}; echo $?`,
+      ])
+        .toString()
+        .trim(),
+    ).to.equal("1");
+    expect(installViaFile("ls", "/tmp/x")).to.equal("ls");
   });
 
   it("withSudo оборачивает команды для не-root", () => {

@@ -13,14 +13,16 @@ ARG GO_VERSION=1.26.9-bookworm
 # agent.yaml + agent.prod.yaml, воркеры wg и socks, собранные под платформу (их build —
 # go build здесь же), release/ — сборки воркеров для обновления нод и install.sh —
 # установщик агента (API раздаёт его вместе с архивами). Программа агента и install.sh —
-# с GitHub Release версии agent-sdk; агента под другие платформы pack берёт оттуда же.
+# с GitHub Release версии AGENT_VERSION (build-arg, по умолчанию — из .env.example);
+# агента под другие платформы pack берёт оттуда же.
 # Ключ подписи воркеров — необязательный секрет agent_signing_key (openssl, agent/README.md):
 # docker build --secret id=agent_signing_key,env=AGENT_SIGNING_KEY …; без него воркеры
 # ставятся, но с API не обновляются. Открытый ключ pack кладёт в архив сам.
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS agent-bundle
 WORKDIR /src
-COPY package.json ./
-RUN version=$(sed -n 's|.*agent-sdk-\([^/"]*\)\.tgz".*|\1|p' package.json) && test -n "$version" && \
+ARG AGENT_VERSION
+COPY .env.example ./
+RUN version=${AGENT_VERSION:-$(sed -n 's/^AGENT_VERSION=\([^[:space:]]*\).*/\1/p' .env.example)} && test -n "$version" && \
     arch=$(dpkg --print-architecture) && \
     base="https://github.com/epifanovmd/agent/releases/download/v$version" && \
     curl -fsSL "$base/manifest.json" -o /tmp/manifest.json && \
@@ -29,6 +31,8 @@ RUN version=$(sed -n 's|.*agent-sdk-\([^/"]*\)\.tgz".*|\1|p' package.json) && te
     echo "$sha  /usr/local/bin/agent" | sha256sum -c - && chmod +x /usr/local/bin/agent && \
     curl -fsSL "$base/install.sh" -o /usr/local/share/agent-install.sh
 COPY agent/go.mod agent/go.sum ./agent/
+# Модуль агента — прямо с GitHub, мимо прокси и базы сумм Go (сумма — в go.sum).
+ENV GOPRIVATE=github.com/epifanovmd/*
 RUN --mount=type=cache,target=/go/pkg/mod cd agent && go mod download
 COPY agent/agent.yaml agent/agent.prod.yaml agent/go-worker.sh ./agent/
 COPY agent/internal ./agent/internal
@@ -72,7 +76,8 @@ FROM node:${NODE_VERSION} AS app
 WORKDIR /app
 
 ENV NODE_ENV=production \
-    NODE_OPTIONS=--enable-source-maps
+    NODE_OPTIONS=--enable-source-maps \
+    AGENT_BUNDLE_DIR=agent/bundle
 
 # tini — корректный PID 1: сигналы доходят до node, дочерние процессы убираются.
 # Менеджеры пакетов в рантайме не нужны (старт и миграции — через node): меньше
@@ -88,7 +93,7 @@ COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/build ./build
 # Ассеты рантайма (шаблоны писем) лежат вне build/ и читаются по пути от корня.
 COPY --chown=node:node templates ./templates
-# Архивы папки агента для нод (AGENT_BUNDLE_DIR=/app/agent/bundle).
+# Архивы папки агента для нод (AGENT_BUNDLE_DIR выше): их раздаёт API.
 COPY --from=agent-bundle --chown=node:node /agent-bundle ./agent/bundle
 
 # Версия сборки (GET /api/v1/app/version) — последним слоем: меняется при

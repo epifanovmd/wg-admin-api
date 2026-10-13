@@ -10,7 +10,7 @@ import { WgAgentWatchService } from "./wg-agent-watch.service";
 import { WgNodeSignals } from "./wg-node-signals";
 
 /**
- * Связь WG-домена с агентами нод (agent-sdk): настройки воркеров `wg` и
+ * Связь WG-домена с агентами нод (ядро агента): настройки воркеров `wg` и
  * `socks` из БД, их итоги, метрики и события — обратно в домен.
  */
 @Module({

@@ -1,14 +1,13 @@
 import type {
   Agent,
-  AgentWorker,
-  ConfigStatus,
-  MetricsPoint,
-  WorkerManifest,
-} from "agent-sdk/server";
-
-import { BaseDto } from "../../../core/dto/BaseDto";
-import type { TAgentLogLevel } from "../agent.types";
-import type { IAgentAlert, IAgentAlertChange } from "../agent-alerts";
+  AgentCommand,
+  AgentEnrollmentToken,
+  AgentEvent,
+  AgentMetric,
+  IAgentConfigStatus,
+  IAgentLogEntry,
+  IAgentWorkerView,
+} from "../../../core";
 
 /**
  * Id агента в пути: формат проверяется до контроллера.
@@ -28,7 +27,6 @@ export interface IAgentErrorDto {
   message: string;
 }
 
-/** Узел агента. */
 export interface IAgentHostDto {
   os: string;
   arch: string;
@@ -36,479 +34,357 @@ export interface IAgentHostDto {
   kernel?: string;
 }
 
-/** Последний ответ воркера на `GET /health`. */
+/** Пульс воркера. */
 export interface IAgentWorkerHealthDto {
   ok: boolean;
-  /** Идёт долгая работа: плановая замена воркера ждёт её окончания. */
+  /** Идёт работа, которую нельзя прерывать: плановая замена ждёт её окончания. */
   busy?: boolean;
   message?: string;
-  /** Сведения от воркера (версии, порты и т. п.). */
-  info?: Record<string, unknown>;
 }
 
-/** Ключ настроек в манифесте воркера. */
 export interface IAgentManifestConfigDto {
   key: string;
   description?: string;
   /** JSON Schema значения. */
-  schema?: Record<string, unknown>;
+  schema?: Record<string, any>;
 }
 
-/**
- * Маршрут воркера в манифесте: `{name}` в пути — один сегмент. Агент
- * пропускает к воркеру только объявленные маршруты (`ROUTE_UNDECLARED`).
- */
-export interface IAgentManifestRouteDto {
-  method: string;
-  path: string;
+export interface IAgentManifestCommandDto {
+  type: string;
   description?: string;
-  /** JSON Schema тела запроса: сервер проверяет тело до отправки. */
-  request?: Record<string, unknown>;
-  /** JSON Schema тела ответа `2xx` — описание, не проверяется. */
-  response?: Record<string, unknown>;
+  /** JSON Schema аргументов. */
+  schema?: Record<string, any>;
+  /** JSON Schema итога. */
+  result?: Record<string, any>;
 }
 
-/** Тип события воркера в манифесте: другие типы агент не принимает. */
 export interface IAgentManifestEventDto {
   type: string;
   description?: string;
-  /** JSON Schema `data` события. */
-  schema?: Record<string, unknown>;
+  schema?: Record<string, any>;
 }
 
-/** Запрос воркера к серверу (`POST /requests` на сокете агента). */
 export interface IAgentManifestRequestDto {
   type: string;
   description?: string;
-  /** JSON Schema `data` запроса: сервер проверяет до обработчика. */
-  schema?: Record<string, unknown>;
-  /** JSON Schema `data` ответа — описание, не проверяется. */
-  response?: Record<string, unknown>;
+  schema?: Record<string, any>;
+  response?: Record<string, any>;
 }
 
-/** Тип задачи воркера в манифесте (`POST /jobs`). */
-export interface IAgentManifestJobDto {
-  type: string;
-  description?: string;
-  /** JSON Schema `data` задачи. */
-  schema?: Record<string, unknown>;
-}
-
-/**
- * Манифест воркера — ответ `GET /manifest`: что воркер умеет (каталог
- * возможностей). Агент пропускает только объявленное: маршруты, типы задач,
- * события, запросы к серверу, ключи настроек.
- */
+/** Что воркер умеет (его регистрация на агенте). */
 export interface IAgentWorkerManifestDto {
-  version: string;
   description?: string;
-  configs: IAgentManifestConfigDto[];
-  routes: IAgentManifestRouteDto[];
-  events: IAgentManifestEventDto[];
-  jobs: IAgentManifestJobDto[];
-  requests: IAgentManifestRequestDto[];
+  configs?: IAgentManifestConfigDto[];
+  commands?: IAgentManifestCommandDto[];
+  events?: IAgentManifestEventDto[];
+  requests?: IAgentManifestRequestDto[];
 }
 
-/** Что агент сообщил о ключе настроек: версия на диске и итог применения. */
-export interface IAgentWorkerConfigReportDto {
-  version: number;
-  /** Нет — ещё применяется. */
-  ok?: boolean;
-  error?: IAgentErrorDto;
-}
-
-/**
- * Воркер агента: из `hello` и последнего `status`. `state` — `starting`,
- * `running` (зарегистрирован), `invalid` (не ответил как нужно на
- * `GET /health` или `GET /manifest`, причина — `message`), `backoff`,
- * `stopped`.
- */
+/** Воркер агента. */
 export interface IAgentWorkerDto {
   name: string;
-  state?: string;
-  message?: string;
   version?: string;
-  /** Ставится и обновляется с сервера (`release: true`). */
-  release?: boolean;
-  /** Встроенный `sysmetrics`: часть агента. */
-  builtin?: boolean;
-  restarts?: number;
+  /** Воркер со сборкой с сервера (обновляется `worker.update`). */
+  release: boolean;
+  state: "starting" | "running" | "invalid" | "backoff" | "stopped" | "unknown";
+  message?: string;
+  restarts: number;
   health?: IAgentWorkerHealthDto;
-  /** `restart` | `update` — замена ждёт, пока воркер занят. */
-  pending?: string;
+  /** Плановая замена ждёт, пока воркер занят. */
+  pending?: "restart" | "update";
   manifest?: IAgentWorkerManifestDto;
-  /** Ключ → что на диске агента и итог применения. */
-  configs?: Record<string, IAgentWorkerConfigReportDto>;
-}
-
-/** Точка метрик: узел (`host`) и ответы `GET /metrics` воркеров. */
-export interface IAgentMetricsPointDto {
-  /** Время сбора на узле, мс. */
-  at: number;
-  host?: Record<string, unknown>;
-  workers?: Record<string, unknown>;
-}
-
-/** Какой процесс сервера держит соединение агента. */
-export interface IAgentSessionDto {
-  id: string;
-  instance: string;
-  since: number;
+  /** Версия в каталоге сборок новее работающей. */
+  updateAvailable?: string;
 }
 
 /** Проблема агента. */
-export class AgentAlertDto extends BaseDto {
-  /** Ключ в пределах агента: `offline`, `workerDown:<воркер>`, … */
-  key: string;
-  agentId: string;
-  agentName: string;
-  /** `offline` | `workerDown` | `workerInvalid` | `workerUnhealthy` | `configFailed`. */
-  type: string;
+export interface IAgentAlertDto {
+  kind:
+    | "offline"
+    | "workerDown"
+    | "workerInvalid"
+    | "workerUnhealthy"
+    | "configFailed";
   worker?: string;
-  configKey?: string;
+  key?: string;
   message: string;
-  /** С какого времени, мс. */
-  since: number;
-  /** В событии: `true` — началась, `false` — закончилась. */
-  active?: boolean;
-
-  constructor(alert: IAgentAlert | IAgentAlertChange) {
-    super(alert);
-
-    this.key = alert.key;
-    this.agentId = alert.agentId;
-    this.agentName = alert.agentName;
-    this.type = alert.type;
-    if (alert.worker) this.worker = alert.worker;
-    if (alert.configKey) this.configKey = alert.configKey;
-    this.message = alert.message;
-    this.since = alert.since;
-    if ("active" in alert) this.active = alert.active;
-  }
-
-  static fromModel(alert: IAgentAlert | IAgentAlertChange): AgentAlertDto {
-    return new AgentAlertDto(alert);
-  }
 }
 
-const manifestDto = (
-  manifest: WorkerManifest | undefined,
-): IAgentWorkerManifestDto | undefined =>
-  manifest && {
-    version: manifest.version ?? "",
-    ...(manifest.description && { description: manifest.description }),
-    configs: manifest.configs ?? [],
-    routes: manifest.routes ?? [],
-    events: manifest.events ?? [],
-    jobs: manifest.jobs ?? [],
-    requests: manifest.requests ?? [],
-  };
+/** Точка метрик: узел и метрики воркеров из их пульса. */
+export interface IAgentMetricsPointDto {
+  at: number;
+  host?: Record<string, any>;
+  workers?: Record<string, any>;
+}
 
-const workerDto = (worker: AgentWorker): IAgentWorkerDto => ({
-  name: worker.name,
-  ...(worker.state && { state: worker.state }),
-  ...(worker.message && { message: worker.message }),
-  ...(worker.version && { version: worker.version }),
-  ...(worker.release !== undefined && { release: worker.release }),
-  ...(worker.builtin && { builtin: true }),
-  ...(worker.restarts !== undefined && { restarts: worker.restarts }),
-  ...(worker.health && {
-    health: {
-      ok: worker.health.ok,
-      ...(worker.health.busy !== undefined && { busy: worker.health.busy }),
-      ...(worker.health.message && { message: worker.health.message }),
-      ...(worker.health.info && { info: worker.health.info }),
-    },
-  }),
-  ...(worker.pending && { pending: worker.pending }),
-  ...(worker.manifest && { manifest: manifestDto(worker.manifest) }),
-  ...(worker.configs && {
-    configs: Object.fromEntries(
-      Object.entries(worker.configs).map(([key, report]) => [
-        key,
-        {
-          version: report.version,
-          ...(report.ok !== undefined && { ok: report.ok }),
-          ...(report.error && { error: report.error }),
-        },
-      ]),
-    ),
-  }),
-});
-
-export const toMetricsPointDto = (
-  point: Pick<MetricsPoint, "at" | "host" | "workers">,
-): IAgentMetricsPointDto => ({
-  at: point.at,
-  ...(point.host && { host: point.host }),
-  ...(point.workers && { workers: point.workers }),
-});
-
-/**
- * Агент, как его видит бэкенд: связь, узел, воркеры (состояние, самочувствие,
- * манифест, настройки), последняя точка метрик, текущие проблемы.
- */
-export class AgentDto extends BaseDto {
+/** Агент. */
+export interface AgentDto {
   id: string;
   name: string;
   labels: Record<string, string>;
   online: boolean;
   revoked: boolean;
-  /** Время регистрации, мс. */
+  version?: string;
+  /** self | external | disabled. */
+  updateMode?: string;
+  /** Как поставлен: systemd | user | manual. */
+  install?: string;
+  host?: IAgentHostDto;
+  remoteIp?: string;
+  /** Отметки времени, мс: регистрация, последняя связь, запуск программы агента. */
   enrolledAt: number;
   lastSeenAt?: number;
-  connectedAt?: number;
-  /** IP последнего подключения. */
-  address?: string;
-  /** Версия агента. */
-  version?: string;
-  bootId?: string;
   startedAt?: number;
-  host?: IAgentHostDto;
-  workers: IAgentWorkerDto[];
-  /** Когда пришёл последний `status`, мс. */
-  statusAt?: number;
-  /** Сколько важных сообщений агента ждут подтверждения. */
+  /** Новая версия агента в его каталоге сборок. */
+  updateAvailable?: string;
+  /** Номер желаемого и применённый агентом. */
+  desiredRev: number;
+  appliedRev?: number;
+  /** Итоги и события, ждущие отправки на узле. */
   outbox?: number;
-  /** Последняя точка метрик. */
+  workers: IAgentWorkerDto[];
   metrics?: IAgentMetricsPointDto;
-  /** Новая версия, которую агент нашёл в своём каталоге сборок сам; нет — новее нет или не проверял. */
-  update?: IAgentUpdateInfoDto;
-  /**
-   * Режим обновления агента: `self` — обновляется по команде сервера;
-   * `external` (в контейнере) и `disabled` — нет. Нет — агент старше 1.4.
-   */
-  updateMode?: string;
-  /**
-   * Как агент поставлен на узел: `systemd`, `user` (без root, служба пользователя),
-   * `manual` (без root, без службы); нет — запущен иначе (в контейнере, `--run`).
-   */
-  install?: string;
-  alerts: AgentAlertDto[];
-  session?: IAgentSessionDto;
-
-  constructor(agent: Agent, alerts: readonly IAgentAlert[]) {
-    super(agent);
-
-    this.id = agent.id;
-    this.name = agent.name;
-    this.labels = agent.labels;
-    this.online = agent.online;
-    this.revoked = agent.revoked;
-    this.enrolledAt = agent.enrolledAt;
-    if (agent.lastSeenAt !== undefined) this.lastSeenAt = agent.lastSeenAt;
-    if (agent.connectedAt !== undefined) this.connectedAt = agent.connectedAt;
-    if (agent.address) this.address = agent.address;
-    if (agent.version) this.version = agent.version;
-    if (agent.bootId) this.bootId = agent.bootId;
-    if (agent.startedAt !== undefined) this.startedAt = agent.startedAt;
-    if (agent.hello?.agent.updateMode) {
-      this.updateMode = agent.hello.agent.updateMode;
-    }
-    if (agent.hello?.agent.install) this.install = agent.hello.agent.install;
-    if (agent.host) {
-      this.host = {
-        os: agent.host.os,
-        arch: agent.host.arch,
-        hostname: agent.host.hostname,
-        ...(agent.host.kernel && { kernel: agent.host.kernel }),
-      };
-    }
-    this.workers = agent.workers.map(workerDto);
-    if (agent.statusAt !== undefined) this.statusAt = agent.statusAt;
-    if (agent.status) this.outbox = agent.status.outbox;
-    if (agent.metrics) this.metrics = toMetricsPointDto(agent.metrics);
-    if (agent.update) {
-      this.update = {
-        latest: agent.update.latest,
-        checkedAt: agent.update.checkedAt,
-      };
-    }
-    this.alerts = alerts.map(AgentAlertDto.fromModel);
-    if (agent.session) this.session = { ...agent.session };
-  }
-
-  /** Агент и его текущие проблемы (`agentAlerts`). */
-  static fromModel(agent: Agent, alerts: readonly IAgentAlert[]): AgentDto {
-    return new AgentDto(agent, alerts);
-  }
+  alerts: IAgentAlertDto[];
 }
 
-/** Новая версия агента из его собственной проверки обновлений. */
-export interface IAgentUpdateInfoDto {
-  latest: string;
-  /** Когда агент проверял, мс. */
-  checkedAt: number;
-}
-
-/** Статус ключа настроек воркера на агенте. */
-export class AgentConfigStatusDto extends BaseDto {
-  agentId: string;
-  worker: string;
-  key: string;
-  /** Желаемая версия; `null` — ключ удалён, агент ещё не удалил. */
-  version: number | null;
-  /** Версия на диске агента. */
-  delivered?: number;
-  /** Последняя версия, применённая воркером. */
-  applied?: number;
-  /**
-   * `pending` | `applying` | `applied` | `failed` | `deleting`; `deleted` —
-   * агент удалил ключ (только в событии сокета `agent:config`).
-   */
-  state: string;
-  error?: IAgentErrorDto;
-  /** Подробный итог применения от воркера (только в `applied`). */
-  result?: unknown;
-  updatedAt?: number;
-
-  constructor(status: ConfigStatus) {
-    super(status);
-
-    this.agentId = status.agentId;
-    this.worker = status.worker;
-    this.key = status.key;
-    this.version = status.version;
-    if (status.delivered !== undefined) this.delivered = status.delivered;
-    if (status.applied !== undefined) this.applied = status.applied;
-    this.state = status.state;
-    if (status.error) this.error = status.error;
-    if (status.result !== undefined) this.result = status.result;
-    if (status.updatedAt !== undefined) this.updatedAt = status.updatedAt;
-  }
-
-  static fromModel(status: ConfigStatus): AgentConfigStatusDto {
-    return new AgentConfigStatusDto(status);
-  }
-}
-
-/** Значение ключа настроек воркера. */
-export interface IAgentConfigDto {
+/** Ключ настроек воркера и итог его применения. */
+export interface AgentConfigDto {
   agentId: string;
   worker: string;
   key: string;
   version: number;
-  /** Значение; только с правом на настройки (`agent:config`). */
-  data?: unknown;
-  /** Время записи, мс. */
+  /** `pending` — воркер ещё не применил эту версию. */
+  state: "pending" | "applied" | "failed";
+  error?: IAgentErrorDto;
+  /** Значение — только с правом на настройки. */
+  data?: any;
+  /** Ключ удалён (только в событии сокета `agent:config`). */
+  deleted?: boolean;
+  /** Изменён, мс. */
   updatedAt: number;
-  /** Кто изменил. */
   actor?: string;
 }
 
-/** Ключ настроек: значение (если задано) и статус применения. */
-export interface IAgentConfigEntryDto {
-  worker: string;
-  key: string;
-  /** Желаемое значение; нет — ключ удалён и ещё удаляется на агенте. */
-  config?: IAgentConfigDto;
-  status: AgentConfigStatusDto;
+/** Команда агенту и её итог. */
+export interface AgentCommandDto {
+  id: string;
+  agentId: string;
+  type: string;
+  /** Для команды воркеру — воркер и тип его команды. */
+  worker?: string;
+  workerType?: string;
+  args?: any;
+  status: "pending" | "done";
+  ok?: boolean;
+  result?: any;
+  error?: IAgentErrorDto;
+  /** Ход долгой команды, 0..1. */
+  progress?: number;
+  progressText?: string;
+  actor?: string;
+  /** Поставлена и завершена, мс. */
+  createdAt: number;
+  finishedAt?: number;
 }
 
 /** Событие воркера. */
 export interface IAgentEventDto {
-  /** Id сообщения агента. */
-  id: string;
   agentId: string;
+  id: string;
   worker: string;
   type: string;
-  data?: unknown;
-  /** Когда случилось на узле, мс. */
-  at: number;
-  /** Когда принято, мс. */
-  receivedAt: number;
-  /** `data` не подошло под схему события из манифеста воркера: замечания. */
+  data?: any;
+  /** Замечания проверки `data` по схеме события из манифеста воркера. */
   problems?: string[];
+  /** Время на узле и приёма, мс. */
+  at: number;
+  receivedAt: number;
 }
 
-/** Запись журнала агента или воркера. */
 export interface IAgentLogEntryDto {
-  /** Время, мс. */
   at: number;
-  level: TAgentLogLevel;
+  level: string;
   /** `agent` или имя воркера. */
   source: string;
   msg: string;
-  attrs?: Record<string, unknown>;
+  attrs?: Record<string, any>;
 }
 
-/** Последние строки журнала. */
 export interface IAgentLogsDto {
   entries: IAgentLogEntryDto[];
 }
 
-/** Итог встроенного действия агента. */
-export interface IAgentActionDto {
+export interface AgentEnrollmentTokenDto {
   id: string;
-  agentId: string;
-  /** `worker.restart` | `worker.update` | `agent.update` | `agent.rotateKey` | `agent.logs`. */
   name: string;
-  args?: Record<string, unknown>;
-  actor?: string;
-  /** `done` | `failed`. */
-  status: string;
-  result?: unknown;
-  error?: IAgentErrorDto;
-  createdAt: number;
-  finishedAt: number;
-  /** Итог отложенной замены воркера (перезапуск или обновление ждали окончания работы). */
-  deferred?: boolean;
+  /** Начало токена — для узнавания в списке. */
+  prefix: string;
+  labels: Record<string, string>;
+  maxUses?: number;
+  uses: number;
+  expiresAt?: Date;
+  revokedAt?: Date;
+  createdBy?: string;
+  createdAt: Date;
 }
 
-/** Итог обновления агента. */
-export interface IAgentUpdateResultDto {
+/** Созданный токен: полный токен — только в этом ответе. */
+export interface ICreatedAgentEnrollmentTokenDto {
+  token: string;
+  enrollmentToken: AgentEnrollmentTokenDto;
+}
+
+export interface IAgentInstallCommandDto {
+  command: string;
+}
+
+/** Сборка воркера в каталоге сборок проекта. */
+export interface IAgentWorkerBuildDto {
+  name: string;
   version: string;
-  previous?: string;
+  os: string;
+  arch: string;
 }
 
-/**
- * Ответ на перезапуск и обновление воркера. Воркер свободен — заменён сразу
- * (`deferred: false`, у обновления — версии). Занят (`health.busy`) — замена
- * отложена до окончания работы (`deferred: true`, `pending`, `actionId`);
- * её итог — событие сокета `agent:action` с `id = actionId` и `deferred: true`.
- */
-export interface IAgentWorkerActionResultDto {
-  deferred: boolean;
-  /** Что ждёт: `restart` | `update`. */
-  pending?: string;
-  /** Id действия: по нему узнаётся итог в `agent:action`. */
-  actionId?: string;
-  /** Обновление: новая версия воркера. */
-  version?: string;
-  /** Обновление: прежняя версия. */
-  previous?: string;
+export interface IAgentReleaseDto {
+  /** Каталог архивов для узлов задан (`AGENT_BUNDLE_DIR`). */
+  bundle: boolean;
+  workers: IAgentWorkerBuildDto[];
 }
 
-/** Тело перезапуска и обновления воркера. */
-export interface IAgentWorkerActionBody {
-  /** Заменить сразу, не дожидаясь окончания работы воркера (`busy`). */
-  force?: boolean;
-}
+// ─── сборка DTO ──────────────────────────────────────────────────────────
 
-/** Тело записи настроек воркера. */
-export interface ISetAgentConfigBody {
-  /** Значение ключа — любой JSON; проверяется по схеме из манифеста воркера. */
-  data: unknown;
-}
+const optional = <T>(value: T | null | undefined): T | undefined =>
+  value ?? undefined;
 
-/** Запрос к воркеру через агента. */
-export interface IAgentFetchBody {
-  /**
-   * HTTP-метод.
-   * @pattern ^[A-Z]{1,16}$
-   */
-  method?: string;
-  /**
-   * Путь у воркера от `/`, с параметрами.
-   * @maxLength 2048
-   */
-  path: string;
-  /** Заголовки запроса. */
-  headers?: Record<string, string>;
-  /** Тело: текст или base64 (`encoding: "base64"`). */
-  body?: string;
-  /** `utf8` (по умолчанию) | `base64`. */
-  encoding?: "utf8" | "base64";
-  /** Срок, мс (по умолчанию 30 000, не больше 600 000). */
-  timeoutMs?: number;
-}
+export const toWorkerDto = (
+  w: IAgentWorkerView,
+  catalogVersion?: string,
+): IAgentWorkerDto => ({
+  name: w.name,
+  version: w.version,
+  release: w.release,
+  state: w.state,
+  message: w.message,
+  restarts: w.restarts,
+  health: w.health,
+  pending: w.pending,
+  manifest: w.manifest as IAgentWorkerManifestDto | undefined,
+  updateAvailable: catalogVersion,
+});
+
+export const toConfigDto = (
+  agentId: string,
+  s: IAgentConfigStatus,
+  data?: unknown,
+): AgentConfigDto => ({
+  agentId,
+  worker: s.worker,
+  key: s.key,
+  version: s.version,
+  state: s.state,
+  error: s.error,
+  data,
+  updatedAt: s.updatedAt.getTime(),
+  actor: optional(s.actor),
+});
+
+export const toCommandDto = (c: AgentCommand): AgentCommandDto => ({
+  id: c.id,
+  agentId: c.agentId,
+  type: c.type,
+  worker: optional(c.worker),
+  workerType: optional(c.workerType),
+  args: optional(c.args),
+  status: c.status,
+  ok: optional(c.ok),
+  result: optional(c.result),
+  error: optional(c.error),
+  progress: optional(c.progress),
+  progressText: optional(c.progressText),
+  actor: optional(c.actor),
+  createdAt: c.createdAt.getTime(),
+  finishedAt: c.finishedAt ? c.finishedAt.getTime() : undefined,
+});
+
+export const toEventDto = (e: AgentEvent): IAgentEventDto => ({
+  agentId: e.agentId,
+  id: e.id,
+  worker: e.worker,
+  type: e.type,
+  data: optional(e.data),
+  problems: e.problems?.length ? e.problems : undefined,
+  at: e.at,
+  receivedAt: e.receivedAt,
+});
+
+export const toMetricDto = (m: AgentMetric): IAgentMetricsPointDto => ({
+  at: m.at,
+  host: optional(m.host),
+  workers: optional(m.workers),
+});
+
+export const toLogEntryDto = (e: IAgentLogEntry): IAgentLogEntryDto => ({
+  ...e,
+});
+
+export const toTokenDto = (
+  t: AgentEnrollmentToken,
+): AgentEnrollmentTokenDto => ({
+  id: t.id,
+  name: t.name,
+  prefix: t.prefix,
+  labels: t.labels,
+  maxUses: optional(t.maxUses),
+  uses: t.uses,
+  expiresAt: optional(t.expiresAt),
+  revokedAt: optional(t.revokedAt),
+  createdBy: optional(t.createdBy),
+  createdAt: t.createdAt,
+});
+
+/** Проблемы агента по его состоянию и итогам настроек. */
+export const agentAlerts = (
+  online: boolean,
+  workers: IAgentWorkerView[],
+  configs: IAgentConfigStatus[],
+): IAgentAlertDto[] => {
+  if (!online) return [{ kind: "offline", message: "Агент не на связи" }];
+  const alerts: IAgentAlertDto[] = [];
+
+  for (const w of workers) {
+    if (w.state === "invalid") {
+      alerts.push({
+        kind: "workerInvalid",
+        worker: w.name,
+        message: w.message ?? "Воркер не зарегистрировался",
+      });
+    } else if (w.state === "backoff" || w.state === "stopped") {
+      alerts.push({
+        kind: "workerDown",
+        worker: w.name,
+        message: w.state === "backoff" ? "Воркер падает" : "Воркер остановлен",
+      });
+    } else if (w.state === "running" && w.health && !w.health.ok) {
+      alerts.push({
+        kind: "workerUnhealthy",
+        worker: w.name,
+        message: w.health.message || "Воркер нездоров",
+      });
+    }
+  }
+  for (const c of configs) {
+    if (c.state === "failed") {
+      alerts.push({
+        kind: "configFailed",
+        worker: c.worker,
+        key: c.key,
+        message: c.error?.message ?? "Воркер не применил настройки",
+      });
+    }
+  }
+
+  return alerts;
+};
+
+export type { Agent };

@@ -89,6 +89,7 @@ services:
         APP_VERSION: ${APP_VERSION:-dev}
         APP_COMMIT: ${APP_COMMIT:-}
         APP_BUILT_AT: ${APP_BUILT_AT:-}
+        AGENT_VERSION: ${AGENT_VERSION:-}
     environment:
       <<: *app-env
       APP_ROLE: api

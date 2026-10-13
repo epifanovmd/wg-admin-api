@@ -1,6 +1,8 @@
 import { expect } from "chai";
+import { existsSync } from "fs";
+import { join } from "path";
 
-import { AGENT_VERSION, realAgentAvailable } from "./agent-release";
+import { enroll, RealAgent } from "./agent";
 import {
   Actor,
   call,
@@ -11,17 +13,16 @@ import {
   signInAdmin,
   signUp,
 } from "./client";
-import { BASE_URL } from "./harness";
-import { RealAgent } from "./real-agent";
+import { AGENT_VERSION } from "./harness";
 
 /**
- * Настоящий агент из сборок с GitHub и воркеры проекта (wg в режиме
- * `WG_DRY_RUN`, socks) из сборок стенда (`agent-release.ts`): установка на ноду по токену, желаемое
- * состояние и итог применения, метрики пиров, перезапуск интерфейса через
- * воркер, журнал, настройки и запросы к воркерам, токены регистрации,
- * действия над агентом, привязка, отзыв и удаление.
+ * Настоящий агент из сборок агента и воркеры проекта из архива стенда (wg — в
+ * имитации `WG_DRY_RUN`, socks): установка на ноду по токену, желаемое
+ * состояние и итог применения, сведения об узле, метрики пиров, перезапуск
+ * интерфейса командой воркеру, доступ к агенту по правам ноды, удаление
+ * агента — уборка воркера на узле, нода без агента.
  */
-describe("агент ноды: настоящий агент и воркер wg (dry-run)", function () {
+describe("агент ноды: настоящий агент и воркеры wg (имитация) и socks", function () {
   this.timeout(120_000);
 
   let admin: Actor;
@@ -39,12 +40,7 @@ describe("агент ноды: настоящий агент и воркер wg 
     expectStatus(await call(admin, "GET", `/api/v1/agents/${agentId}`), 200)
       .data;
 
-  before(async function () {
-    if (!realAgentAvailable()) {
-      // Без агента (`yarn agent:fetch`) и архива папки агента (agent pack)
-      // сценарии с настоящим агентом пропускаются.
-      this.skip();
-    }
+  before(async () => {
     admin = await signInAdmin();
     user = await signUp("agents-user");
   });
@@ -53,63 +49,7 @@ describe("агент ноды: настоящий агент и воркер wg 
     await agent?.stop();
   });
 
-  it("токены регистрации: создание, список без секрета, отзыв; отозванный — 401", async () => {
-    const created = expectStatus(
-      await call(admin, "POST", "/api/v1/agent-enrollment-tokens", {
-        name: "e2e-token",
-        maxUses: 1,
-      }),
-      201,
-    ).data;
-
-    expect(created.token).to.include(".");
-
-    // Срок — ISO-строка с миллисекундами, как шлёт веб (Date.toISOString()).
-    const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
-    const dated = expectStatus(
-      await call(admin, "POST", "/api/v1/agent-enrollment-tokens", {
-        name: "e2e-dated",
-        maxUses: 1,
-        expiresAt,
-      }),
-      201,
-    ).data.enrollmentToken;
-
-    expect(new Date(dated.expiresAt).toISOString()).to.equal(expiresAt);
-
-    const list = expectStatus(
-      await call(admin, "GET", "/api/v1/agent-enrollment-tokens"),
-      200,
-    ).data;
-
-    expect(JSON.stringify(list)).to.not.include(created.token.split(".")[1]);
-    expectStatus(
-      await call(
-        admin,
-        "POST",
-        `/api/v1/agent-enrollment-tokens/${created.enrollmentToken.id}/revoke`,
-      ),
-      204,
-    );
-
-    const enroll = await fetch(`${BASE_URL}/api/v1/agent-link/enroll`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        token: created.token,
-        name: "x",
-        host: { os: "linux", arch: "amd64", hostname: "x" },
-      }),
-    });
-
-    expect(enroll.status).to.equal(401);
-    expectStatus(
-      await call(user, "GET", "/api/v1/agent-enrollment-tokens"),
-      403,
-    );
-  });
-
-  it("установка на ноду: агент регистрируется по токену ноды, нода online, воркеры wg и socks", async () => {
+  it("установка на ноду: агент регистрируется по токену ноды, нода online, воркеры wg и socks, сведения узла", async () => {
     const created = expectStatus(
       await call(admin, "POST", "/api/v1/wg/nodes", {
         name: "real-node",
@@ -129,35 +69,39 @@ describe("агент ноды: настоящий агент и воркер wg 
       async () => {
         const current = await nodeById(node.id);
 
-        // wgVersion приходит с первым health воркера wg — позже связи агента.
+        // Версия wg — событием node.info воркера, позже связи агента.
         return current.status === "online" && current.wgVersion
           ? current
           : null;
       },
-      { timeoutMs: 30_000, what: "нода online, воркер wg ответил" },
+      { timeoutMs: 30_000, what: "нода online, сведения воркера wg" },
     );
 
     expect(online.agentId).to.equal(agentId);
     expect(online.agentVersion).to.equal(AGENT_VERSION);
     expect(online.wgVersion).to.equal("dry-run");
+    expect(online.osInfo).to.include({ wgMode: "userspace" });
+    expect(online.osInfo.platform).to.be.a("string");
 
     const record = await agentRecord();
     const wg = record.workers.find((w: any) => w.name === "wg");
 
     expect(wg.state).to.equal("running");
+    expect(wg.release).to.equal(true);
     expect(wg.manifest.configs.map((c: any) => c.key)).to.deep.equal([
       "state",
       "probes",
     ]);
+    expect(wg.manifest.commands.map((c: any) => c.type)).to.deep.equal([
+      "interface.restart",
+    ]);
     expect(record.workers.find((w: any) => w.name === "socks").state).to.equal(
       "running",
     );
-    expect(record.labels.nodeId).to.equal(node.id);
 
     const list = expectStatus(await call(admin, "GET", "/api/v1/agents"), 200);
 
     expect(items(list.data).map((a: any) => a.id)).to.include(agentId);
-    expectStatus(await call(admin, "GET", "/api/v1/agents/alerts"), 200);
     // Агент чужой ноды не раскрывается.
     expectStatus(await call(user, "GET", `/api/v1/agents/${agentId}`), 404);
   });
@@ -198,33 +142,37 @@ describe("агент ноды: настоящий агент и воркер wg 
     });
 
     expect(up.status).to.equal("up");
+    // Конфиг wg-quick имитации — на «узле».
+    expect(existsSync(join(agent!.wireguardDir, "wg0.conf"))).to.equal(true);
 
-    const configs = expectStatus(
-      await call(admin, "GET", `/api/v1/agents/${agentId}/configs?worker=wg`),
-      200,
-    ).data;
-    const state = configs.find((c: any) => c.key === "state");
+    // Итог настройки — из состояния агента (раз в stateMs), позже события итога.
+    const state = await eventually(async () => {
+      const configs = expectStatus(
+        await call(admin, "GET", `/api/v1/agents/${agentId}/configs`),
+        200,
+      ).data;
+      const found = configs.find(
+        (c: any) => c.worker === "wg" && c.key === "state",
+      );
 
-    expect(state.status.state).to.equal("applied");
-    expect(state.status.result.interfaces).to.deep.include({
-      name: "wg0",
-      status: "up",
+      return found?.state === "applied" ? found : null;
     });
 
-    const entry = expectStatus(
-      await call(
-        admin,
-        "GET",
-        `/api/v1/agents/${agentId}/workers/wg/configs/state`,
-      ),
+    expect(state.data.version).to.equal(synced.configVersion);
+    expect(state.data.interfaces[0].peers).to.have.length(1);
+
+    const events = expectStatus(
+      await call(admin, "GET", `/api/v1/agents/events?agentId=${agentId}`),
       200,
     ).data;
 
-    expect(entry.config.data.interfaces[0].peers).to.have.length(1);
-    expect(entry.config.data.version).to.equal(synced.configVersion);
+    expect(items(events).map((e: any) => e.type)).to.include.members([
+      "state.result",
+      "node.info",
+    ]);
   });
 
-  it("настройки без права на них: статус и версия видны, значение (ключи WireGuard) — нет", async () => {
+  it("настройки без права на них: итог виден, значение (ключи WireGuard) — нет", async () => {
     const viewer = await signUp("agents-viewer");
 
     expectStatus(
@@ -237,25 +185,16 @@ describe("агент ноды: настоящий агент и воркер wg 
 
     const actor = await signIn(viewer.email, viewer.password);
     const configs = expectStatus(
-      await call(actor, "GET", `/api/v1/agents/${agentId}/configs?worker=wg`),
+      await call(actor, "GET", `/api/v1/agents/${agentId}/configs`),
       200,
     ).data;
-    const state = configs.find((c: any) => c.key === "state");
+    const state = configs.find(
+      (c: any) => c.worker === "wg" && c.key === "state",
+    );
 
-    expect(state.status.state).to.equal("applied");
-    expect(state.config.version).to.be.a("number");
-    expect(state.config).to.not.have.property("data");
-
-    const entry = expectStatus(
-      await call(
-        actor,
-        "GET",
-        `/api/v1/agents/${agentId}/workers/wg/configs/state`,
-      ),
-      200,
-    ).data;
-
-    expect(entry.config).to.not.have.property("data");
+    expect(state.state).to.equal("applied");
+    expect(state.version).to.be.a("number");
+    expect(state).to.not.have.property("data");
   });
 
   it("метрики воркера wg: статистика пира и окна скорости", async () => {
@@ -269,21 +208,16 @@ describe("агент ноды: настоящий агент и воркер wg 
     );
 
     expect(live.isOnline).to.equal(true);
-    expectStatus(
-      await call(admin, "GET", `/api/v1/wg/stats/window/peer/${peer.id}`),
-      200,
-    );
-    expectStatus(
-      await call(admin, "GET", `/api/v1/wg/stats/window/interface/${iface.id}`),
-      200,
-    );
-    expectStatus(
-      await call(admin, "GET", `/api/v1/wg/stats/window/node/${node.id}`),
-      200,
-    );
+    for (const path of [
+      `/api/v1/wg/stats/window/peer/${peer.id}`,
+      `/api/v1/wg/stats/window/interface/${iface.id}`,
+      `/api/v1/wg/stats/window/node/${node.id}`,
+    ]) {
+      expectStatus(await call(admin, "GET", path), 200);
+    }
   });
 
-  it("перезапуск интерфейса — запрос к воркеру wg; журнал агента и воркера", async () => {
+  it("перезапуск интерфейса — команда воркеру wg; журнал агента и воркера", async () => {
     const restarted = expectStatus(
       await call(admin, "POST", `/api/v1/wg/interfaces/${iface.id}/restart`),
       200,
@@ -291,8 +225,20 @@ describe("агент ноды: настоящий агент и воркер wg 
 
     expect(restarted).to.deep.equal({ name: "wg0", status: "up" });
 
+    const commands = expectStatus(
+      await call(admin, "GET", `/api/v1/agents/${agentId}/commands`),
+      200,
+    ).data;
+
+    expect(commands[0]).to.include({
+      worker: "wg",
+      workerType: "interface.restart",
+      status: "done",
+      ok: true,
+    });
+
     const logs = expectStatus(
-      await call(admin, "GET", `/api/v1/wg/nodes/${node.id}/logs?lines=100`),
+      await call(admin, "GET", `/api/v1/agents/${agentId}/logs?lines=100`),
       200,
     ).data;
 
@@ -305,67 +251,36 @@ describe("агент ноды: настоящий агент и воркер wg 
       ),
       200,
     );
-    expectStatus(
-      await call(admin, "GET", `/api/v1/agents/events?agentId=${agentId}`),
-      200,
-    );
   });
 
-  it("запрос к воркеру и настройки: GET /state, своя настройка probes, удаление ключа", async () => {
-    const res = await call(
-      admin,
-      "POST",
-      `/api/v1/agents/${agentId}/workers/wg/fetch`,
-      { method: "GET", path: "/state" },
-    );
+  it("доступ по правам ноды: владелец ноды видит и управляет её агентом", async () => {
+    const owner = await signUp("agents-owner");
 
-    expect(res.status).to.equal(200);
-    expect(res.data.interfaces).to.deep.include({ name: "wg0", status: "up" });
-
-    // Необъявленный маршрут агент не пропускает.
     expectStatus(
-      await call(admin, "POST", `/api/v1/agents/${agentId}/workers/wg/fetch`, {
-        method: "GET",
-        path: "/nope",
+      await call(admin, "PATCH", `/api/v1/user/setPrivileges/${owner.id}`, {
+        roles: ["user"],
+        permissions: ["wg:node:view:own", "wg:node:agent:own"],
       }),
-      404,
+      200,
+    );
+    expectStatus(
+      await call(admin, "POST", `/api/v1/wg/nodes/${node.id}/assign`, {
+        userId: owner.id,
+      }),
+      200,
     );
 
-    const put = expectStatus(
-      await call(
-        admin,
-        "PUT",
-        `/api/v1/agents/${agentId}/workers/wg/configs/probes`,
-        { data: { targets: [] } },
-      ),
+    const actor = await signIn(owner.email, owner.password);
+    const seen = expectStatus(
+      await call(actor, "GET", `/api/v1/agents/${agentId}`),
       200,
     ).data;
 
-    expect(put.config.version).to.be.greaterThan(0);
-    // Значение не по схеме манифеста — 400.
-    expectStatus(
-      await call(
-        admin,
-        "PUT",
-        `/api/v1/agents/${agentId}/workers/wg/configs/probes`,
-        { data: { targets: "x" } },
-      ),
-      400,
-    );
-    expectStatus(
-      await call(
-        admin,
-        "DELETE",
-        `/api/v1/agents/${agentId}/workers/wg/configs/probes`,
-      ),
-      204,
-    );
-  });
+    expect(seen.id).to.equal(agentId);
 
-  it("действия: перезапуск воркера, обновления, команда установки, смена ключа", async () => {
     const restarted = expectStatus(
       await call(
-        admin,
+        actor,
         "POST",
         `/api/v1/agents/${agentId}/workers/socks/restart`,
         { force: true },
@@ -373,71 +288,138 @@ describe("агент ноды: настоящий агент и воркер wg 
       200,
     ).data;
 
-    expect(restarted.deferred).to.equal(false);
-
-    // Агент стенда себя не обновляет (update.mode: disabled) — отказ агента.
-    const update = await call(
-      admin,
-      "POST",
-      `/api/v1/agents/${agentId}/update`,
+    expect(restarted).to.include({ type: "worker.restart" });
+    await eventually(
+      async () =>
+        (await agentRecord()).workers.find((w: any) => w.name === "socks")
+          ?.state === "running" || null,
+      { timeoutMs: 30_000, what: "socks перезапущен" },
     );
+  });
 
-    expect(update.status).to.be.at.least(400);
+  it("токены регистрации и команда установки: создание, список без секрета, отзыв — 401", async () => {
+    const created = expectStatus(
+      await call(admin, "POST", "/api/v1/agent-enrollment/tokens", {
+        name: "e2e-token",
+        maxUses: 1,
+      }),
+      201,
+    ).data;
+    const list = expectStatus(
+      await call(admin, "GET", "/api/v1/agent-enrollment/tokens"),
+      200,
+    ).data;
 
-    const workerUpdate = await call(
-      admin,
-      "POST",
-      `/api/v1/agents/${agentId}/workers/wg/update`,
-      {},
+    expect(JSON.stringify(list)).to.not.include(created.token);
+    expectStatus(
+      await call(
+        admin,
+        "POST",
+        `/api/v1/agent-enrollment/tokens/${created.enrollmentToken.id}/revoke`,
+      ),
+      204,
     );
-
-    expect(workerUpdate.status).to.be.oneOf([200, 409, 502, 503]);
+    expect((await enroll(created.token, "revoked-token")).status).to.equal(401);
 
     const command = expectStatus(
-      await call(admin, "POST", "/api/v1/agent-releases/install-command", {
+      await call(admin, "POST", "/api/v1/agent-enrollment/install-command", {
         token: "abc.def",
+      }),
+      200,
+    ).data.command;
+
+    expect(command).to.include("/agent/v1/bundle/install.sh");
+    expect(command).to.include("--token 'abc.def'");
+    expectStatus(
+      await call(user, "GET", "/api/v1/agent-enrollment/tokens"),
+      403,
+    );
+  });
+
+  it("команды и настройки воркеров через агента: итог команды, отмена, своя настройка, метрики", async () => {
+    const agentPath = `/api/v1/agents/${agentId}`;
+    const done = expectStatus(
+      await call(admin, "POST", `${agentPath}/workers/wg/commands`, {
+        type: "interface.restart",
+        args: { name: "wg0" },
+        waitSeconds: 30,
       }),
       200,
     ).data;
 
-    expect(command.command).to.equal(
-      `curl -fsSL '${BASE_URL}/api/v1/agent-link/bundle/install.sh' | sudo sh -s -- '--server' '${BASE_URL}' '--bundle' '${BASE_URL}/api/v1/agent-link/bundle/linux-{arch}.tar.gz' '--token' 'abc.def'`,
+    expect(done).to.include({ status: "done", ok: true });
+    expect(done.result).to.deep.equal({ name: "wg0", status: "up" });
+
+    const failed = expectStatus(
+      await call(admin, "POST", `${agentPath}/workers/wg/commands`, {
+        type: "interface.restart",
+        args: { name: "wg9" },
+        waitSeconds: 30,
+      }),
+      200,
+    ).data;
+
+    expect(failed.ok).to.equal(false);
+    expect(failed.error.code).to.equal("INTERFACE_NOT_FOUND");
+    expect(
+      expectStatus(
+        await call(admin, "GET", `${agentPath}/commands/${done.id}`),
+        200,
+      ).data.id,
+    ).to.equal(done.id);
+    // Выполненную команду отменять нечего — ответ без ошибки сервера.
+    expect(
+      (await call(admin, "POST", `${agentPath}/commands/${done.id}/cancel`))
+        .status,
+    ).to.be.below(500);
+
+    const put = expectStatus(
+      await call(admin, "PUT", `${agentPath}/workers/wg/configs/probes`, {
+        targets: [],
+      }),
+      200,
+    ).data;
+
+    expect(put.version).to.be.greaterThan(0);
+    // Значение не по схеме манифеста — 400.
+    expectStatus(
+      await call(admin, "PUT", `${agentPath}/workers/wg/configs/probes`, {
+        targets: "x",
+      }),
+      400,
+    );
+    expectStatus(
+      await call(admin, "DELETE", `${agentPath}/workers/wg/configs/probes`),
+      204,
     );
 
+    const metrics = await eventually(async () => {
+      const res = expectStatus(
+        await call(admin, "GET", `${agentPath}/metrics`),
+        200,
+      ).data;
+
+      return res.length ? res : null;
+    });
+
+    expect(metrics[0]).to.have.property("at");
+  });
+
+  it("смена ключа и привязка: агент снова на связи; агент другой ноды не привязать", async () => {
     expectStatus(
       await call(admin, "POST", `/api/v1/agents/${agentId}/rotate-key`),
-      204,
+      200,
     );
     await eventually(async () => ((await agentRecord()).online ? true : null), {
       timeoutMs: 20_000,
       what: "агент снова на связи",
     });
-  });
 
-  it("привязка агента к другой ноде и копия интерфейса на ней", async () => {
     const other = expectStatus(
-      await call(admin, "POST", "/api/v1/wg/nodes", {
-        name: "real-node-2",
-        publicHost: "203.0.113.151",
-      }),
+      await call(admin, "POST", "/api/v1/wg/nodes", { name: "real-node-2" }),
       201,
     ).data.node;
-    const replica = expectStatus(
-      await call(admin, "POST", `/api/v1/wg/interfaces/${iface.id}/replicas`, {
-        nodeId: other.id,
-      }),
-      201,
-    ).data;
 
-    expect(replica.replicas.map((r: any) => r.nodeId)).to.include(other.id);
-    expectStatus(
-      await call(
-        admin,
-        "DELETE",
-        `/api/v1/wg/interfaces/${iface.id}/replicas/${other.id}`,
-      ),
-      204,
-    );
     expectStatus(
       await call(admin, "POST", `/api/v1/wg/nodes/${other.id}/agent`, {
         agentId,
@@ -451,11 +433,24 @@ describe("агент ноды: настоящий агент и воркер wg 
     );
   });
 
-  it("отзыв и удаление агента: нода без агента", async () => {
-    expectStatus(
+  it("отзыв: агент остаётся в списке отозванным, нода — «агент отозван»", async () => {
+    const revoked = expectStatus(
       await call(admin, "POST", `/api/v1/agents/${agentId}/revoke`),
       200,
-    );
+    ).data;
+
+    expect(revoked.revoked).to.equal(true);
+
+    const current = await eventually(async () => {
+      const res = await nodeById(node.id);
+
+      return res.status === "created" ? res : null;
+    });
+
+    expect(current.statusMessage).to.equal("Агент отозван");
+  });
+
+  it("удаление агента: воркер wg убирает созданное на узле, агент отозван, нода без агента", async () => {
     expectStatus(await call(admin, "DELETE", `/api/v1/agents/${agentId}`), 204);
 
     const detached = await eventually(async () => {
@@ -465,7 +460,6 @@ describe("агент ноды: настоящий агент и воркер wg 
     });
 
     expect(detached.status).to.equal("created");
-    // Сообщённое агентом уходит вместе с ним.
     expect(detached).to.include({
       agentVersion: null,
       wgVersion: null,
@@ -475,6 +469,13 @@ describe("агент ноды: настоящий агент и воркер wg 
       appliedVersion: 0,
     });
 
+    // Отозванный агент останавливает воркеры с уборкой.
+    await eventually(
+      async () =>
+        !existsSync(join(agent!.wireguardDir, "wg0.conf")) ? true : null,
+      { timeoutMs: 30_000, what: "уборка воркера wg" },
+    );
+
     const unknown = await eventually(async () => {
       const res = await call(admin, "GET", `/api/v1/wg/interfaces/${iface.id}`);
 
@@ -482,14 +483,6 @@ describe("агент ноды: настоящий агент и воркер wg 
     });
 
     expect(unknown.status).to.equal("unknown");
-    const live = await call(
-      admin,
-      "GET",
-      `/api/v1/wg/stats/current/node/${node.id}`,
-    );
-
-    // Снимка скорости нет — 204 без тела.
-    expect(live.status).to.equal(204);
     await agent?.stop();
     agent = null;
     expectStatus(

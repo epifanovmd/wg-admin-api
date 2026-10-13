@@ -1,8 +1,6 @@
 import { inject } from "inversify";
-import { isDeepStrictEqual } from "util";
 
-import { Injectable, logger } from "../../core";
-import { AgentWorkerService } from "../agent";
+import { Agents, Injectable, logger } from "../../core";
 import {
   SOCKS_PROXIES_CONFIG,
   SOCKS_WORKER,
@@ -25,9 +23,10 @@ interface IConfigEntry {
 
 /**
  * Доставка домена на ноды: настройки воркеров агента ноды (`wg/state`,
- * `wg/probes`, `socks/proxies`) собираются из БД и записываются в хранилище
- * агентов, только если значение изменилось. Агент на связи получает новую
- * версию сразу, без связи — при подключении. Изменения одной ноды
+ * `wg/probes`, `socks/proxies`) собираются из БД и записываются в желаемое
+ * агента, только если значение изменилось. Агент на связи получает новую
+ * версию сразу, без связи — при подключении (и применяет её без связи после
+ * перезапуска). Изменения одной ноды
  * склеиваются (`COALESCE_MS`), сборки одной ноды не пересекаются.
  */
 @Injectable()
@@ -41,7 +40,7 @@ export class WgAgentSyncService {
   constructor(
     @inject(WgNodeService) private readonly _nodes: WgNodeService,
     @inject(WgAgentStateService) private readonly _state: WgAgentStateService,
-    @inject(AgentWorkerService) private readonly _workers: AgentWorkerService,
+    @inject(Agents) private readonly _agents: Agents,
   ) {}
 
   /** Запланировать синхронизацию ноды. */
@@ -110,31 +109,27 @@ export class WgAgentSyncService {
     }
   }
 
+  /** Записать ключ, если значение изменилось; отказ (схема манифеста) — в журнал. */
   private async _put(agentId: string, entry: IConfigEntry): Promise<void> {
-    const current = await this._workers.findConfig(
-      agentId,
-      entry.worker,
-      entry.key,
-    );
-
-    if (current && isDeepStrictEqual(current.data, entry.data)) return;
-
-    const written = await this._workers.putConfig(
-      agentId,
-      entry.worker,
-      entry.key,
-      entry.data,
-    );
-
-    logger.debug(
-      {
+    try {
+      const version = await this._agents.setConfig(
         agentId,
-        worker: entry.worker,
-        key: entry.key,
-        version: written.version,
-      },
-      "[WG] Настройка воркера записана",
-    );
+        entry.worker,
+        entry.key,
+        entry.data,
+        { onlyIfChanged: true },
+      );
+
+      logger.debug(
+        { agentId, worker: entry.worker, key: entry.key, version },
+        "[WG] Настройка воркера записана",
+      );
+    } catch (err) {
+      logger.warn(
+        { err, agentId, worker: entry.worker, key: entry.key },
+        "[WG] Настройка воркера не записана",
+      );
+    }
   }
 
   private _arm(): void {

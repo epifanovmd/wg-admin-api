@@ -1,7 +1,6 @@
-# Программа агента скачивается (yarn agent, yarn agent:fetch) и обновляется (yarn agent upgrade).
+# Программа агента скачивается (yarn agent, yarn agent:fetch); сборки — yarn agent:fetch, go-agent.sh build.
 /agent
-/agent.prev
-/agent.update.json
+/dist/
 # Свои переменные, архивы для узлов и каталог сборок воркеров (yarn agent:pack).
 /.env.prod
 /bundle/
