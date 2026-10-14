@@ -3,6 +3,8 @@
 node_modules
 /build
 coverage
++ /.env.example
++ /agent/package/.env.example
 .env*
 .idea
 .claude
