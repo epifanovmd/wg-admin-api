@@ -5,13 +5,19 @@ import { config } from "../../config";
 import { Injectable } from "../decorators";
 import { logger } from "../logger";
 import type { IRawHttpHandler } from "../routing";
-import { serveAgentFiles } from "./agent-files";
+import { AGENT_BUNDLE_PATH, serveAgentFiles } from "./agent-files";
+import { AgentIssueService } from "./agent-issue.service";
 import {
   AgentProtocolError,
   AgentProtocolService,
 } from "./agent-protocol.service";
 import { AgentStreams } from "./agent-streams";
 import { AGENT_PROTOCOL_PREFIX, AgentProtocolCode } from "./protocol";
+
+/** Одноразовая ссылка на архив с токеном. */
+const ISSUED = new RegExp(
+  `^${AGENT_BUNDLE_PATH}/issued/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`,
+);
 
 /** Пределы тел запросов агента. */
 const BODY_MAX = 4 * 1024 * 1024;
@@ -77,6 +83,7 @@ export class AgentLinkHandler implements IRawHttpHandler {
     @inject(AgentProtocolService)
     private readonly _protocol: AgentProtocolService,
     @inject(AgentStreams) private readonly _streams: AgentStreams,
+    @inject(AgentIssueService) private readonly _issues: AgentIssueService,
   ) {}
 
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
@@ -84,6 +91,7 @@ export class AgentLinkHandler implements IRawHttpHandler {
 
     if (!url.pathname.startsWith(`${AGENT_PROTOCOL_PREFIX}/`)) return false;
     try {
+      if (await this.serveIssued(req, res, url.pathname)) return true;
       if (await serveAgentFiles(req, res, url.pathname)) return true;
       await this.route(req, res, url);
     } catch (err) {
@@ -102,6 +110,39 @@ export class AgentLinkHandler implements IRawHttpHandler {
         else res.end();
       }
     }
+
+    return true;
+  }
+
+  /**
+   * Одноразовая ссылка на архив с токеном: `GET /agent/v1/bundle/issued/{id}` — архив один
+   * раз и до срока, иначе 410. Не наш путь — `false`.
+   */
+  private async serveIssued(
+    req: IncomingMessage,
+    res: ServerResponse,
+    path: string,
+  ): Promise<boolean> {
+    const match = ISSUED.exec(path);
+
+    if (!match || req.method !== "GET") return false;
+    const archive = await this._issues.download(match[1]);
+
+    if (!archive) {
+      sendJSON(res, 410, {
+        code: "ISSUE_GONE",
+        message: "ссылка уже использована или истекла — выдайте новую",
+      });
+
+      return true;
+    }
+    res.writeHead(200, {
+      "Content-Type": "application/gzip",
+      "Content-Length": archive.data.length,
+      "Content-Disposition": `attachment; filename="${archive.file}"`,
+      "Cache-Control": "no-store",
+    });
+    res.end(archive.data);
 
     return true;
   }

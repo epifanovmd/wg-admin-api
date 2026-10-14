@@ -51,7 +51,7 @@ describe("wireguard", () => {
 
       nodeA = resA.data.node;
       expect(resA.data.install.command).to.match(
-        /\/agent\/v1\/bundle\/install\.sh' \| sudo sh -s -- --server '[^']+' --bundle '[^']+\/agent\/v1\/bundle\/linux-\{arch\}\.tar\.gz' --token '[^']+\.[^']+' --name 'node-a'/,
+        /\/agent\/v1\/bundle\/install\.sh' \| sudo sh -s -- --server '[^']+' --bundle '[^']+\/agent\/v1\/bundle\/agent\.tar\.gz' --token '[^']+\.[^']+' --name 'node-a'/,
       );
       expect(resA.data.install.command).not.to.include("--worker");
       expect(nodeA.status).to.equal("created");

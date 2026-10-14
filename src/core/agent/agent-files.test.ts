@@ -15,20 +15,20 @@ describe("agent-files", () => {
       "https://api.example.com/agent/v1/bundle/install.sh",
     );
     expect(bundleArchiveUrl(server)).to.equal(
-      "https://api.example.com/agent/v1/bundle/linux-{arch}.tar.gz",
+      "https://api.example.com/agent/v1/bundle/agent.tar.gz",
     );
     expect(bundleInstallFlags(server)).to.deep.equal([
       "--server",
       "https://api.example.com",
       "--bundle",
-      "https://api.example.com/agent/v1/bundle/linux-{arch}.tar.gz",
+      "https://api.example.com/agent/v1/bundle/agent.tar.gz",
     ]);
   });
 
   it("команда установки: служба — с sudo, rootless и run — без; имя без кавычек внутри", () => {
     expect(agentInstallCommand({ server, token: "t.s" })).to.equal(
       "curl -fsSL 'https://api.example.com/agent/v1/bundle/install.sh' | sudo sh -s -- " +
-        "--server 'https://api.example.com' --bundle 'https://api.example.com/agent/v1/bundle/linux-{arch}.tar.gz' --token 't.s'",
+        "--server 'https://api.example.com' --bundle 'https://api.example.com/agent/v1/bundle/agent.tar.gz' --token 't.s'",
     );
     expect(
       agentInstallCommand({ server, token: "t.s", mode: "rootless" }),

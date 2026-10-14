@@ -11,5 +11,5 @@ backup_*.sql.gz
 agent/dist
 agent/agent
 agent/bundle
-agent/.env.prod
+agent/.env
 .agent

@@ -11,14 +11,16 @@
 agent/
 ├── agent.yaml        машина разработчика — yarn agent (воркер wg — в имитации)
 ├── agent.prod.yaml   узлы WireGuard: поверх agent.yaml (экземпляр wg, root, пакеты, sysctl)
-├── .env.prod.example образец .env.prod — если узел ставится не с API
+├── agent.docker.yaml  агент в контейнере: поверх agent.prod.yaml (том данных, без самообновления)
+├── package/          файлы архива для получателя: Dockerfile, compose.yml, docker-entrypoint.sh,
+│                     .env.example, .dockerignore, README.md
 ├── workers/wg/       воркер wg (Go): интерфейсы, туннели, пробросы, пробы
 ├── workers/socks/    воркер socks (Go): SOCKS5-прокси через mTLS
 ├── internal/, go.mod общий Go-код воркеров
 ├── go-worker.sh      сборка Go-воркера: Go на машине, иначе в контейнере (scripts/go-agent.sh)
 ├── dev.sh            yarn agent*: программа агента версии AGENT_VERSION, порт и токен API
 ├── agent             программа агента (не в git: yarn agent скачивает её сам)
-├── bundle/           архивы для узлов (yarn agent:pack, не в git) — их раздаёт API
+├── bundle/           архив для узлов (yarn agent:pack / make agent-archive, не в git) — его раздаёт API
 └── dist/             сборки агента для сквозных тестов (yarn agent:fetch) и воркеров, не в git
 ```
 
@@ -311,16 +313,26 @@ toolchain из `go.mod` (`scripts/go-agent.sh`). Модуль агента Go б
 
 ## Как агент попадает на узел
 
-Принцип один — вручную и с API: архив папки агента под машину узла и `agent install` из него.
+Принцип один — вручную, из веба и в CI: **архив агента** (все платформы в одном). Он
+самодостаточен: распаковал — и запускай службой, на месте или в Docker.
 
 ```bash
-yarn agent:pack                   # agent/bundle: агент, настройки, воркеры, release/ и install.sh
+make agent-archive                # = yarn agent:pack → agent/bundle: agent-prod-<версия>.tar.gz (linux amd64 и arm64 в одном), release/, install.sh
+make agent-image                  # образ агента из архива под эту машину (его Dockerfile)
 ```
 
-`agent pack --env prod` кладёт в архив программу агента под платформу узла, `agent.yaml` +
-`agent.prod.yaml`, воркеры `wg` и `socks`, собранные под эту платформу (их `build`), и их
-подписанные сборки (`release/`) — для обновления воркеров с API. `agent install` на узле ставит
-агента службой по `install:` из `agent.prod.yaml`:
+`agent pack --env prod` кладёт в один архив программы агента под все платформы (`bin/`, их выбирает
+скрипт `agent` по `uname`), `agent.yaml` + `agent.prod.yaml`, воркеры `wg` и `socks`, собранные под
+каждую платформу (их `build`), их подписанные сборки (`release/`) — для обновления воркеров с API,
+`bundle.json`, а по `pack.files` (`agent.prod.yaml`) — файлы получателя из `package/`
+(`Dockerfile`, `compose.yml`, `docker-entrypoint.sh`, `.env.example`, `README.md`) и
+`agent.docker.yaml`. Секретов в общем архиве нет: адрес и токен получатель кладёт в `agent/.env`
+(образец `.env.example`; его читают `envFiles` настроек и `compose.yml`). Без адреса и токена агент
+не запустится (`server.required` агента) и скажет, чего не хватает; адрес — только `https://`
+(`http://` — `AGENT_SERVER_ALLOW_INSECURE=true`). Тот же архив собирает стадия образа API
+`agent-bundle` (раздаёт API) и CI (артефакт сборки, файлы релиза GitHub и образ
+`…:<версия>-agent` из архива). `agent install` на узле ставит агента службой по `install:` из
+`agent.prod.yaml`:
 
 - экземпляр `wg` — своя служба `agent-wg` и свои каталоги рядом с агентами других бэкендов;
 - `privileged: true` — агент и воркеры от root без ограничений systemd: воркер wg настраивает
@@ -334,26 +346,36 @@ yarn agent:pack                   # agent/bundle: агент, настройки
 запускает воркеры после него. Узел — Linux с systemd; ядро без модуля WireGuard (старше 5.6) —
 поставьте `wireguard-go`, wg-quick сам возьмёт его.
 
-| Как                  | Что сделать                                                                                                                                       |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| вручную, архивом     | `scp agent/bundle/agent-prod-…-linux-amd64.tar.gz узел:` → `tar xzf … && cd agent && sudo ./agent install --server https://<api> --token <токен>` |
-| одной командой с API | токен и команда — при создании ноды или `POST /api/v1/wg/nodes/{id}/install-command`                                                              |
-| с API по SSH         | `POST /api/v1/wg/nodes/{id}/provision` — то же самое на узле, токен — файлом; прежний агент снимается сам (ниже)                                  |
-| удалить              | `sudo agent-wg uninstall [--purge]` или `POST /api/v1/wg/nodes/{id}/uninstall`                                                                    |
+| Как                  | Что сделать                                                                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| вручную, архивом     | `scp agent/bundle/agent-prod-….tar.gz узел:` → `tar xzf … && cd agent && cp .env.example .env` (адрес, токен) → `sudo ./agent install --env prod`, `sudo ./agent run --env prod` или `docker compose up -d --build` |
+| архив с токеном      | веб: «Установить агента» → «Архив» (или `POST /api/v1/wg/nodes/{id}/agent/issue/archive`): тот же архив и `.env` с одноразовым токеном ноды; одноразовая ссылка — `…/issue/link`, только `.env` — `…/issue/env`     |
+| одной командой с API | токен и команда — при создании ноды или `POST /api/v1/wg/nodes/{id}/install-command` (`mode: docker` — Docker Compose из архива)                                                                                    |
+| с API по SSH         | `POST /api/v1/wg/nodes/{id}/provision` — то же самое на узле, токен — файлом; прежний агент снимается сам (ниже)                                                                                                    |
+| удалить              | `sudo agent-wg uninstall [--purge]` или `POST /api/v1/wg/nodes/{id}/uninstall`                                                                                                                                      |
 
 Команда установки с API:
 
 ```bash
 curl -fsSL 'https://<api>/agent/v1/bundle/install.sh' | sudo sh -s -- --server 'https://<api>' \
-  --bundle 'https://<api>/agent/v1/bundle/linux-{arch}.tar.gz' --token '<токен>' --name '<нода>'
+  --bundle 'https://<api>/agent/v1/bundle/agent.tar.gz' --token '<токен>' --name '<нода>'
 ```
 
 Флагов экземпляра, воркеров, пакетов и прав в ней нет — всё это в `agent.prod.yaml` архива. API
-раздаёт архивы из `AGENT_BUNDLE_DIR` (`/agent/v1/bundle/…`, без входа: секретов в архиве нет); в
-образе API (`/app/agent/bundle`) их собирает стадия `agent-bundle` `Dockerfile` (`agent pack
---env prod` для linux/amd64 и linux/arm64), для разработки — `yarn agent:pack`. Узел ставится не
-с API — адрес и токен можно положить в `agent/.env.prod` (образец — `.env.prod.example`) до
-`yarn agent:pack`.
+раздаёт архив из `AGENT_BUNDLE_DIR` (`/agent/v1/bundle/agent.tar.gz` — все платформы,
+`install.sh`; без входа: секретов в архиве нет); в образе API (`/app/agent/bundle`) его собирает
+стадия `agent-bundle` `Dockerfile`, для разработки — `yarn agent:pack`.
+
+**Docker.** Воркер wg настраивает сам узел, поэтому контейнер агента работает в сети узла
+(`network_mode: host`) и с правами на неё (`privileged`): `compose.yml` архива, данные агента и
+`/etc/wireguard` — тома, пересылку пакетов включает `docker-entrypoint.sh`. Команда с API
+(`mode: docker`) скачивает архив, пишет `.env` (0600) и запускает `docker compose up -d --build`. В
+контейнере агент себя не обновляет — обновляют архивом и образом.
+
+**Выдача агента получателю** (ядро, `AgentIssueService`): архив с `.env` (адрес, одноразовый токен
+с меткой ноды, имя ноды) — файлом или одноразовой ссылкой (`GET /agent/v1/bundle/issued/{id}`,
+один раз и до срока), только `.env` — для общего архива или образа (`--env-file`). Архив с
+токеном на сервере не хранится; выдача — в журнале аудита.
 
 На узле (экземпляр `wg`):
 

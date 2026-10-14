@@ -62,29 +62,36 @@ permission)` и `viewFilter(actor)`; методы без актора (`findEnti
 пользователи присоединяются join-ом (`joinUserName`) в `findPage`, `findWithOwners` и `findManyWithOwners`, поэтому те же
 поля — и в событии `wg:node:updated`.
 
-| Метод  | Путь                     | Право                                                                    |
-| ------ | ------------------------ | ------------------------------------------------------------------------ |
-| POST   | `/`                      | `wg:node:create` (ответ — нода и `install`: команда установки с токеном) |
-| GET    | `/`, `/options`, `/{id}` | `wg:node:view[:own]`                                                     |
-| PATCH  | `/{id}`                  | `wg:node:update[:own]`                                                   |
-| DELETE | `/{id}`                  | `wg:node:delete[:own]` (при интерфейсах — 409)                           |
-| POST   | `/{id}/assign`           | `wg:node:assign[:own]` — `{ userId }`, владелец                          |
-| POST   | `/{id}/revoke`           | `wg:node:assign[:own]` — снять владельца                                 |
-| POST   | `/{id}/install-command`  | `wg:node:agent[:own]` — токен и команда установки агента                 |
-| POST   | `/{id}/agent`            | `wg:node:agent[:own]` — `{ agentId }`, привязка агента                   |
+| Метод  | Путь                        | Право                                                                    |
+| ------ | --------------------------- | ------------------------------------------------------------------------ |
+| POST   | `/`                         | `wg:node:create` (ответ — нода и `install`: команда установки с токеном) |
+| GET    | `/`, `/options`, `/{id}`    | `wg:node:view[:own]`                                                     |
+| PATCH  | `/{id}`                     | `wg:node:update[:own]`                                                   |
+| DELETE | `/{id}`                     | `wg:node:delete[:own]` (при интерфейсах — 409)                           |
+| POST   | `/{id}/assign`              | `wg:node:assign[:own]` — `{ userId }`, владелец                          |
+| POST   | `/{id}/revoke`              | `wg:node:assign[:own]` — снять владельца                                 |
+| POST   | `/{id}/install-command`     | `wg:node:agent[:own]` — токен и команда установки агента                 |
+| POST   | `/{id}/agent/issue/env`     | `wg:node:agent[:own]` — `.env` агента ноды (токен — только в ответе)     |
+| POST   | `/{id}/agent/issue/archive` | `wg:node:agent[:own]` — архив агента (все платформы) с этим `.env`       |
+| POST   | `/{id}/agent/issue/link`    | `wg:node:agent[:own]` — одноразовая ссылка на такой архив                |
+| POST   | `/{id}/agent`               | `wg:node:agent[:own]` — `{ agentId }`, привязка агента                   |
 
 Журнал, обновление агента и воркеров, перезапуск воркера — маршруты агента
 (`/api/v1/agents/{agentId}/…`, модуль agent) с правами ноды.
 
 Команда установки (`WgNodeAgentService.commandFor`): `curl -fsSL '<AGENT_PUBLIC_URL или
 APP_PUBLIC_URL>/agent/v1/bundle/install.sh' | sudo sh -s -- --server '<API>' --bundle
-'<API>/agent/v1/bundle/linux-{arch}.tar.gz' --token '<токен>' --name '<нода>'` —
-установщик агента ставит архив папки агента (`agent pack`) под машину ноды. Экземпляр `wg`
+'<API>/agent/v1/bundle/agent.tar.gz' --token '<токен>' --name '<нода>'` —
+установщик агента ставит архив папки агента (`agent pack`, все платформы). `mode: docker` —
+архив, `.env` (0600) и `docker compose up -d --build` (контейнер в сети узла; нет `compose.yml`
+в архиве — 409, токен отзывается). Экземпляр `wg`
 (`WG_AGENT_INSTANCE`, как `instance` в `agent/agent.prod.yaml`), воркеры wg и socks, права
 root, пакеты и параметры ядра задаёт `agent/agent.prod.yaml` архива, флагов для них в
 команде нет. На ноде — служба `agent-wg`, `/opt/agent-wg/bin/agent`, `/etc/agent-wg`,
 `/var/lib/agent-wg`. Токен — одноразовый, с меткой ноды, сутки (10 минут — 30 дней,
-`expiresInMinutes`). Перезапуск интерфейса (модуль wg-interface) —
+`expiresInMinutes`). Выдача (`agent/issue/*`) — то же для получателя, который запустит агента
+сам: `.env` (адрес, одноразовый токен с меткой ноды, имя агента — заданное или имя ноды), архив с
+ним или одноразовая ссылка на архив (`AgentIssueService` ядра). Перезапуск интерфейса (модуль wg-interface) —
 `WgNodeAgentService.restartInterface`: команда `interface.restart` воркеру wg основной ноды,
 итог — в ответе (ждёт до 100 с); нет агента — 409 `WG_NODE_NO_AGENT`, агент без связи — сразу
 503 `AGENT_OFFLINE`, отказ воркера — 502 `WG_NODE_WORKER_FAILED` с его текстом, итога нет в

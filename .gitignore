@@ -9,12 +9,12 @@ yarn-error.log
 .env*
 !.env.example
 !.env.deploy.example
-!agent/.env.prod.example
+!agent/package/.env.example
 
 # Локальная память агента разработки
 .claude/memory/
 
 # Данные агента разработки (yarn agent) и скачанные сборки агента (yarn agent:fetch: e2e);
-# программа агента и архивы для узлов — в agent/.gitignore
+# программа агента и архив для узлов — в agent/.gitignore
 agent/dist/
 .agent/

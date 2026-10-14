@@ -28,6 +28,7 @@ import { AgentCommandRepository } from "./agent-command.repository";
 import { AgentEnrollmentService } from "./agent-enrollment.service";
 import { AgentEventRepository } from "./agent-event.repository";
 import { AgentMetricRepository } from "./agent-metric.repository";
+import { AgentRecentMetrics } from "./agent-recent-metrics";
 import { schemaProblems } from "./agent-schemas";
 import { newAgentId, workerManifest } from "./agents.service";
 import {
@@ -85,6 +86,7 @@ export class AgentProtocolService {
     private readonly _events: AgentEventRepository,
     @inject(AgentMetricRepository)
     private readonly _metrics: AgentMetricRepository,
+    @inject(AgentRecentMetrics) private readonly _recent: AgentRecentMetrics,
     @inject(AgentEnrollmentService)
     private readonly _enrollment: AgentEnrollmentService,
     @inject(AgentSignals) private readonly _signals: AgentSignals,
@@ -360,6 +362,7 @@ export class AgentProtocolService {
     const last = list[list.length - 1];
 
     await this._agents.update({ id: agent.id }, { metrics: last as never });
+    await this._recent.add(agent.id, list);
     const storedAt = (await this._metrics.findLastAt(agent.id)) ?? 0;
     let mark = storedAt;
 

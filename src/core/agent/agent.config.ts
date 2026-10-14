@@ -30,11 +30,14 @@ export const agentConfig = defineModuleConfig(
     metricsStoreIntervalMs: nonNegativeInt.default(60_000),
     /** Сколько хранить историю метрик, часов. */
     metricsRetentionHours: positiveInt.default(168),
+    /** Свежие точки — каждую, за столько минут (график последних минут). */
+    metricsRecentMinutes: positiveInt.default(10),
     /** Сколько дней хранить события воркеров и выполненные команды. */
     eventsRetentionDays: positiveInt.default(14),
     /**
-     * Архивы папки агента для узлов (`agent pack --env prod`):
-     * `agent-*-<версия>-linux-<arch>.tar.gz` и `install.sh` — их ставит `install.sh --bundle`;
+     * Архив папки агента для узлов (`agent pack --env prod`): `agent-*-<версия>.tar.gz` — все
+     * платформы в одном архиве, раздаётся как `agent.tar.gz`; `install.sh` — ставит его
+     * (`install.sh --bundle`);
      * `release/` — каталог сборок воркеров проекта (`worker.update`, `agent install --worker`).
      * Относительный путь — от корня проекта.
      */
@@ -52,6 +55,7 @@ export const agentConfig = defineModuleConfig(
     metricsIntervalMs: process.env.AGENT_METRICS_INTERVAL_MS,
     metricsStoreIntervalMs: process.env.AGENT_METRICS_STORE_INTERVAL_MS,
     metricsRetentionHours: process.env.AGENT_METRICS_RETENTION_HOURS,
+    metricsRecentMinutes: process.env.AGENT_METRICS_RECENT_MINUTES,
     eventsRetentionDays: process.env.AGENT_EVENTS_RETENTION_DAYS,
     bundleDir: process.env.AGENT_BUNDLE_DIR,
     configsKey: process.env.AGENT_CONFIGS_KEY,

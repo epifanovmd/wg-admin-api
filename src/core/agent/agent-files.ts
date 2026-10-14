@@ -7,15 +7,15 @@ import { config } from "../../config";
 import { agentConfig, agentReleasesDir } from "./agent.config";
 import { AGENT_PROTOCOL_PREFIX } from "./protocol";
 
-/** Архивы для узлов: `install.sh` и `<os>-<arch>.tar.gz` (новейший архив платформы). */
+/** Архив для узлов: `install.sh` и `agent.tar.gz` (новейший архив agent pack, все платформы). */
 export const AGENT_BUNDLE_PATH = `${AGENT_PROTOCOL_PREFIX}/bundle`;
 
 /** Каталог сборок воркеров проекта: `manifest.json` и файлы сборок. */
 export const AGENT_RELEASES_PATH = `${AGENT_PROTOCOL_PREFIX}/releases`;
 
-const PLATFORM = /^(linux|darwin)-(amd64|arm64)\.tar\.gz$/;
-const ARCHIVE =
-  /^agent-[a-z0-9-]+-[0-9][^/]*-(linux|darwin)-(amd64|arm64)\.tar\.gz$/;
+/** Имя архива в адресе раздачи. */
+export const BUNDLE_ARCHIVE_NAME = "agent.tar.gz";
+const ARCHIVE = /^agent-[a-z0-9-]+-[0-9][^/]*\.tar\.gz$/;
 const RELEASE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Адрес бэкенда для агентов: `AGENT_PUBLIC_URL`, иначе `APP_PUBLIC_URL`. */
@@ -26,9 +26,9 @@ export const agentPublicUrl = (): string =>
 export const bundleInstallUrl = (server: string): string =>
   `${server.replace(/\/+$/, "")}${AGENT_BUNDLE_PATH}/install.sh`;
 
-/** Адрес архива для `install.sh --bundle`: `{arch}` установщик заменит на amd64 или arm64. */
+/** Адрес архива агента (все платформы): `<сервер>/agent/v1/bundle/agent.tar.gz`. */
 export const bundleArchiveUrl = (server: string): string =>
-  `${server.replace(/\/+$/, "")}${AGENT_BUNDLE_PATH}/linux-{arch}.tar.gz`;
+  `${server.replace(/\/+$/, "")}${AGENT_BUNDLE_PATH}/${BUNDLE_ARCHIVE_NAME}`;
 
 /** Флаги установщика для установки из архива этого сервера. */
 export const bundleInstallFlags = (server: string): string[] => [
@@ -38,8 +38,11 @@ export const bundleInstallFlags = (server: string): string[] => [
   bundleArchiveUrl(server),
 ];
 
-/** Способ установки: служба (root), служба пользователя, без установки (контейнер). */
-export type TAgentInstallMode = "systemd" | "rootless" | "run";
+/**
+ * Способ установки: служба (root), служба пользователя, без установки (свой менеджер процессов),
+ * Docker Compose из архива (`compose.yml` архива).
+ */
+export type TAgentInstallMode = "systemd" | "rootless" | "run" | "docker";
 
 /** Значение для shell в одинарных кавычках. */
 const shellQuote = (value: string): string =>
@@ -58,6 +61,9 @@ export const agentInstallCommand = (options: {
   server?: string;
 }): string => {
   const server = (options.server ?? agentPublicUrl()).replace(/\/+$/, "");
+
+  if (options.mode === "docker")
+    return agentDockerCommand({ ...options, server });
   const flags = [
     "--server",
     shellQuote(server),
@@ -76,18 +82,48 @@ export const agentInstallCommand = (options: {
   return `curl -fsSL ${shellQuote(bundleInstallUrl(server))} | ${sudo}sh -s -- ${flags.join(" ")}`;
 };
 
-const newestArchive = async (
+/**
+ * Команда запуска агента в Docker Compose из архива этого сервера (все платформы — образ под
+ * платформу машины), `.env` с адресом, токеном и именем (0600; без имени — имя машины, а не
+ * контейнера), `docker compose up -d --build` по `compose.yml` архива (каталог `agent/` в текущем).
+ */
+const agentDockerCommand = (options: {
+  token?: string;
+  name?: string;
+  server: string;
+}): string => {
+  const env = [
+    `AGENT_SERVER_URL=${options.server}`,
+    `AGENT_ENROLL_TOKEN=${options.token ?? ""}`,
+    ...(/^http:\/\//i.test(options.server)
+      ? ["AGENT_SERVER_ALLOW_INSECURE=true"]
+      : []),
+  ].map(shellQuote);
+
+  // Имя агента: заданное, иначе — имя машины (у контейнера своё имя, оно меняется).
+  env.push(
+    options.name
+      ? shellQuote(`AGENT_NAME=${options.name}`)
+      : `"AGENT_NAME=$(hostname)"`,
+  );
+
+  return [
+    `curl -fsSL ${shellQuote(bundleArchiveUrl(options.server))} | tar -xz`,
+    "cd agent",
+    `(umask 077 && printf '%s\\n' ${env.join(" ")} > .env)`,
+    "docker compose up -d --build",
+  ].join(" && ");
+};
+
+/** Новейший архив agent pack в каталоге архивов (по времени изменения). */
+export const newestBundleArchive = async (
   dir: string,
-  os: string,
-  arch: string,
-): Promise<{ path: string; size: number } | null> => {
+): Promise<{ path: string; size: number; mtime: number } | null> => {
   const names = await readdir(dir).catch(() => [] as string[]);
   let best: { path: string; size: number; mtime: number } | null = null;
 
   for (const name of names) {
-    const match = ARCHIVE.exec(name);
-
-    if (match?.[1] !== os || match[2] !== arch) continue;
+    if (!ARCHIVE.test(name)) continue;
     const path = join(dir, name);
     const info = await stat(path).catch(() => null);
 
@@ -96,7 +132,7 @@ const newestArchive = async (
     }
   }
 
-  return best && { path: best.path, size: best.size };
+  return best;
 };
 
 const fileIn = async (
@@ -152,12 +188,11 @@ export const serveAgentFiles = async (
   if (path.startsWith(`${AGENT_BUNDLE_PATH}/`)) {
     const dir = agentConfig.bundleDir;
     const name = path.slice(AGENT_BUNDLE_PATH.length + 1);
-    const platform = PLATFORM.exec(name);
     let file: { path: string; size: number } | null = null;
 
     if (dir && name === "install.sh") file = await fileIn(dir, name);
-    else if (dir && platform)
-      file = await newestArchive(dir, platform[1], platform[2]);
+    else if (dir && name === BUNDLE_ARCHIVE_NAME)
+      file = await newestBundleArchive(dir);
     if (!file)
       notFound(res, `нет ${name} в каталоге архивов агента (AGENT_BUNDLE_DIR)`);
     else sendFile(req, res, file, contentType(name));

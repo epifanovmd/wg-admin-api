@@ -6,10 +6,12 @@ import {
   AgentEnrollmentService,
   AgentError,
   agentInstallCommand,
+  AgentIssueService,
   agentPublicUrl,
   Agents,
   compareAgentVersions,
   EventBus,
+  IAgentIssueInput,
   ICursorPageDto,
   Injectable,
   IPaginatedDto,
@@ -31,6 +33,9 @@ import {
   AgentDto,
   AgentEnrollmentTokenDto,
   IAgentEventDto,
+  IAgentInstallOptionsDto,
+  IAgentIssuedEnvDto,
+  IAgentIssuedLinkDto,
   IAgentLogsDto,
   IAgentMetricsPointDto,
   IAgentReleaseDto,
@@ -70,6 +75,29 @@ const parseCursor = (
  * Агенты для веба: доступ (права модуля или политики), DTO, действия пользователя с аудитом.
  * Сама работа с агентами — `Agents` ядра.
  */
+/** Срок выданного токена и одноразовой ссылки по умолчанию, мин (сутки). */
+export const AGENT_ISSUE_TTL_MINUTES = 24 * 60;
+
+/** Запрос выдачи агента: имя, метки, число регистраций, срок токена, адрес бэкенда. */
+export interface IAgentIssueRequest {
+  name?: string;
+  labels?: Record<string, string>;
+  maxUses?: number;
+  expiresInMinutes?: number;
+  baseUrl?: string;
+  /** Имя токена в списке токенов; нет — по имени агента. */
+  tokenName?: string;
+}
+
+const issueInput = (request: IAgentIssueRequest): IAgentIssueInput => ({
+  tokenName: request.tokenName ?? `выдача: ${request.name ?? "агент"}`,
+  name: request.name,
+  labels: request.labels,
+  maxUses: request.maxUses,
+  tokenTtlMinutes: request.expiresInMinutes ?? AGENT_ISSUE_TTL_MINUTES,
+  server: request.baseUrl,
+});
+
 @Injectable()
 export class AgentService {
   constructor(
@@ -77,6 +105,7 @@ export class AgentService {
     @inject(AgentAccessService) private readonly _access: AgentAccessService,
     @inject(AgentEnrollmentService)
     private readonly _enrollment: AgentEnrollmentService,
+    @inject(AgentIssueService) private readonly _issue: AgentIssueService,
     @inject(EventBus) private readonly _bus: EventBus,
   ) {}
 
@@ -135,13 +164,21 @@ export class AgentService {
     return agentPublicUrl();
   }
 
-  installCommand(options: {
+  /** Команда установки; `docker` — только если в архиве агента есть compose.yml. */
+  async installCommand(options: {
     token?: string;
     tokenFile?: string;
     name?: string;
     mode?: TAgentInstallMode;
     server?: string;
-  }): string {
+  }): Promise<string> {
+    if (options.mode === "docker") {
+      const { archive } = await this._issue.options();
+
+      if (!archive) throw AgentError.ARCHIVE_NOT_FOUND();
+      if (!archive.compose) throw AgentError.ARCHIVE_NO_COMPOSE();
+    }
+
     return agentInstallCommand(options);
   }
 
@@ -573,6 +610,77 @@ export class AgentService {
     ) {
       this._access.requireAll(actor, "manage");
     }
+  }
+
+  /** Что можно выдать: адрес бэкенда и архив агента (все платформы). */
+  async installOptions(actor: IAgentActor): Promise<IAgentInstallOptionsDto> {
+    this.requireEnroll(actor);
+    const { server, archive } = await this._issue.options();
+
+    return {
+      server,
+      archive: archive
+        ? { ...archive, version: archive.version ?? undefined }
+        : undefined,
+    };
+  }
+
+  /** Токен регистрации и `.env` с ним (показывается один раз). */
+  async issueEnv(
+    actor: IAgentActor,
+    request: IAgentIssueRequest,
+  ): Promise<IAgentIssuedEnvDto> {
+    this.requireEnroll(actor);
+    const issued = await this._issue.env(actor.userId, issueInput(request));
+
+    this.auditIssue(actor.userId, "env", issued.tokenId, request);
+
+    return { ...issued, expiresAt: issued.expiresAt.getTime() };
+  }
+
+  /** Архив агента (все платформы) с `.env` (токен — в нём). */
+  async issueArchive(
+    actor: IAgentActor,
+    request: IAgentIssueRequest,
+  ): Promise<{ file: string; data: Buffer }> {
+    this.requireEnroll(actor);
+    const issued = await this._issue.archive(actor.userId, issueInput(request));
+
+    this.auditIssue(actor.userId, "archive", issued.tokenId, request);
+
+    return { file: issued.file, data: issued.data };
+  }
+
+  /** Одноразовая ссылка на архив агента с токеном. */
+  async issueLink(
+    actor: IAgentActor,
+    request: IAgentIssueRequest & { linkExpiresInMinutes?: number },
+  ): Promise<IAgentIssuedLinkDto> {
+    this.requireEnroll(actor);
+    const link = await this._issue.link(
+      actor.userId,
+      issueInput(request),
+      request.linkExpiresInMinutes ?? AGENT_ISSUE_TTL_MINUTES,
+    );
+
+    this.auditIssue(actor.userId, "link", link.id, request);
+
+    return { url: link.url, expiresAt: link.expiresAt.getTime() };
+  }
+
+  private auditIssue(
+    actorId: string,
+    kind: string,
+    target: string,
+    request: IAgentIssueRequest,
+  ): void {
+    this._bus.emit(
+      new AgentActionAuditedEvent("agent.issue", actorId, target, null, {
+        kind,
+        name: request.name,
+        labels: request.labels,
+      }),
+    );
   }
 
   private audit(

@@ -238,6 +238,39 @@ export interface IAgentInstallCommandDto {
   command: string;
 }
 
+/** Архив агента для узлов (все платформы). */
+export interface IAgentArchiveDto {
+  file: string;
+  version?: string;
+  /** Платформы: `linux/amd64`, `linux/arm64`. */
+  platforms: string[];
+  size: number;
+  /** В архиве есть compose.yml: запуск в Docker Compose. */
+  compose: boolean;
+}
+
+/** Что можно выдать: адрес бэкенда для агентов и архив агента (нет — `AGENT_BUNDLE_DIR` пуст). */
+export interface IAgentInstallOptionsDto {
+  server: string;
+  archive?: IAgentArchiveDto;
+}
+
+/** Выданный токен регистрации и `.env` с ним (показывается один раз). */
+export interface IAgentIssuedEnvDto {
+  env: string;
+  token: string;
+  tokenId: string;
+  /** Срок токена, мс. */
+  expiresAt: number;
+}
+
+/** Одноразовая ссылка на архив агента с токеном. */
+export interface IAgentIssuedLinkDto {
+  url: string;
+  /** Срок ссылки, мс. */
+  expiresAt: number;
+}
+
 /** Сборка воркера в каталоге сборок проекта. */
 export interface IAgentWorkerBuildDto {
   name: string;

@@ -8,8 +8,10 @@
 #                                   yarn agent config check
 #   yarn agent:fetch                программа агента, сборки агента и install.sh той же версии в
 #                                   agent/dist/v<версия> (сквозные тесты; AGENT_PLATFORMS="linux-amd64 …")
-#   yarn agent:pack                 архивы для узлов, сборки воркеров и установщик агента
-#                                   (install.sh той же версии) → agent/bundle
+#   yarn agent:pack                 архив для узлов (agent pack; файлы получателя agent/package —
+#                                   Dockerfile, compose.yml, .env.example — по pack.files),
+#                                   сборки воркеров и установщик агента той же версии → agent/bundle
+#   sh agent/dev.sh image [ТЕГ]     образ агента из архива agent/bundle под эту машину (make agent-image)
 #
 # Другой env-файл — ENV_FILE=…, второй агент — AGENT_DIR=.agent-2 AGENT_NAME=dev-2 (свои ключ и
 # данные), привязать к ноде — AGENT_NODE_ID=<id> (метка nodeId). Данные агента — <AGENT_DIR>/data;
@@ -130,6 +132,19 @@ case "$cmd" in
     "$AGENT" pack --env prod --out "$out" --release-out "$out/release" "$@"
     # Установщик агента: API раздаёт его вместе с архивами (bundle/install.sh).
     curl -fsSL "$BASE/install.sh" -o "$out/install.sh" || die "нет $BASE/install.sh"
+    ;;
+  image)
+    # Образ агента из архива (Dockerfile архива; платформу выбирает скрипт agent в образе).
+    tag=${1:-agent-wg:local}
+    # Архив в agent/bundle один: pack каждый раз собирает каталог заново.
+    set -- "$ROOT"/agent/bundle/agent-*.tar.gz
+    archive=$1
+    [ -f "$archive" ] || die "нет архива в agent/bundle — сначала yarn agent:pack (make agent-archive)"
+    tmp=$(mktemp -d)
+    tar -xzf "$archive" -C "$tmp"
+    docker build -t "$tag" "$tmp/agent" || { rm -rf "$tmp"; exit 1; }
+    rm -rf "$tmp"
+    echo "образ $tag — из $(basename "$archive")"
     ;;
   run)
     ensure_agent

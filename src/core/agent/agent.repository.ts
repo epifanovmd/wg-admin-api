@@ -34,7 +34,8 @@ export class AgentRepository extends BaseRepository<Agent> {
 
   /** Поднять номер желаемого; вернуть новый. */
   async bumpDesired(id: string): Promise<number> {
-    const rows: Array<{ desired_rev: string }> = await this.query(
+    // UPDATE … RETURNING в TypeORM — [строки, число изменённых].
+    const [rows]: [Array<{ desired_rev: string }>, number] = await this.query(
       "UPDATE agents SET desired_rev = desired_rev + 1, updated_at = now() WHERE id = $1 RETURNING desired_rev",
       [id],
     );
@@ -72,7 +73,7 @@ export class AgentRepository extends BaseRepository<Agent> {
 
   /** Сбросить потоки копии (её прежний запуск оборвался). */
   async clearStreams(instance: string): Promise<string[]> {
-    const rows: Array<{ id: string }> = await this.query(
+    const [rows]: [Array<{ id: string }>, number] = await this.query(
       "UPDATE agents SET stream_instance = NULL, last_seen_at = NULL WHERE stream_instance = $1 RETURNING id",
       [instance],
     );

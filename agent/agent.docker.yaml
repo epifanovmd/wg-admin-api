@@ -1,0 +1,13 @@
+# Агент в контейнере (Dockerfile архива, package/Dockerfile): поверх agent.prod.yaml. Адрес API —
+# AGENT_SERVER_URL, токен — AGENT_ENROLL_TOKEN, данные — том /var/lib/agent. Контейнер — в сети
+# узла и с правами на неё (compose.yml архива): воркер wg настраивает интерфейсы, маршруты и
+# iptables самого узла. Себя не обновляет: обновляют образ.
+extends: agent.prod.yaml
+dataDir: /var/lib/agent
+update:
+  mode: external
+workers:
+  - path: workers/wg
+    env:
+      # Конфиги wg-quick — том /etc/wireguard, что создал воркер — в томе данных агента.
+      WG_STATE_DIR: /var/lib/agent/wg-state

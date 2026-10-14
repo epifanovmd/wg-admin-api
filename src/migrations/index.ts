@@ -26,6 +26,7 @@ import { SocksOwnership1790762066727 } from "./1790762066727-SocksOwnership";
 import { AddBiometric1790934167120 } from "./1790934167120-AddBiometric";
 import { AgentNodes1791548803242 } from "./1791548803242-AgentNodes";
 import { AgentProtocol1792100000000 } from "./1792100000000-AgentProtocol";
+import { AgentIssues1792200000000 } from "./1792200000000-AgentIssues";
 
 /**
  * Миграции в порядке применения. Новая миграция: `yarn migration:generate
@@ -61,4 +62,5 @@ export const migrations: Function[] = [
   AddBiometric1790934167120,
   AgentNodes1791548803242,
   AgentProtocol1792100000000,
+  AgentIssues1792200000000,
 ];

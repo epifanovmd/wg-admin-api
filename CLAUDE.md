@@ -32,7 +32,8 @@ yarn test:e2e             # интеграционный набор test/e2e/*.e
 yarn gen:module <name>    # каркас модуля по конвенциям (--dry-run — список файлов)
 yarn migration:generate src/migrations/<Name> | migration:run | migration:revert
 yarn agent                # локальный агент на переднем плане (agent/agent.yaml; agent/dev.sh)
-yarn agent:pack           # архивы папки агента для узлов в agent/bundle (воркеры wg, socks — сборкой Go)
+yarn agent:pack           # архив агента для узлов (все платформы, файлы agent/package) в agent/bundle (= make agent-archive)
+make agent-image          # образ агента из архива под эту машину
 yarn agent:fetch          # скачать сборки агента версии AGENT_VERSION с GitHub в agent/dist (e2e)
 scripts/go-agent.sh test | vet | tidy | fmt | build [os [arch]]   # воркеры: Go в контейнере
 ```

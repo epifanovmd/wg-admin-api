@@ -2,7 +2,10 @@
 # приложения — .env.production (кладёт `make env`).
 #   make release  — готовый образ коммита из ghcr (TAG=<sha>; его собирает CI)
 #   make deploy   — запасной путь: исходники на хост и сборка там же
-# Цели image и local-* работают и без .env.deploy.
+# Агент нод (без .env.deploy):
+#   make agent-archive — архив агента для нод (все платформы) → agent/bundle (agent pack: тот же архив раздаёт API)
+#   make agent-image   — образ агента из архива под эту машину ($(IMAGE):$(TAG)-agent)
+# Цели image, agent-* и local-* работают и без .env.deploy.
 -include .env.deploy
 
 TAG ?= latest
@@ -25,7 +28,7 @@ DB = --host $(SSH_USER)@$(SSH_HOST) --container $(DB_CONTAINER) --user $(DB_USER
 
 REMOTE_TARGETS = deploy release sync compose env build pull migrate up down status logs restart db-dump db-restore
 
-.PHONY: $(REMOTE_TARGETS) require-deploy image local-up local-down local-logs
+.PHONY: $(REMOTE_TARGETS) require-deploy image local-up local-down local-logs agent-archive agent-image
 
 $(REMOTE_TARGETS): require-deploy
 
@@ -93,3 +96,10 @@ local-down:
 
 local-logs:
 	$(COMPOSE) logs -f --tail=200 api worker
+
+# --- Агент нод ---
+agent-archive:
+	sh agent/dev.sh pack
+
+agent-image:
+	sh agent/dev.sh image $(IMAGE):$(TAG)-agent

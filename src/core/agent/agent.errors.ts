@@ -34,4 +34,12 @@ export const AgentError = defineErrors("AGENT", {
     status: 404,
     message: "Токен регистрации не найден",
   },
+  ARCHIVE_NOT_FOUND: {
+    status: 404,
+    message: "Архива агента нет (AGENT_BUNDLE_DIR)",
+  },
+  ARCHIVE_NO_COMPOSE: {
+    status: 409,
+    message: "В архиве агента нет compose.yml — запуск в Docker не настроен",
+  },
 });

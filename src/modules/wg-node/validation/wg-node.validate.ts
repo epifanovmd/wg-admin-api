@@ -39,13 +39,37 @@ export const AssignWgNodeSchema = z.object({
   userId: z.uuid(),
 });
 
-/** Токен установки: от 10 минут до 30 дней. */
+const tokenMinutes = z
+  .number()
+  .int()
+  .min(10, "Срок токена — не меньше 10 минут")
+  .max(30 * 24 * 60, "Срок токена — не больше 30 дней");
+
+/** Токен установки: от 10 минут до 30 дней; способ — служба или Docker. */
 export const CreateWgNodeInstallCommandSchema = z.object({
-  expiresInMinutes: z
+  expiresInMinutes: tokenMinutes.optional(),
+  mode: z.enum(["systemd", "docker"]).optional(),
+});
+
+/** Выдача агента ноды: имя агента, адрес сервера, срок токена. */
+export const IssueWgNodeAgentSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(128)
+    .refine(value => !/[\r\n]/.test(value), "Без перевода строки")
+    .optional(),
+  baseUrl: z.url("Адрес — URL").max(500).optional(),
+  expiresInMinutes: tokenMinutes.optional(),
+});
+
+export const IssueWgNodeAgentLinkSchema = IssueWgNodeAgentSchema.extend({
+  linkExpiresInMinutes: z
     .number()
     .int()
-    .min(10, "Срок токена — не меньше 10 минут")
-    .max(30 * 24 * 60, "Срок токена — не больше 30 дней")
+    .min(5)
+    .max(7 * 24 * 60)
     .optional(),
 });
 

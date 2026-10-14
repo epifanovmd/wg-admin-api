@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   AGENT_ID_PATTERN,
+  AGENT_INSTALL_MODES,
   COMMAND_TYPE_PATTERN,
   WORKER_NAME_PATTERN,
 } from "../agent.types";
@@ -82,9 +83,41 @@ export const InstallCommandBodySchema = z
     tokenFile: shellValue.optional(),
     name: z.string().max(128).optional(),
     baseUrl: z.url("Адрес — URL").max(500).optional(),
-    mode: z.enum(["systemd", "rootless", "run"]).optional(),
+    mode: z.enum(AGENT_INSTALL_MODES).optional(),
   })
   .refine(value => !!value.token !== !!value.tokenFile, {
     message: "Нужно ровно одно из token и tokenFile",
     path: ["token"],
   });
+
+/** Выдача агента получателю: токен, `.env` с адресом и именем (архив и ссылка — с ним же). */
+export const IssueAgentBodySchema = z.object({
+  /** Имя агента (`AGENT_NAME`); нет — имя машины. */
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(128)
+    .refine(value => !/[\r\n]/.test(value), "Без перевода строки")
+    .optional(),
+  labels: z.record(z.string(), z.string().max(256)).optional(),
+  maxUses: z.number().int().min(1).max(1000).optional(),
+  /** Срок токена, мин (по умолчанию сутки). */
+  expiresInMinutes: z
+    .number()
+    .int()
+    .min(5)
+    .max(30 * 24 * 60)
+    .optional(),
+  baseUrl: z.url("Адрес — URL").max(500).optional(),
+});
+
+export const IssueAgentLinkBodySchema = IssueAgentBodySchema.extend({
+  /** Срок ссылки, мин (по умолчанию сутки). */
+  linkExpiresInMinutes: z
+    .number()
+    .int()
+    .min(5)
+    .max(7 * 24 * 60)
+    .optional(),
+});

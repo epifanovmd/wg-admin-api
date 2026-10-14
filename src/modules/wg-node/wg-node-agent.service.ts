@@ -3,16 +3,26 @@ import { inject } from "inversify";
 import {
   AgentEnrollmentService,
   AgentError,
+  AgentIssueService,
   Agents,
   IAgentEnrollmentSource,
+  IAgentIssueInput,
   Injectable,
   logger,
 } from "../../core";
 import type { AuthContext } from "../../types/koa";
-import { AgentDto, AgentService } from "../agent";
+import {
+  AgentDto,
+  AgentService,
+  IAgentIssuedEnvDto,
+  IAgentIssuedLinkDto,
+} from "../agent";
 import type {
   ICreateWgNodeInstallCommandBody,
+  IIssueWgNodeAgentBody,
+  IIssueWgNodeAgentLinkBody,
   IWgNodeInstallCommandDto,
+  TWgNodeInstallMode,
 } from "./dto";
 import { WgNode } from "./wg-node.entity";
 import { WgNodeError } from "./wg-node.errors";
@@ -63,11 +73,13 @@ export class WgNodeAgentService {
     @inject(Agents) private readonly _core: Agents,
     @inject(AgentEnrollmentService)
     private readonly _enrollment: AgentEnrollmentService,
+    @inject(AgentIssueService) private readonly _issue: AgentIssueService,
   ) {}
 
   /**
    * Команда установки агента вручную: одноразовый токен с меткой ноды (агент
-   * привяжется к ней при регистрации) и строка `curl … | sudo sh`.
+   * привяжется к ней при регистрации) и строка `curl … | sudo sh` (службой) или
+   * архив, `.env` и `docker compose up` (`mode: docker`).
    */
   async installCommand(
     actor: AuthContext,
@@ -84,6 +96,7 @@ export class WgNodeAgentService {
       actor.userId,
       node,
       body.expiresInMinutes ?? WG_NODE_INSTALL_TOKEN_TTL_MINUTES,
+      body.mode,
     );
   }
 
@@ -92,12 +105,82 @@ export class WgNodeAgentService {
     actorId: string,
     node: WgNode,
     ttlMinutes = WG_NODE_INSTALL_TOKEN_TTL_MINUTES,
+    mode?: TWgNodeInstallMode,
   ): Promise<IWgNodeInstallCommandDto> {
     const issued = await this.issueToken(actorId, node, ttlMinutes);
+    const command = await this.commandFor(
+      node,
+      { token: issued.token },
+      undefined,
+      mode,
+    ).catch(async (err: unknown) => {
+      await this.revokeToken(issued.tokenId);
+      throw err;
+    });
+
+    return { command, ...issued };
+  }
+
+  /** `.env` агента ноды: адрес, одноразовый токен с меткой ноды, имя агента. */
+  async issueEnv(
+    actor: AuthContext,
+    id: string,
+    body: IIssueWgNodeAgentBody,
+  ): Promise<IAgentIssuedEnvDto> {
+    const input = await this.issueInput(actor, id, body);
+    const issued = await this._issue.env(actor.userId, input);
+
+    return { ...issued, expiresAt: issued.expiresAt.getTime() };
+  }
+
+  /** Архив агента (все платформы) с `.env` агента ноды. */
+  async issueArchive(
+    actor: AuthContext,
+    id: string,
+    body: IIssueWgNodeAgentBody,
+  ): Promise<{ file: string; data: Buffer }> {
+    const input = await this.issueInput(actor, id, body);
+    const issued = await this._issue.archive(actor.userId, input);
+
+    return { file: issued.file, data: issued.data };
+  }
+
+  /** Одноразовая ссылка на архив агента ноды (токен — при скачивании). */
+  async issueLink(
+    actor: AuthContext,
+    id: string,
+    body: IIssueWgNodeAgentLinkBody,
+  ): Promise<IAgentIssuedLinkDto> {
+    const input = await this.issueInput(actor, id, body);
+    const link = await this._issue.link(
+      actor.userId,
+      input,
+      body.linkExpiresInMinutes ?? WG_NODE_INSTALL_TOKEN_TTL_MINUTES,
+    );
+
+    return { url: link.url, expiresAt: link.expiresAt.getTime() };
+  }
+
+  /** Выдача для ноды: метка ноды, имя агента — заданное или имя ноды. */
+  private async issueInput(
+    actor: AuthContext,
+    id: string,
+    body: IIssueWgNodeAgentBody,
+  ): Promise<IAgentIssueInput> {
+    const node = await this._nodes.findFor(
+      actor,
+      id,
+      WgNodePermissions.NODE_AGENT,
+    );
 
     return {
-      command: this.commandFor(node, { token: issued.token }),
-      ...issued,
+      tokenName: `wg-node:${node.name}`.slice(0, 100),
+      name: body.name ?? node.name,
+      labels: { [WG_NODE_ID_LABEL]: node.id },
+      maxUses: 1,
+      tokenTtlMinutes:
+        body.expiresInMinutes ?? WG_NODE_INSTALL_TOKEN_TTL_MINUTES,
+      server: body.baseUrl,
     };
   }
 
@@ -134,16 +217,19 @@ export class WgNodeAgentService {
   /**
    * Команда установки агента ноды: архив папки агента с этого сервера — экземпляр
    * `wg`, воркеры wg и socks, права root, пакеты и параметры ядра для WireGuard,
-   * пробросов и NAT задаёт `agent/agent.prod.yaml`; здесь — токен и имя ноды.
+   * пробросов и NAT задаёт `agent/agent.prod.yaml`; здесь — токен, имя ноды и
+   * способ (`docker` — Docker Compose из архива, контейнер в сети узла).
    */
   commandFor(
     node: Pick<WgNode, "name">,
     auth: { token: string } | { tokenFile: string },
     baseUrl?: string,
-  ): string {
+    mode?: TWgNodeInstallMode,
+  ): Promise<string> {
     return this._agents.installCommand({
       ...auth,
       ...(baseUrl && { server: baseUrl }),
+      ...(mode && { mode }),
       name: node.name,
     });
   }

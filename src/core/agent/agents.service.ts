@@ -28,6 +28,7 @@ import {
 } from "./agent-event.repository";
 import { AgentMetric } from "./agent-metric.entity";
 import { AgentMetricRepository } from "./agent-metric.repository";
+import { AgentRecentMetrics } from "./agent-recent-metrics";
 import { schemaProblems } from "./agent-schemas";
 import {
   AGENT_PROTOCOL_PREFIX,
@@ -127,6 +128,7 @@ export class Agents {
     private readonly _events: AgentEventRepository,
     @inject(AgentMetricRepository)
     private readonly _metrics: AgentMetricRepository,
+    @inject(AgentRecentMetrics) private readonly _recent: AgentRecentMetrics,
     @inject(AgentSignals) private readonly _signals: AgentSignals,
     @inject(EventBus) private readonly _bus: EventBus,
   ) {}
@@ -231,6 +233,7 @@ export class Agents {
         [agentId],
       );
     });
+    await this._recent.delete(agentId);
     await this.push(agentId);
     this._bus.emit(new AgentDeletedEvent(agentId));
   }
@@ -668,13 +671,37 @@ export class Agents {
     return this._events.findFeed(filter);
   }
 
-  metrics(
+  /**
+   * Точки метрик агента в [since, until]: история из БД, а за последние минуты — и свежие точки
+   * (каждая полученная), без повторов по времени; последние `limit`.
+   */
+  async metrics(
     agentId: string,
     since: number,
     until: number,
     limit: number,
   ): Promise<AgentMetric[]> {
-    return this._metrics.findRange(agentId, since, until, limit);
+    const stored = await this._metrics.findRange(agentId, since, until, limit);
+    const recentFrom = Math.max(since, Date.now() - this._recent.windowMs);
+
+    if (until < recentFrom) return stored;
+    const byAt = new Map<number, AgentMetric>(stored.map(m => [m.at, m]));
+
+    for (const p of await this._recent.range(agentId, recentFrom, until)) {
+      if (!byAt.has(p.at)) {
+        byAt.set(
+          p.at,
+          this._metrics.create({
+            agentId,
+            at: p.at,
+            host: p.host ?? null,
+            workers: p.workers ?? null,
+          }),
+        );
+      }
+    }
+
+    return [...byAt.values()].sort((a, b) => a.at - b.at).slice(-limit);
   }
 
   // ─── служебное ───────────────────────────────────────────────────────

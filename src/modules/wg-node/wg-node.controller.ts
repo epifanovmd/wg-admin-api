@@ -1,4 +1,5 @@
 import { inject } from "inversify";
+import { Readable } from "stream";
 import {
   Body,
   Controller,
@@ -7,6 +8,7 @@ import {
   Patch,
   Path,
   Post,
+  Produces,
   Query,
   Request,
   Response,
@@ -25,12 +27,15 @@ import {
 } from "../../core";
 import { UUID } from "../../core/http";
 import { KoaRequest } from "../../types/koa";
+import type { IAgentIssuedEnvDto, IAgentIssuedLinkDto } from "../agent";
 import {
   IAssignWgNodeBody,
   IBindWgNodeAgentBody,
   ICreatedWgNodeDto,
   ICreateWgNodeBody,
   ICreateWgNodeInstallCommandBody,
+  IIssueWgNodeAgentBody,
+  IIssueWgNodeAgentLinkBody,
   IUpdateWgNodeBody,
   IWgNodeInstallCommandDto,
   WgNodeDto,
@@ -41,6 +46,8 @@ import {
   BindWgNodeAgentSchema,
   CreateWgNodeInstallCommandSchema,
   CreateWgNodeSchema,
+  IssueWgNodeAgentLinkSchema,
+  IssueWgNodeAgentSchema,
   UpdateWgNodeSchema,
 } from "./validation";
 import { WgNodeService } from "./wg-node.service";
@@ -203,6 +210,78 @@ export class WgNodeController extends Controller {
     @Body() body: ICreateWgNodeInstallCommandBody,
   ): Promise<IWgNodeInstallCommandDto> {
     return this._agents.installCommand(getContextUser(req), id, body);
+  }
+
+  /**
+   * `.env` агента ноды: адрес, одноразовый токен с меткой ноды (агент привяжется к ней), имя
+   * агента — для архива агента или образа (`--env-file`). Токен — только в этом ответе.
+   * @summary Выдать .env агента ноды
+   */
+  @Security("jwt", ["permission:wg:node:agent:own"])
+  @ValidateBody(IssueWgNodeAgentSchema)
+  @SuccessResponse(201, "Created")
+  @Post("{id}/agent/issue/env")
+  async issueWgNodeAgentEnv(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+    @Body() body: IIssueWgNodeAgentBody,
+  ): Promise<IAgentIssuedEnvDto> {
+    const issued = await this._agents.issueEnv(getContextUser(req), id, body);
+
+    this.setStatus(201);
+
+    return issued;
+  }
+
+  /**
+   * Архив агента (все платформы) с `.env` агента ноды: распаковать и запустить — службой, на
+   * месте или в Docker.
+   * @summary Выдать архив агента ноды
+   */
+  @Security("jwt", ["permission:wg:node:agent:own"])
+  @ValidateBody(IssueWgNodeAgentSchema)
+  @Produces("application/gzip")
+  @Post("{id}/agent/issue/archive")
+  async issueWgNodeAgentArchive(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+    @Body() body: IIssueWgNodeAgentBody,
+  ): Promise<Readable> {
+    const archive = await this._agents.issueArchive(
+      getContextUser(req),
+      id,
+      body,
+    );
+
+    this.setHeader("Content-Type", "application/gzip");
+    this.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${archive.file}"`,
+    );
+    this.setHeader("Cache-Control", "no-store");
+
+    return Readable.from(archive.data);
+  }
+
+  /**
+   * Одноразовая ссылка на архив агента ноды: скачать можно один раз и до срока, токен с
+   * меткой ноды создаётся при скачивании.
+   * @summary Выдать ссылку на архив агента ноды
+   */
+  @Security("jwt", ["permission:wg:node:agent:own"])
+  @ValidateBody(IssueWgNodeAgentLinkSchema)
+  @SuccessResponse(201, "Created")
+  @Post("{id}/agent/issue/link")
+  async issueWgNodeAgentLink(
+    @Request() req: KoaRequest,
+    @Path() id: UUID,
+    @Body() body: IIssueWgNodeAgentLinkBody,
+  ): Promise<IAgentIssuedLinkDto> {
+    const link = await this._agents.issueLink(getContextUser(req), id, body);
+
+    this.setStatus(201);
+
+    return link;
   }
 
   /**

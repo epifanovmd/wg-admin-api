@@ -924,6 +924,15 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"AgentInstallMode": {
+				"type": "string",
+				"enum": [
+					"systemd",
+					"rootless",
+					"run",
+					"docker"
+				]
+			},
 			"IInstallCommandBody": {
 				"properties": {
 					"token": {
@@ -941,12 +950,164 @@
 						"description": "Адрес API для узла; без него — `AGENT_PUBLIC_URL`."
 					},
 					"mode": {
+						"$ref": "#/components/schemas/AgentInstallMode"
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentArchiveDto": {
+				"description": "Архив агента для узлов (все платформы).",
+				"properties": {
+					"file": {
+						"type": "string"
+					},
+					"version": {
+						"type": "string"
+					},
+					"platforms": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"description": "Платформы: `linux/amd64`, `linux/arm64`."
+					},
+					"size": {
+						"type": "number",
+						"format": "double"
+					},
+					"compose": {
+						"type": "boolean",
+						"description": "В архиве есть compose.yml: запуск в Docker Compose."
+					}
+				},
+				"required": [
+					"file",
+					"platforms",
+					"size",
+					"compose"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentInstallOptionsDto": {
+				"description": "Что можно выдать: адрес бэкенда для агентов и архив агента (нет — `AGENT_BUNDLE_DIR` пуст).",
+				"properties": {
+					"server": {
+						"type": "string"
+					},
+					"archive": {
+						"$ref": "#/components/schemas/IAgentArchiveDto"
+					}
+				},
+				"required": [
+					"server"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentIssuedEnvDto": {
+				"description": "Выданный токен регистрации и `.env` с ним (показывается один раз).",
+				"properties": {
+					"env": {
+						"type": "string"
+					},
+					"token": {
+						"type": "string"
+					},
+					"tokenId": {
+						"type": "string"
+					},
+					"expiresAt": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок токена, мс."
+					}
+				},
+				"required": [
+					"env",
+					"token",
+					"tokenId",
+					"expiresAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IIssueAgentBody": {
+				"properties": {
+					"name": {
 						"type": "string",
-						"enum": [
-							"systemd",
-							"rootless",
-							"run"
-						]
+						"description": "Имя агента (`AGENT_NAME` в `.env`); нет — имя машины."
+					},
+					"labels": {
+						"$ref": "#/components/schemas/Record_string.string_",
+						"description": "Метки зарегистрированного агента (агент их не перепишет)."
+					},
+					"maxUses": {
+						"type": "number",
+						"format": "double",
+						"description": "Сколько машин может зарегистрироваться этим токеном (по умолчанию 1)."
+					},
+					"expiresInMinutes": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок токена, мин (по умолчанию сутки)."
+					},
+					"baseUrl": {
+						"type": "string",
+						"description": "Адрес API для агента; без него — `AGENT_PUBLIC_URL`."
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IAgentIssuedLinkDto": {
+				"description": "Одноразовая ссылка на архив агента с токеном.",
+				"properties": {
+					"url": {
+						"type": "string"
+					},
+					"expiresAt": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок ссылки, мс."
+					}
+				},
+				"required": [
+					"url",
+					"expiresAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IIssueAgentLinkBody": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "Имя агента (`AGENT_NAME` в `.env`); нет — имя машины."
+					},
+					"labels": {
+						"$ref": "#/components/schemas/Record_string.string_",
+						"description": "Метки зарегистрированного агента (агент их не перепишет)."
+					},
+					"maxUses": {
+						"type": "number",
+						"format": "double",
+						"description": "Сколько машин может зарегистрироваться этим токеном (по умолчанию 1)."
+					},
+					"expiresInMinutes": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок токена, мин (по умолчанию сутки)."
+					},
+					"baseUrl": {
+						"type": "string",
+						"description": "Адрес API для агента; без него — `AGENT_PUBLIC_URL`."
+					},
+					"linkExpiresInMinutes": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок ссылки, мин (по умолчанию сутки); токен создаётся при скачивании."
 					}
 				},
 				"type": "object",
@@ -1388,13 +1549,68 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"TWgNodeInstallMode": {
+				"type": "string",
+				"enum": [
+					"systemd",
+					"docker"
+				],
+				"description": "Способ установки агента ноды: `systemd` — служба от root (по умолчанию), `docker` — Docker\nCompose из архива агента (контейнер в сети узла, команда без sudo)."
+			},
 			"ICreateWgNodeInstallCommandBody": {
-				"description": "Команда установки агента: срок токена.",
+				"description": "Команда установки агента: срок токена, способ.",
 				"properties": {
 					"expiresInMinutes": {
 						"type": "number",
 						"format": "double",
 						"description": "Срок одноразового токена регистрации, минут (по умолчанию сутки)."
+					},
+					"mode": {
+						"$ref": "#/components/schemas/TWgNodeInstallMode"
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IIssueWgNodeAgentBody": {
+				"description": "Выдача агента ноды: `.env` (адрес, токен с меткой ноды, имя агента), архив с ним или\nодноразовая ссылка на архив.",
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "Имя агента; нет — имя ноды."
+					},
+					"baseUrl": {
+						"type": "string",
+						"description": "Адрес сервера для агента; без него — `AGENT_PUBLIC_URL` / `APP_PUBLIC_URL`."
+					},
+					"expiresInMinutes": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок одноразового токена, минут (по умолчанию сутки)."
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"IIssueWgNodeAgentLinkBody": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "Имя агента; нет — имя ноды."
+					},
+					"baseUrl": {
+						"type": "string",
+						"description": "Адрес сервера для агента; без него — `AGENT_PUBLIC_URL` / `APP_PUBLIC_URL`."
+					},
+					"expiresInMinutes": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок одноразового токена, минут (по умолчанию сутки)."
+					},
+					"linkExpiresInMinutes": {
+						"type": "number",
+						"format": "double",
+						"description": "Срок ссылки, минут (по умолчанию сутки); токен создаётся при скачивании."
 					}
 				},
 				"type": "object",
@@ -6872,6 +7088,197 @@
 				}
 			}
 		},
+		"/api/v1/agent-enrollment/install-options": {
+			"get": {
+				"operationId": "GetAgentInstallOptions",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentInstallOptionsDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Адрес бэкенда для агентов и архив агента: платформы, есть ли запуск в Docker Compose.",
+				"summary": "Варианты установки агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:agent:enroll"
+						]
+					}
+				],
+				"parameters": []
+			}
+		},
+		"/api/v1/agent-enrollment/issue/env": {
+			"post": {
+				"operationId": "IssueAgentEnv",
+				"responses": {
+					"201": {
+						"description": "",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentIssuedEnvDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Токен регистрации и `.env` с адресом, токеном и именем — для архива агента или образа\n(`--env-file`). Токен — только в этом ответе.",
+				"summary": "Выдать токен и .env агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:agent:enroll"
+						]
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IIssueAgentBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/agent-enrollment/issue/archive": {
+			"post": {
+				"operationId": "IssueAgentArchive",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/gzip": {
+								"schema": {
+									"type": "string",
+									"format": "byte"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Архив агента (все платформы) с `.env` (адрес, одноразовый токен, имя): распаковать и\nзапустить — службой, на месте или в Docker. Архив на сервере не хранится.",
+				"summary": "Выдать архив агента с токеном",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:agent:enroll"
+						]
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IIssueAgentBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/agent-enrollment/issue/link": {
+			"post": {
+				"operationId": "IssueAgentLink",
+				"responses": {
+					"201": {
+						"description": "",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentIssuedLinkDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Одноразовая ссылка на архив агента с токеном (для передачи человеку): скачать можно один\nраз и до срока, токен создаётся при скачивании.",
+				"summary": "Выдать ссылку на архив агента",
+				"tags": [
+					"Agent"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:agent:enroll"
+						]
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IIssueAgentLinkBody"
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/agent-enrollment/release": {
 			"get": {
 				"operationId": "GetAgentRelease",
@@ -7721,6 +8128,184 @@
 						"application/json": {
 							"schema": {
 								"$ref": "#/components/schemas/ICreateWgNodeInstallCommandBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/nodes/{id}/agent/issue/env": {
+			"post": {
+				"operationId": "IssueWgNodeAgentEnv",
+				"responses": {
+					"201": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentIssuedEnvDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "`.env` агента ноды: адрес, одноразовый токен с меткой ноды (агент привяжется к ней), имя\nагента — для архива агента или образа (`--env-file`). Токен — только в этом ответе.",
+				"summary": "Выдать .env агента ноды",
+				"tags": [
+					"WgNode"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:node:agent:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IIssueWgNodeAgentBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/nodes/{id}/agent/issue/archive": {
+			"post": {
+				"operationId": "IssueWgNodeAgentArchive",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/gzip": {
+								"schema": {
+									"type": "string",
+									"format": "byte"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Архив агента (все платформы) с `.env` агента ноды: распаковать и запустить — службой, на\nместе или в Docker.",
+				"summary": "Выдать архив агента ноды",
+				"tags": [
+					"WgNode"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:node:agent:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IIssueWgNodeAgentBody"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/wg/nodes/{id}/agent/issue/link": {
+			"post": {
+				"operationId": "IssueWgNodeAgentLink",
+				"responses": {
+					"201": {
+						"description": "Created",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IAgentIssuedLinkDto"
+								}
+							}
+						}
+					},
+					"default": {
+						"description": "Ошибка",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/IErrorResponseDto"
+								}
+							}
+						}
+					}
+				},
+				"description": "Одноразовая ссылка на архив агента ноды: скачать можно один раз и до срока, токен с\nметкой ноды создаётся при скачивании.",
+				"summary": "Выдать ссылку на архив агента ноды",
+				"tags": [
+					"WgNode"
+				],
+				"security": [
+					{
+						"jwt": [
+							"permission:wg:node:agent:own"
+						]
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/UUID"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/IIssueWgNodeAgentLinkBody"
 							}
 						}
 					}

@@ -241,7 +241,7 @@ flowchart LR
 
 ```bash
 curl -fsSL '<бэкенд>/agent/v1/bundle/install.sh' | sudo sh -s -- --server '<бэкенд>' \
-  --bundle '<бэкенд>/agent/v1/bundle/linux-{arch}.tar.gz' --token '<токен>' --name '<нода>'
+  --bundle '<бэкенд>/agent/v1/bundle/agent.tar.gz' --token '<токен>' --name '<нода>'
 ```
 
 Команду с одноразовым токеном выдаёт создание ноды и запрос новой команды

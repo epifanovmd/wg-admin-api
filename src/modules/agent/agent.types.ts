@@ -28,8 +28,16 @@ export const WORKER_NAME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 /** Тип команды и события воркера. */
 export const COMMAND_TYPE_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/;
 
-/** Способ установки агента: служба (root), служба пользователя, без установки. */
-export const AGENT_INSTALL_MODES = ["systemd", "rootless", "run"] as const;
+/**
+ * Способ установки агента: служба (root), служба пользователя, без установки, Docker Compose
+ * из архива агента.
+ */
+export const AGENT_INSTALL_MODES = [
+  "systemd",
+  "rootless",
+  "run",
+  "docker",
+] as const;
 
 export type AgentInstallMode = (typeof AGENT_INSTALL_MODES)[number];
 

@@ -88,7 +88,7 @@ export class WgProvisionNodeJob implements IJobHandler<IWgProvisionJobData> {
 
       const plan = buildProvisionPlan(
         workDir,
-        this._agents.commandFor(
+        await this._agents.commandFor(
           node,
           { tokenFile: files.token },
           data.backendUrl,

@@ -1,0 +1,27 @@
+# Агент из этого архива в Docker Compose: cp .env.example .env (адрес, токен, имя) →
+# docker compose up -d --build. Без адреса в .env compose не запустится.
+services:
+  agent:
+    build: .
+    image: agent-wg:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      AGENT_SERVER_URL: ${AGENT_SERVER_URL:?заполните .env — образец .env.example}
+    # Воркер wg настраивает сам узел: интерфейсы WireGuard, маршруты, iptables, пересылку пакетов —
+    # контейнер в сети узла и с правами на неё.
+    network_mode: host
+    privileged: true
+    volumes:
+      # Ключ агента, очередь важных сообщений, настройки и состояние воркеров — переживают
+      # пересоздание контейнера.
+      - agent-data:/var/lib/agent
+      - wg-config:/etc/wireguard
+      # Модуль ядра wireguard (если не загружен).
+      - /lib/modules:/lib/modules:ro
+    # Не меньше lifecycle.stopTimeout воркеров: в контейнере они останавливаются с агентом.
+    stop_grace_period: 90s
+
+volumes:
+  agent-data:
+  wg-config:

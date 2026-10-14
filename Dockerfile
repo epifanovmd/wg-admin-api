@@ -1,18 +1,19 @@
 # syntax=docker/dockerfile:1.7
 # Один образ на все роли процесса (APP_ROLE=api|worker|all) и миграции.
-# Архивы папки агента для нод (agent pack: агент, настройки, воркеры wg и socks)
-# собираются здесь же — бэкенд раздаёт их (AGENT_BUNDLE_DIR); новые версии агента
+# Архив папки агента для нод (agent pack: агент, настройки, воркеры wg и socks, файлы
+# получателя) собирается здесь же — бэкенд раздаёт его (AGENT_BUNDLE_DIR); новые версии агента
 # узлы берут из своего каталога сборок (релизы GitHub агента).
 # Стадии сборки идут на платформе сборщика (кросс-компиляция, без эмуляции);
 # платформа образа влияет только на production-зависимости и runtime.
 ARG NODE_VERSION=24-alpine
 ARG GO_VERSION=1.26.9-bookworm
 
-# ── Архивы папки агента для нод (agent pack) ─────────────────────────────────
-# agent pack --env prod: по архиву на linux/amd64 и linux/arm64 — программа агента,
-# agent.yaml + agent.prod.yaml, воркеры wg и socks, собранные под платформу (их build —
-# go build здесь же), release/ — сборки воркеров для обновления нод и install.sh —
-# установщик агента (API раздаёт его вместе с архивами). Программа агента и install.sh —
+# ── Архив папки агента для нод (agent pack) ──────────────────────────────────
+# agent pack --env prod (тот же архив, что make agent-archive): один архив на linux/amd64 и
+# linux/arm64 — программы агента, agent.yaml + agent.prod.yaml, воркеры wg и socks, собранные под
+# обе платформы (их build — go build здесь же), файлы pack.files — agent/package: Dockerfile,
+# compose.yml, .env.example, README.md; release/ — сборки воркеров для обновления нод и
+# install.sh — установщик агента (API раздаёт его вместе с архивом). Программа агента и install.sh —
 # с GitHub Release версии AGENT_VERSION (build-arg, по умолчанию — из .env.example);
 # агента под другие платформы pack берёт оттуда же.
 # Ключ подписи воркеров — необязательный секрет agent_signing_key (openssl, agent/README.md):
@@ -34,7 +35,8 @@ COPY agent/go.mod agent/go.sum ./agent/
 # Модуль агента — прямо с GitHub, мимо прокси и базы сумм Go (сумма — в go.sum).
 ENV GOPRIVATE=github.com/epifanovmd/*
 RUN --mount=type=cache,target=/go/pkg/mod cd agent && go mod download
-COPY agent/agent.yaml agent/agent.prod.yaml agent/go-worker.sh ./agent/
+COPY agent/agent.yaml agent/agent.prod.yaml agent/agent.docker.yaml agent/go-worker.sh ./agent/
+COPY agent/package ./agent/package
 COPY agent/internal ./agent/internal
 COPY agent/workers ./agent/workers
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -46,6 +48,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     cd agent && AGENT_NO_UPDATE_CHECK=1 agent pack --env prod --platform linux/amd64,linux/arm64 \
       --out /agent-bundle --release-out /agent-bundle/release && \
     cp /usr/local/share/agent-install.sh /agent-bundle/install.sh
+
+# ── Только архив агента (CI: docker build --target agent-archives --output …) ──
+FROM scratch AS agent-archives
+COPY --from=agent-bundle /agent-bundle /
 
 # ── Все зависимости для сборки ───────────────────────────────────────────────
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION} AS deps

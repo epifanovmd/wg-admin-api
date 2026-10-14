@@ -16,8 +16,9 @@ const installCommand = (tokenFile: string, baseUrl = "http://api") =>
 const makeAgents = () => ({
   commandFor: sinon
     .stub()
-    .callsFake((_node: unknown, auth: { tokenFile: string }, url: string) =>
-      installCommand(auth.tokenFile, url),
+    .callsFake(
+      async (_node: unknown, auth: { tokenFile: string }, url: string) =>
+        installCommand(auth.tokenFile, url),
     ),
   revokeToken: sinon.stub().resolves(),
   instance: () => "wg",
