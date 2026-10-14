@@ -10,7 +10,9 @@
 # Обновление — новым архивом и пересборкой (update.mode: external); ключ агента — в томе.
 FROM debian:12-slim
 
+# upgrade — исправления безопасности базового образа (он отстаёт от репозитория Debian).
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
       wireguard-tools iproute2 iptables conntrack iputils-ping procps ca-certificates \
     && rm -rf /var/lib/apt/lists/*
