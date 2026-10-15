@@ -20,7 +20,7 @@ Mocha, Chai, Sinon; сборка `tsc`. Node >= 24. Роль процесса �
 ## Команды
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d   # Postgres, Redis, Mailpit
+yarn services:up          # docker-compose.dev.yml: Postgres :5434, Redis :6381, Mailpit :1027/:8027 (API dev — :8182)
 yarn dev                  # генерация маршрутов + tsx watch (APP_ROLE=all)
 yarn generate             # tsoa: routes.ts + swagger.json
 yarn build                # генерация + tsc: src/ → build/
@@ -28,7 +28,8 @@ yarn server               # production-сборка (node build/main.js)
 yarn lint | lint:fix | prettier:fix
 yarn typecheck            # проверка типов (yarn dev:types — watch)
 yarn test                 # юнит, src/**/*.test.ts (один файл: yarn test:file <path>)
-yarn test:e2e             # интеграционный набор test/e2e/*.e2e.ts (нужен dev-compose)
+yarn test:e2e             # интеграционный набор test/e2e/*.e2e.ts (нужен yarn services:up)
+make local-up | local-ps | local-logs | local-down   # production-стек в Docker (.env.docker, API :8182); make help
 yarn gen:module <name>    # каркас модуля по конвенциям (--dry-run — список файлов)
 yarn migration:generate src/migrations/<Name> | migration:run | migration:revert
 yarn agent                # локальный агент на переднем плане (agent/agent.yaml; agent/dev.sh)

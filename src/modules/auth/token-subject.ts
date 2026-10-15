@@ -1,6 +1,6 @@
 import type { TokenSubject } from "../../core";
+import { grantOfUser } from "../user";
 import type { User } from "../user/user.entity";
-import { grantOfUser } from "../user/user-grant.resolver";
 
 /**
  * Субъект токена из пользователя: роли и эффективные права

@@ -63,6 +63,18 @@ export const csv = z
 /** Секреты, которых нет в тестах: тестам нужен только валидный конфиг. */
 const testOnly = <T>(value: T) => (isTest ? value : undefined);
 
+/**
+ * Префикс ключей Redis: пусто или сегменты с `:` на конце — `project:`,
+ * `project:e2e:` (стенд в Redis проекта).
+ */
+export const redisKeyPrefix = z
+  .string()
+  .regex(
+    /^([A-Za-z0-9_.-]+:)*$/,
+    "REDIS_KEY_PREFIX — вида `project:` или `project:e2e:`",
+  )
+  .default("");
+
 const configSchema = z.object({
   app: z.object({
     /** Имя сервиса: application_name в Postgres, логи, метрики. */
@@ -148,10 +160,7 @@ const configSchema = z.object({
      * Префикс всех ключей и каналов pub/sub (`wg_admin:`): изоляция проектов в
      * общем Redis, где пользователю ACL доступны только ключи `<префикс>*`.
      */
-    keyPrefix: z
-      .string()
-      .regex(/^([A-Za-z0-9_.-]+:)?$/, "REDIS_KEY_PREFIX — вида `project:`")
-      .default(""),
+    keyPrefix: redisKeyPrefix,
   }),
 
   rateLimit: z.object({

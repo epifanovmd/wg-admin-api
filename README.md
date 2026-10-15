@@ -61,16 +61,23 @@ docs/                ← устройство системы
 
 ```sh
 yarn
-cp .env.example .env.development
-docker compose -f docker-compose.dev.yml up -d   # Postgres, Redis, Mailpit
-yarn dev                                         # генерация маршрутов + tsx watch
+cp .env.example .env.development   # подключения уже настроены на сервисы ниже
+yarn services:up                   # docker-compose.dev.yml: Postgres, Redis, Mailpit
+yarn dev                           # генерация маршрутов + tsx watch; API — http://localhost:8182
 ```
+
+Локальная инфраструктура (`docker-compose.dev.yml`, `yarn services:up` / `services:down`) —
+на нестандартных портах, чтобы не мешать другим Postgres/Redis на машине: Postgres
+`:5434` (`postgres`/`postgres`, база `wg_admin`), Redis `:6381`, Mailpit (SMTP `:1027`,
+веб-интерфейс писем — http://localhost:8027). Порты слушают только `127.0.0.1`. API в
+development — `:8182`; фронт wg-admin-web — `:3001` (dev) и `:4175` (Docker), их origin-ы
+уже в `CORS_ALLOWED_ORIGINS` из `.env.example`.
 
 Переменные окружения с описанием — в `.env.example`; читается `.env.<NODE_ENV>`,
 затем `.env`. Конфигурация валидируется при старте; скомпилированный запуск без
 `NODE_ENV` работает как production, где небезопасные умолчания (пустой пароль
 БД, CORS `*`, нет Redis, нет `WG_SECRETS_KEY`) — ошибка запуска. Письма без SMTP
-в development пишутся в лог; Mailpit — http://localhost:8025.
+в development пишутся в лог; Mailpit — http://localhost:8027.
 
 `yarn dev` запускает процесс в роли `all` (HTTP, сокеты и задачи) и применяет
 миграции. API — `/api/v1/...`, Swagger UI — `/api-docs`; системные маршруты —
@@ -99,20 +106,21 @@ yarn agent config check # итоговые настройки агента и о
 
 | Команда                             | Что делает                                                                                   |
 | ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| `yarn services:up`                  | поднять локальные сервисы `docker-compose.dev.yml` (`services:down` — остановить)            |
 | `yarn dev`                          | генерация маршрутов + сервер с перезапуском при изменениях (роль `all`, миграции при старте) |
 | `yarn dev:types`                    | проверка типов в режиме watch                                                                |
 | `yarn gen:module <имя> [--dry-run]` | каркас нового модуля по конвенциям (`--dry-run` — только список файлов)                      |
 
 **Проверки**
 
-| Команда                  | Что делает                                                              |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `yarn lint` / `lint:fix` | ESLint (`src`, `test`) / с автоисправлением                             |
-| `yarn prettier:fix`      | форматирование `src/**/*.ts`                                            |
-| `yarn typecheck`         | проверка типов (`tsc --noEmit`)                                         |
-| `yarn test`              | юнит-тесты (`src/**/*.test.ts`)                                         |
-| `yarn test:file <путь>`  | один файл тестов                                                        |
-| `yarn test:e2e`          | интеграционные тесты: настоящий сервер поверх Postgres, Redis и Mailpit |
+| Команда                  | Что делает                                                                                                              |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `yarn lint` / `lint:fix` | ESLint (`src`, `test`) / с автоисправлением                                                                             |
+| `yarn prettier:fix`      | форматирование `src/**/*.ts`                                                                                            |
+| `yarn typecheck`         | проверка типов (`tsc --noEmit`)                                                                                         |
+| `yarn test`              | юнит-тесты (`src/**/*.test.ts`)                                                                                         |
+| `yarn test:file <путь>`  | один файл тестов                                                                                                        |
+| `yarn test:e2e`          | интеграционные тесты: настоящий сервер поверх Postgres, Redis и Mailpit (нужны `yarn services:up` и `yarn agent:fetch`) |
 
 **Сборка, кодогенерация, база**
 
@@ -156,12 +164,18 @@ yarn agent config check # итоговые настройки агента и о
 | `make status` / `logs` / `restart` | состояние сервисов / журнал `api` и `worker` / их перезапуск            |
 | `make db-dump` / `db-restore`      | дамп базы с хоста в файл / восстановление из файла (`scripts/db`)       |
 
-**Makefile — на этой машине** (без `.env.deploy`)
+**Makefile — на этой машине** (без `.env.deploy`): production-стек в Docker со своими
+Postgres и Redis; настройки — `.env.docker` (при первом `local-up` копируется из
+`.env.docker.example`), образ — с тегом `local`, API — http://localhost:8182. `make help` —
+список команд.
 
-| Команда                                       | Что делает                                                |
-| --------------------------------------------- | --------------------------------------------------------- |
-| `make image`                                  | собрать образ локально                                    |
-| `make local-up` / `local-down` / `local-logs` | production-стек в Docker: запустить / остановить / журнал |
+| Команда           | Что делает                        |
+| ----------------- | --------------------------------- |
+| `make image`      | собрать образ локально            |
+| `make local-up`   | собрать и запустить стек в Docker |
+| `make local-ps`   | состояние сервисов                |
+| `make local-down` | остановить                        |
+| `make local-logs` | журнал `api` и `worker`           |
 
 pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, юнит-тесты.
 
@@ -173,8 +187,11 @@ pre-commit (lefthook): prettier и eslint по staged-файлам, typecheck, �
 - **E2E** — `test/e2e/*.e2e.ts`: настоящий сервер (`APP_ROLE=all`) против
   Postgres, Redis и Mailpit, сценарии всех эндпоинтов по HTTP и сокетам;
   последний тест проверяет, что вызван каждый эндпоинт спецификации. Стенд
-  пересоздаёт базу (только с `e2e`/`test` в имени) и чистит отдельную базу
-  Redis. Параметры — `E2E_*`. Сценарии домена идут с фейковым агентом на
+  очищает базу (только с `e2e`/`test` в имени): пересоздаёт её схемы — хватает прав
+  владельца базы, а если базы нет — создаёт её; в Redis удаляет ключи своего префикса
+  (`E2E_REDIS_KEY_PREFIX` — общий Redis с доступом по префиксу) или очищает отдельную
+  базу (не `0`). Параметры — `E2E_*`, по умолчанию — сервисы `docker-compose.dev.yml`
+  (`yarn services:up`). Сценарии домена идут с фейковым агентом на
   протоколе агента (`test/e2e/fake-agent.ts`, `node-agent.ts`); `agents.e2e.ts` —
   настоящий агент и воркеры wg (имитация) и socks из архива стенда. Агент — сборки
   версии `AGENT_VERSION` с GitHub, скачанные заранее (`yarn agent:fetch`): стенд
@@ -246,8 +263,8 @@ docker compose up -d --scale api=3      # реплики API (API_PORTS=8181-818
 - `make env` — `.env.production` на хост; `status`, `logs`, `restart`, `down`;
 - `make db-dump` / `make db-restore` — дамп базы с хоста и обратно
   (`scripts/db`);
-- без `.env.deploy`: `make image` — образ локально, `make local-up|local-down|local-logs`
-  — стек на этой машине.
+- без `.env.deploy`: `make image` — образ локально, `make local-up|local-ps|local-down|local-logs`
+  — стек на этой машине (`.env.docker`), `make help` — список команд.
 
 ## CI
 

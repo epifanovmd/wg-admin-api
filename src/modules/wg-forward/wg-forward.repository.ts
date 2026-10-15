@@ -1,6 +1,6 @@
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
-import { joinUserName } from "../user/user-name";
+import { joinUserName } from "../user";
 import { WgForwardAccess } from "./wg-forward.access";
 import { WgForward } from "./wg-forward.entity";
 import { EWgForwardProtocol } from "./wg-forward.types";

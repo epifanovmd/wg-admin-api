@@ -21,24 +21,26 @@ import { promisify } from "util";
 /**
  * Интеграционный стенд: настоящий сервер (`APP_ROLE=all`) поверх Postgres,
  * Redis и SMTP (Mailpit). Параметры — из окружения E2E_*, по умолчанию —
- * сервисы `docker-compose.dev.yml`.
+ * сервисы `docker-compose.dev.yml` (`yarn services:up`).
  */
 const env = process.env;
 
 export const E2E = {
   db: {
     host: env.E2E_POSTGRES_HOST ?? "localhost",
-    port: Number(env.E2E_POSTGRES_PORT ?? 5432),
+    port: Number(env.E2E_POSTGRES_PORT ?? 5434),
     user: env.E2E_POSTGRES_USER ?? "postgres",
     password: env.E2E_POSTGRES_PASSWORD ?? "postgres",
     database: env.E2E_POSTGRES_DB ?? "wg_admin_e2e",
   },
-  redisUrl: env.E2E_REDIS_URL ?? "redis://localhost:6379/15",
+  redisUrl: env.E2E_REDIS_URL ?? "redis://localhost:6381/15",
+  /** Префикс ключей стенда в общем Redis (доступ по префиксу); пусто — отдельная база. */
+  redisKeyPrefix: env.E2E_REDIS_KEY_PREFIX ?? "",
   smtp: {
     host: env.E2E_SMTP_HOST ?? "localhost",
-    port: env.E2E_SMTP_PORT ?? "1025",
+    port: env.E2E_SMTP_PORT ?? "1027",
   },
-  mailpitUrl: env.E2E_MAILPIT_URL ?? "http://localhost:8025",
+  mailpitUrl: env.E2E_MAILPIT_URL ?? "http://localhost:8027",
   admin: { email: "admin@e2e.local", password: "admin-e2e-password" },
 };
 
@@ -62,8 +64,9 @@ const freePorts = async (count: number): Promise<number[]> => {
 };
 
 /**
- * Стенд пересоздаёт БД — только с именем, где явно есть «e2e» или «test»:
- * защита от запуска против рабочей базы.
+ * Стенд очищает БД — только с именем, где явно есть «e2e» или «test»: защита от
+ * запуска против рабочей базы. Базы нет — создаётся (нужен CREATEDB); есть —
+ * пересоздаются её схемы, на что хватает прав владельца базы.
  */
 const resetDatabase = async (): Promise<void> => {
   const { database } = E2E.db;
@@ -72,31 +75,76 @@ const resetDatabase = async (): Promise<void> => {
     throw new Error(`E2E: база «${database}» не похожа на тестовую — отказ`);
   }
 
-  const admin = new Client({ ...E2E.db, database: "postgres" });
+  const db = new Client(E2E.db);
 
-  await admin.connect();
-  await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
-  await admin.query(`CREATE DATABASE "${database}"`);
-  await admin.end();
+  try {
+    await db.connect();
+  } catch (error) {
+    if ((error as { code?: string }).code !== "3D000") throw error;
+    const admin = new Client({ ...E2E.db, database: "postgres" });
+
+    await admin.connect();
+    await admin.query(`CREATE DATABASE "${database}"`);
+    await admin.end();
+
+    return;
+  }
+
+  try {
+    const { rows } = await db.query<{ name: string; owner: string }>(
+      `SELECT nspname AS name, pg_get_userbyid(nspowner) AS owner FROM pg_namespace
+       WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'`,
+    );
+    const foreign = rows.filter(
+      row => row.owner !== E2E.db.user && row.name !== "public",
+    );
+
+    if (foreign.length) {
+      throw new Error(
+        `E2E: схемы ${foreign.map(row => `${row.name} (${row.owner})`).join(", ")} базы «${database}» — не роли ${E2E.db.user}: удалите их администратором`,
+      );
+    }
+    for (const { name } of rows) {
+      await db.query(`DROP SCHEMA "${name}" CASCADE`);
+    }
+    await db.query("CREATE SCHEMA public");
+  } finally {
+    await db.end();
+  }
 };
 
 /**
- * Лимиты, присутствие и одноразовые токены живут в Redis — стенд чистит его.
- * Только отдельную базу (не 0): защита от очистки общего Redis.
+ * Лимиты, присутствие и одноразовые токены живут в Redis — стенд чистит его:
+ * ключи своего префикса (общий Redis) или отдельную базу (не `0`) — защита от
+ * очистки общего Redis.
  */
 const resetRedis = async (): Promise<void> => {
+  const prefix = E2E.redisKeyPrefix;
   const db = Number(new URL(E2E.redisUrl).pathname.slice(1) || 0);
 
-  if (!db) {
+  if (!prefix && !db) {
     throw new Error(
-      `E2E: Redis ${E2E.redisUrl} — база 0, нужна отдельная (/15)`,
+      `E2E: Redis ${E2E.redisUrl} — база 0 без префикса, нужна отдельная (/15) или E2E_REDIS_KEY_PREFIX`,
     );
   }
 
   const redis = new Redis(E2E.redisUrl);
 
-  await redis.flushdb();
-  redis.disconnect();
+  try {
+    if (!prefix) {
+      await redis.flushdb();
+
+      return;
+    }
+    for await (const keys of redis.scanStream({
+      match: `${prefix}*`,
+      count: 500,
+    })) {
+      if ((keys as string[]).length) await redis.del(...(keys as string[]));
+    }
+  } finally {
+    redis.disconnect();
+  }
 };
 
 /** Версия агента: `AGENT_VERSION` окружения, иначе из `.env.example`. */
@@ -259,6 +307,7 @@ const serverEnv = (port: number): NodeJS.ProcessEnv => ({
   POSTGRES_PASSWORD: E2E.db.password,
   POSTGRES_DB: E2E.db.database,
   REDIS_URL: E2E.redisUrl,
+  REDIS_KEY_PREFIX: E2E.redisKeyPrefix,
   SMTP_HOST: E2E.smtp.host,
   SMTP_PORT: E2E.smtp.port,
   SMTP_SECURE: "false",

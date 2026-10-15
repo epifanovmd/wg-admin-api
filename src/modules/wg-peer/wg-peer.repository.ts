@@ -2,7 +2,7 @@ import { In, LessThan } from "typeorm";
 
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
-import { joinUserName } from "../user/user-name";
+import { joinUserName } from "../user";
 import { WgPeerAccess } from "./wg-peer.access";
 import { WgPeer } from "./wg-peer.entity";
 import { WG_PEER_ONLINE_WINDOW_SEC } from "./wg-peer.types";

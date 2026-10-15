@@ -142,6 +142,7 @@ jobs:
         ports: ["1025:1025", "8025:8025"]
     env:
       E2E_POSTGRES_HOST: localhost
+      E2E_POSTGRES_PORT: "5432"
       E2E_POSTGRES_USER: postgres
       E2E_POSTGRES_PASSWORD: postgres
       E2E_POSTGRES_DB: wg_admin_e2e

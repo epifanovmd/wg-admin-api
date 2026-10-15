@@ -1,5 +1,5 @@
 import { BaseRepository, InjectableRepository } from "../../core";
-import { joinUserName } from "../user/user-name";
+import { joinUserName } from "../user";
 import { WgSocksAccess } from "./wg-socks.access";
 import { WgSocksClient, WgSocksService, WgSocksUser } from "./wg-socks.entity";
 

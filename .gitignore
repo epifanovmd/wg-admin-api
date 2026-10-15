@@ -8,6 +8,7 @@ coverage
 yarn-error.log
 .env*
 !.env.example
+!.env.docker.example
 !.env.deploy.example
 !agent/package/.env.example
 

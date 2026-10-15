@@ -61,7 +61,7 @@ src/modules/mailer/
   повторов.
 - **SMTP не настроен, development/test**: задача ставится, обработчик пишет письмо в
   лог (шаблон, локаль и данные — строкой, чтобы логгер не маскировал код).
-- Локально — Mailpit из `docker-compose.dev.yml`: SMTP `localhost:1025`, UI :8025.
+- Локально — Mailpit из `docker-compose.dev.yml`: SMTP `localhost:1027`, UI :8027.
 
 ## Шаблоны (`templates/mail/`)
 

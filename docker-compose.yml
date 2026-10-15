@@ -28,6 +28,8 @@ x-app: &app
   environment: &app-env
     NODE_ENV: production
     SERVER_HOST: 0.0.0.0
+    # Порт в контейнере фиксирован (ports, проверки готовности); на хосте — API_PORTS.
+    SERVER_PORT: "8181"
     TRUST_PROXY: "true"
     POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
     REDIS_URL: ${REDIS_URL:-redis://redis:6379}

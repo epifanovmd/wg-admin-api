@@ -1,5 +1,5 @@
 # Интеграционный набор: настоящий сервер + Postgres, Redis, Mailpit.
-# Сервисы: docker compose -f docker-compose.dev.yml up -d
+# Сервисы: yarn services:up (docker-compose.dev.yml; порты стенда — E2E_* в test/e2e/harness.ts)
 require:
   - tsx
   - test/e2e/setup.ts

@@ -2,7 +2,7 @@ import { In } from "typeorm";
 
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
-import { joinUserName } from "../user/user-name";
+import { joinUserName } from "../user";
 import { EWgEndpointMode, WgEndpoint } from "../wg-endpoint";
 import { WgInterfaceAccess } from "./wg-interface.access";
 import { WgInterface } from "./wg-interface.entity";

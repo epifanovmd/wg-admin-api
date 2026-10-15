@@ -2,7 +2,7 @@ import type { EntityManager } from "typeorm";
 
 import type { Pagination } from "../../core";
 import { BaseRepository, InjectableRepository } from "../../core";
-import { joinUserName } from "../user/user-name";
+import { joinUserName } from "../user";
 import { WgNodeAccess } from "./wg-node.access";
 import { WgNode } from "./wg-node.entity";
 import { EWgNodeStatus } from "./wg-node.types";
